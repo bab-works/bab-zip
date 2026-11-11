@@ -48,6 +48,10 @@
   @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { .card, nav, dialog { background:var(--bg); } }
   input, select, button { font:inherit; color:inherit; }
   input, select { width:100%; padding:11px 14px; border:1px solid var(--glass-edge); border-radius:14px; background:var(--fill); min-width:0; outline:none; }
+  /* iOS 날짜·월 칸은 고유 너비가 커서 옆 칸을 침범함 → 기본 모양을 끄고 칸 너비에 맞춤 */
+  input[type=date], input[type=month] { -webkit-appearance:none; appearance:none; min-height:46px; text-align:left; }
+  input::-webkit-date-and-time-value { text-align:left; }
+  h2:focus { outline:none; }
   input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer; transition:transform .15s, background .15s; }
   button:active { transform:scale(.95); }
@@ -72,9 +76,9 @@
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
   .hint { color:var(--muted); font-size:12px; margin:4px 0 8px; }
   .in { color:var(--in); } .out { color:var(--out); } .refund { color:var(--refund); } .move { color:var(--muted); }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .grid2 .full { grid-column:1/-1; }
+  .grid2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; } .grid2 .full { grid-column:1/-1; }
   .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
-  .grid3 select { padding:9px 8px; font-size:14px; }
+  .grid3 select { padding:9px 8px; } /* 16px 미만이면 iOS가 누를 때 화면을 확대함 */
 
   /* 홈 */
   .hero small { color:var(--muted); font-size:13px; }
@@ -186,10 +190,10 @@
   @media (prefers-color-scheme: dark) { .seg input:checked + span { background:rgba(255,255,255,.18); } }
   .seg input:focus-visible + span { outline:2px solid var(--accent); }
   .amount { display:flex; align-items:baseline; justify-content:center; gap:4px; margin:6px 0 2px; }
-  .amount input { font-size:36px; font-weight:800; text-align:right; background:none; padding:4px 0; width:auto; max-width:75%; letter-spacing:-.02em; }
+  .amount input { font-size:36px; font-weight:800; text-align:right; background:none; border:0; padding:4px 0; width:auto; max-width:75%; letter-spacing:-.02em; }
   .amount span { font-size:22px; font-weight:700; }
-  .quick { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
-  .quick button { flex:none; }
+  .quick { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; }
+  .quick button { padding:9px 0; font-size:13px; white-space:nowrap; }
   .chips { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
   .chips button { border-radius:16px; padding:8px 2px; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; }
   .chips button .em { font-size:22px; }
@@ -336,7 +340,7 @@
 
 <dialog id="entry">
   <form id="entryForm" class="grid2">
-    <h2 id="entryTitle" class="full" style="text-align:center;margin:0">거래 추가</h2>
+    <h2 id="entryTitle" class="full" style="text-align:center;margin:0" tabindex="-1" autofocus>거래 추가</h2>
     <input type="hidden" name="tid">
     <div class="seg full" role="radiogroup" aria-label="구분">
       <label><input type="radio" name="type" value="지출" checked><span>지출</span></label>
