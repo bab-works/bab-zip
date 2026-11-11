@@ -648,21 +648,24 @@ let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
 let sec = 'money', curList = 'book';
 const L = k => (lists[k] || []).filter(i => k !== 'board' || i.kind === '보드게임');
 const yearOpts = () => [...new Set([localISO().slice(0, 4) + '년', ...L('book').map(i => i.year).filter(Boolean)])].sort().reverse();
+// 취미 기록 평가: 이모지 5단계 (값 = 이모지 그대로 시트에 저장)
+const RATE = [['😫', '😫 별로'], ['😕', '😕 아쉬움'], ['😐', '😐 보통'], ['🙂', '🙂 좋음'], ['😍', '😍 최고']];
+const RATE_OPTS = [['', '선택 안 함'], ...RATE];
 // 필드: [이름, 라벨, 종류, 선택지]
 const LIST_FIELDS = {
   book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
     ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => String(k + 1).padStart(2, '0') + '월')]],
-    ['status', '독서 상태', 'select', ['완독', '읽는 중', '보류', '중도포기']], ['stars', '별점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']], ['memo', '메모', 'text']],
+    ['status', '독서 상태', 'select', ['완독', '읽는 중', '보류', '중도포기']], ['stars', '별점', 'select', RATE_OPTS], ['memo', '메모', 'text']],
   buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text']],
   wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text']],
   escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
-    ['rating', '평점', 'select', ['', '1', '2', '3', '4', '5']], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
+    ['rating', '평점', 'select', RATE_OPTS], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
     ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
   board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
-  movie: [['title', '영화 제목', 'text'], ['director', '감독', 'text'], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['rating', '평점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']],
+  movie: [['title', '영화 제목', 'text'], ['director', '감독', 'text'], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['rating', '평점', 'select', RATE_OPTS],
     ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
   play: [['title', '작품명', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['cast', '출연', 'text'],
-    ['rating', '평점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+    ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
 // 목록 한 줄: [제목, 설명, 오른쪽 표시]
@@ -670,7 +673,7 @@ const LIST_ROW = {
   book: i => [i.title, joinDot([i.author, [i.year, i.month].filter(Boolean).join(' '), i.memo]), i.stars || i.status],
   buy: i => [i.title, joinDot([i.author, i.memo]), i.done ? '✅ 구매함' : '미구매'],
   wish: i => [i.title, joinDot([i.author, i.kind, i.memo]), ''],
-  escape: i => [i.theme, joinDot([i.date, i.shop, i.area, i.with, i.review]), joinDot([i.result, i.rating && '★' + i.rating])],
+  escape: i => [i.theme, joinDot([i.date, i.shop, i.area, i.with, i.review]), joinDot([i.result, i.rating])],
   board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), ''],
   movie: i => [i.title, joinDot([i.director, i.date, i.place, i.with, i.review]), i.rating],
   play: i => [i.title, joinDot([i.kind, i.date, i.place, i.cast, i.with, i.review]), i.rating || i.kind],
@@ -757,8 +760,10 @@ function openItem(it) {
     if (type === 'bool') return `<label class="chk"><input type="checkbox" name="${n}"> ${lab}</label>`;
     const full = k === 0 || n === 'memo' || n === 'review' ? ' full' : '';
     if (type === 'select') {
-      const o = [...new Set([...(typeof opts === 'function' ? opts() : opts), ...(it && it[n] ? [String(it[n])] : [])])];
-      return `<label class="f${full}">${lab}<select name="${n}">${o.map(v => `<option value="${esc(v)}">${esc(v) || '선택 안 함'}</option>`).join('')}</select></label>`;
+      const base = (typeof opts === 'function' ? opts() : opts).map(o => Array.isArray(o) ? o : [o, o || '선택 안 함']);
+      // 옛 값(예: ★★★★)이 있으면 목록에 그대로 남겨서 안 지워지게
+      if (it && it[n] && !base.some(o => o[0] === String(it[n]))) base.push([String(it[n]), String(it[n])]);
+      return `<label class="f${full}">${lab}<select name="${n}">${base.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>`;
     }
     return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${type === 'number' ? 'inputmode="numeric" min="0"' : 'maxlength="1000"'} ${k === 0 ? 'required' : ''}></label>`;
   }).join('');
@@ -781,7 +786,6 @@ $('#lForm').addEventListener('submit', e => {
   LIST_FIELDS[curList].forEach(([n, , type]) => { item[n] = type === 'bool' ? f[n].checked : type === 'number' ? (f[n].value === '' ? '' : Math.round(+f[n].value)) : f[n].value.trim(); });
   if (!item[LIST_FIELDS[curList][0][0]]) return;
   if (curList === 'board') item.kind = '보드게임';
-  if (curList === 'escape' && item.rating !== '') item.rating = +item.rating;
   const arr = lists[curList] = lists[curList] || [], idx = arr.findIndex(i => i.id === item.id);
   // 독서 기록의 순번 = 같은 연·월 안에서 몇 번째 책인지 (새로 추가할 때만 매김)
   if (curList === 'book' && idx < 0) item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;

@@ -181,7 +181,7 @@ const LISTS = {
     cols: { title: [2], author: [3], kind: [4], memo: [5] } },
   escape: { tab: '방탈출 기록', head: 3, key: 'theme', width: 12, idCol: 14,
     cols: { date: [1, 'date'], theme: [2], shop: [3], area: [4], result: [5], people: [6, 'num'], hints: [7, 'num'], left: [8, 'num'],
-      cost: [9, 'num'], rating: [10, 'num'], with: [11], review: [12] } },
+      cost: [9, 'num'], rating: [10], with: [11], review: [12] } }, // 평점은 이모지 문자열
   board: { tab: '보드게임 기록', head: 1, key: 'name', width: 7, idCol: 1,
     cols: { date: [2, 'date'], kind: [3], name: [4], place: [5], with: [6], review: [7] } },
   movie: { tab: '영화 기록', head: 1, key: 'title', width: 8, idCol: 9, no: [1],
