@@ -23,12 +23,23 @@ const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const localISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString(); };
 const persist = () => { store.set('data2', data); store.set('pending', pending); };
-const setStatus = t => { $('#status').textContent = t; };
+// 동기화·저장·삭제 완료는 잠깐 뜨는 팝업으로만, 연결 문제 같은 건 상단에 남김
+let syncTimer;
+const setStatus = t => {
+  if (/동기화됨|저장됨|삭제됨/.test(t)) {
+    const el = $('#syncPop');
+    el.textContent = t; el.classList.add('show');
+    clearTimeout(syncTimer); syncTimer = setTimeout(() => el.classList.remove('show'), 1500);
+    $('#status').textContent = '';
+    return;
+  }
+  $('#status').textContent = t;
+};
 let toastTimer;
-function toast(t) {
+function toast(t, ms = 3500) {
   const el = $('#toast');
   el.textContent = t; el.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 // ── 시트 통신 ──

@@ -82,7 +82,7 @@
   .in { color:var(--in); } .out { color:var(--out); } .refund { color:var(--refund); } .move { color:var(--muted); }
   .grid2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; } .grid2 .full { grid-column:1/-1; }
   .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
-  .grid3 select { padding:9px 8px; } /* 16px 미만이면 iOS가 누를 때 화면을 확대함 */
+  .grid3 select { padding:9px 8px; }
 
   /* 홈 */
   .hero small { color:var(--muted); font-size:13px; }
@@ -141,10 +141,11 @@
   #fActive:empty { display:none; }
   /* 날짜 칸: iOS 스크롤 휠 (숨긴 input이 값을 담고, 휠 select가 화면을 담당) */
   .wheel { display:flex; gap:4px; min-width:0; margin-top:4px; }
-  .wheel select { flex:1; min-width:0; padding:11px 6px; font-size:15px; }
+  .wheel select { flex:1; min-width:0; padding:11px 6px; }
   #monthPick { margin:auto; border-radius:28px; width:min(86vw,340px); }
   #monthWheel .wheel { margin-top:0; }
-  .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; }
+  .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; font-size:16px; }
+  input, select, textarea { font-size:16px; }
 
   /* 달력 */
   .tabs { display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; }
@@ -219,9 +220,14 @@
   .minis { display:flex; gap:6px; flex-wrap:wrap; }
   .minis:empty { display:none; }
   .chips button[aria-pressed="true"], .minis button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  #syncPop { position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 14px); transform:translateX(-50%); z-index:10; pointer-events:none;
+    background:var(--glass); border:1px solid var(--glass-edge); color:var(--fg); padding:7px 14px; border-radius:20px; font-size:13px; font-weight:600;
+    opacity:0; transition:opacity .25s; box-shadow:var(--shadow); -webkit-backdrop-filter:blur(18px) saturate(180%); backdrop-filter:blur(18px) saturate(180%); }
+  #syncPop.show { opacity:1; }
   #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
-    background:rgba(20,24,22,.85); color:#fff; padding:11px 18px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none;
-    -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
+    background:var(--glass); border:1px solid var(--glass-edge); color:var(--fg); padding:9px 16px; border-radius:20px; font-size:14px; font-weight:600;
+    opacity:0; transition:opacity .25s; pointer-events:none; box-shadow:var(--shadow);
+    -webkit-backdrop-filter:blur(18px) saturate(180%); backdrop-filter:blur(18px) saturate(180%); }
   #toast.show { opacity:1; }
 </style>
 </head>
@@ -446,6 +452,7 @@
   </form>
 </dialog>
 <div id="toast" role="alert"></div>
+<div id="syncPop" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>
