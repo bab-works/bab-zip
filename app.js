@@ -6,6 +6,13 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 let cfg = store.get('cfg', { url: '', token: '' });
+// 설정 링크(…/#url=웹앱URL&token=비밀번호)로 열면 연결 정보를 저장. 폰이 저장소를 지워도 이 링크로 열면 다시 연결됨
+const hp = new URLSearchParams(location.hash.slice(1));
+if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(hp.get('url') || '') && hp.get('token')) {
+  cfg = { url: hp.get('url'), token: hp.get('token') };
+  store.set('cfg', cfg);
+}
+navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로 지우지 않게 요청
 // 시트(원본)의 화면용 사본. meta = 카테고리·예산·결제수단·분류규칙·반복
 let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
 let pending = store.get('pending', []); // 아직 시트에 못 보낸 작업 (오프라인 대비, 순서대로 전송)
@@ -355,6 +362,12 @@ $('#calGrid').addEventListener('click', e => {
 $('#dayAdd').addEventListener('click', () => openEntry(null, selDay));
 $('#calPrev').addEventListener('click', () => moveMonth(-1));
 $('#calNext').addEventListener('click', () => moveMonth(1));
+$('#calToday').addEventListener('click', () => {
+  selDay = localISO().slice(0, 10);
+  $('#month').value = selDay.slice(0, 7);
+  dailySel = 0;
+  render();
+});
 // 달력을 좌우로 밀어서 달 이동
 let touchX = null;
 $('#calGrid').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
