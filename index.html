@@ -16,6 +16,7 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#111413; --card:#1b201e; --fg:#e8ecea; --muted:#9aa39f; --line:#2b322f;
           --in:#6aa8ff; --out:#ff7b7b; --refund:#4fc98f; --warn:#f5a524; } }
   * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
   body { margin:0 auto; max-width:560px; background:var(--bg); color:var(--fg);
          font:16px/1.4 system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
          padding:env(safe-area-inset-top) 16px calc(90px + env(safe-area-inset-bottom)); }
@@ -73,6 +74,18 @@
   dialog::backdrop { background:rgba(0,0,0,.4); }
   dialog label.f { display:block; font-size:13px; color:var(--muted); }
   dialog label.f > input, dialog label.f > select { margin-top:3px; color:var(--fg); }
+  .cal-head b { font-size:17px; }
+  .cal-week, .cal { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:3px; }
+  .cal-week span { text-align:center; font-size:12px; color:var(--muted); padding:4px 0; }
+  .cal-week span:first-child, .cal .sun .d { color:var(--out); } .cal-week span:last-child, .cal .sat .d { color:var(--in); }
+  .cal button { display:flex; flex-direction:column; align-items:stretch; gap:1px; min-height:58px; padding:4px 2px; border-radius:8px;
+                background:color-mix(in srgb, var(--out) var(--heat, 0%), var(--card)); border:1px solid var(--line); text-align:center; overflow:hidden; }
+  .cal button .d { font-size:13px; font-weight:600; }
+  .cal button small { font-size:10px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal button.today { border:2px solid var(--accent); }
+  .cal button[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); }
+  .cal button[aria-pressed="true"] * { color:#fff !important; }
+  .cal .blank { visibility:hidden; }
   #toast { position:fixed; left:50%; bottom:calc(140px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw;
            background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
   #toast.show { opacity:1; }
@@ -102,8 +115,7 @@
     </div>
   </section>
 
-  <section id="v-list" hidden>
-    <div class="card">
+  <div id="filters" class="card" hidden>
       <input id="q" type="search" placeholder="검색: 내용·메모·카테고리·결제수단" aria-label="검색">
       <div class="grid3">
         <select id="fType" aria-label="구분 필터"></select>
@@ -111,14 +123,35 @@
         <select id="fPay" aria-label="결제수단 필터"></select>
       </div>
       <div class="row" style="margin-top:8px">
-        <select id="fSort" aria-label="정렬">
+        <select id="fSort" class="list-only" aria-label="정렬">
           <option value="date-desc">최신순</option><option value="date-asc">오래된순</option>
           <option value="amt-desc">금액 큰순</option><option value="amt-asc">금액 작은순</option>
         </select>
-        <label class="chk"><input type="checkbox" id="fAll"> 전체 기간</label>
+        <label class="chk list-only"><input type="checkbox" id="fAll"> 전체 기간</label>
+        <span id="fActive" class="hint" style="margin:0;flex:1"></span>
         <button id="fReset" class="small">초기화</button>
       </div>
+  </div>
+
+  <section id="v-cal" hidden>
+    <div class="card">
+      <div class="row cal-head">
+        <button id="calPrev" class="small" aria-label="이전 달">‹</button>
+        <b id="calTitle"></b>
+        <button id="calNext" class="small" aria-label="다음 달">›</button>
+      </div>
+      <p id="calSum" class="hint" style="text-align:center"></p>
+      <div class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div id="calGrid" class="cal" role="grid" aria-label="달력"></div>
     </div>
+    <div class="card">
+      <div class="row"><h2 id="dayTitle" style="margin:0"></h2><button id="dayAdd" class="small primary">＋ 이날 추가</button></div>
+      <p id="daySum" class="hint"></p>
+      <ul id="dayList" class="tx"></ul>
+    </div>
+  </section>
+
+  <section id="v-list" hidden>
     <p id="listInfo" class="hint"></p>
     <div class="card"><ul id="list" class="tx"></ul></div>
   </section>
@@ -150,6 +183,7 @@
 <button id="fab" class="primary" aria-label="거래 추가">＋</button>
 <nav>
   <button data-view="home" aria-current="page">홈</button>
+  <button data-view="cal">달력</button>
   <button data-view="list">내역</button>
   <button data-view="rec">반복</button>
 </nav>

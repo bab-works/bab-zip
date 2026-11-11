@@ -145,14 +145,22 @@ function txRow(i) {
     <span>${esc(i.content || i.minor || i.major)}${inst}</span></div>
     <b class="${cls}">${sign}${won(i.amount)}</b></li>`;
 }
-function renderList() {
+// 검색·필터 (달력과 내역이 같이 씀)
+function filtered() {
+  const q = $('#q').value.trim().toLowerCase(), t = $('#fType').value, mj = $('#fMajor').value, p = $('#fPay').value;
+  return data.items.filter(i => (!t || i.type === t) && (!mj || i.major === mj) && (!p || i.pay === p) &&
+    (!q || [i.content, i.memo, i.major, i.minor, i.pay].join(' ').toLowerCase().includes(q)));
+}
+function renderFilters() {
   fillSelect($('#fType'), TYPES, '구분 전체');
   fillSelect($('#fMajor'), majorsAll(), '대분류 전체');
   fillSelect($('#fPay'), payments(), '결제수단 전체');
-  const m = $('#month').value, all = $('#fAll').checked, q = $('#q').value.trim().toLowerCase();
-  const t = $('#fType').value, mj = $('#fMajor').value, p = $('#fPay').value, [key, dir] = $('#fSort').value.split('-');
-  const list = data.items.filter(i => (all || i.date.startsWith(m)) && (!t || i.type === t) && (!mj || i.major === mj) && (!p || i.pay === p) &&
-      (!q || [i.content, i.memo, i.major, i.minor, i.pay].join(' ').toLowerCase().includes(q)))
+  const on = ['#q', '#fType', '#fMajor', '#fPay'].map(s => $(s).value.trim()).filter(Boolean);
+  $('#fActive').textContent = on.length ? `필터 적용 중: ${on.join(' · ')}` : '';
+}
+function renderList() {
+  const m = $('#month').value, all = $('#fAll').checked, [key, dir] = $('#fSort').value.split('-');
+  const list = filtered().filter(i => all || i.date.startsWith(m))
     .sort((a, b) => (key === 'amt' ? a.amount - b.amount || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || a.amount - b.amount) * (dir === 'asc' ? 1 : -1));
   const exp = list.reduce((s, i) => s + net(i), 0), inc = list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0);
   $('#listInfo').textContent = `${list.length.toLocaleString()}건 · 지출 ${won(exp)} · 수입 ${won(inc)}` +
@@ -172,7 +180,52 @@ function renderRec() {
   fillSelect(f.pay, payments(), '결제수단 선택 안 함');
 }
 
-function render() { renderHome(); renderList(); renderRec(); }
+// ── 달력 ──
+const cf1 = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 1 });
+const cf0 = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 0 });
+const compact = n => (Math.abs(n) >= 1e6 ? cf0 : cf1).format(Math.abs(n)); // 칸이 좁아 100만 이상은 소수점 없이
+const WEEK = '일월화수목금토';
+let selDay = localISO().slice(0, 10);
+function daySums(list) {
+  return { inc: list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0), exp: list.reduce((s, i) => s + net(i), 0) };
+}
+function renderCal() {
+  const m = $('#month').value;
+  if (!m) return;
+  const [y, mo] = m.split('-').map(Number), first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate();
+  if (!selDay.startsWith(m)) selDay = m + '-01';
+  const byDay = {};
+  filtered().filter(i => i.date.startsWith(m)).forEach(i => (byDay[i.date] = byDay[i.date] || []).push(i));
+  const sums = {};
+  Object.keys(byDay).forEach(d => { sums[d] = daySums(byDay[d]); });
+  const maxExp = Math.max(1, ...Object.values(sums).map(s => s.exp));
+  const today = localISO().slice(0, 10);
+  const month = daySums(Object.values(byDay).flat());
+  $('#calTitle').textContent = `${y}년 ${mo}월`;
+  $('#calSum').innerHTML = `수입 <b class="in">${won(month.inc)}</b> · 지출 <b class="out">${won(month.exp)}</b>`;
+  let html = '<span class="blank"></span>'.repeat(first);
+  for (let d = 1; d <= days; d++) {
+    const ds = `${m}-${String(d).padStart(2, '0')}`, s = sums[ds], wd = (first + d - 1) % 7;
+    const heat = s && s.exp > 0 ? Math.round(4 + s.exp / maxExp * 26) : 0; // 지출이 많은 날일수록 진하게
+    html += `<button type="button" data-day="${ds}" class="${ds === today ? 'today ' : ''}${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}"
+      style="--heat:${heat}%" aria-pressed="${ds === selDay}" aria-label="${mo}월 ${d}일${s ? ` 수입 ${won(s.inc)} 지출 ${won(s.exp)}` : ''}">
+      <span class="d">${d}</span>${s && s.inc ? `<small class="in">+${compact(s.inc)}</small>` : ''}${s && s.exp ? (s.exp > 0 ? `<small class="out">-${compact(s.exp)}</small>` : `<small class="refund">+${compact(s.exp)}</small>`) : ''}</button>`;
+  }
+  $('#calGrid').innerHTML = html;
+
+  const list = (byDay[selDay] || []).sort((a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || b.amount - a.amount);
+  const [, sm, sd] = selDay.split('-').map(Number), ds = daySums(list);
+  $('#dayTitle').textContent = `${sm}월 ${sd}일 (${WEEK[new Date(y, sm - 1, sd).getDay()]})`;
+  $('#daySum').innerHTML = list.length ? `${list.length}건 · 수입 <b class="in">${won(ds.inc)}</b> · 지출 <b class="out">${won(ds.exp)}</b>` : '';
+  $('#dayList').innerHTML = list.map(txRow).join('') || '<li class="empty">이날 기록이 없어요</li>';
+}
+function moveMonth(k) {
+  const [y, mo] = $('#month').value.split('-').map(Number), d = new Date(y, mo - 1 + k, 1);
+  $('#month').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  render();
+}
+
+function render() { renderFilters(); renderHome(); renderCal(); renderList(); renderRec(); }
 
 // ── 거래 입력·수정 ──
 const F = $('#entryForm').elements;
@@ -180,11 +233,11 @@ function entryCats(major, minor) {
   fillSelect(F.major, majorsFor(F.type.value)); setSel(F.major, major);
   fillSelect(F.minor, minorsFor(F.major.value), '소분류 없음'); setSel(F.minor, minor);
 }
-function openEntry(it) {
+function openEntry(it, date) {
   $('#entryForm').reset();
   F.tid.value = it?.id || '';
   F.type.value = it?.type || '지출';
-  F.date.value = it?.date || localISO().slice(0, 10);
+  F.date.value = it?.date || date || localISO().slice(0, 10);
   entryCats(it?.major, it?.minor);
   fillSelect(F.pay, payments(), '결제수단 선택 안 함'); F.pay.value = ''; setSel(F.pay, it?.pay);
   F.amount.value = it?.amount || '';
@@ -231,11 +284,26 @@ $('#entryDelete').addEventListener('click', () => {
   queue({ action: 'delete', id }).then(ok => ok && setStatus('삭제됨'));
 });
 $('#entryCancel').addEventListener('click', () => $('#entry').close());
-$('#fab').addEventListener('click', () => openEntry());
-$('#list').addEventListener('click', e => {
+$('#fab').addEventListener('click', () => openEntry(null, $('#v-cal').hidden ? '' : selDay));
+['#list', '#dayList'].forEach(s => $(s).addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
   if (it) openEntry(it);
+}));
+$('#calGrid').addEventListener('click', e => {
+  const d = e.target.closest('[data-day]')?.dataset.day;
+  if (d) { selDay = d; renderCal(); $('#dayTitle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+});
+$('#dayAdd').addEventListener('click', () => openEntry(null, selDay));
+$('#calPrev').addEventListener('click', () => moveMonth(-1));
+$('#calNext').addEventListener('click', () => moveMonth(1));
+// 달력을 좌우로 밀어서 달 이동
+let touchX = null;
+$('#calGrid').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+$('#calGrid').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - (touchX ?? e.changedTouches[0].clientX);
+  touchX = null;
+  if (Math.abs(dx) > 60) moveMonth(dx < 0 ? 1 : -1);
 });
 
 // ── 예산 ──
@@ -287,15 +355,17 @@ document.querySelector('nav').addEventListener('click', e => {
   const v = e.target.dataset.view;
   if (!v) return;
   document.querySelectorAll('nav button').forEach(b => b === e.target ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
-  ['home', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
-  $('#fab').hidden = v === 'rec';
+  ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
+  $('#filters').hidden = v !== 'list' && v !== 'cal';
+  document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
+  $('#fab').hidden = v === 'rec' || v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
 });
 ['#month', '#fType', '#fMajor', '#fPay', '#fSort', '#fAll'].forEach(s => $(s).addEventListener('change', render));
-$('#q').addEventListener('input', renderList);
+$('#q').addEventListener('input', () => { renderFilters(); renderCal(); renderList(); });
 $('#fReset').addEventListener('click', () => {
   ['#q', '#fType', '#fMajor', '#fPay'].forEach(s => { $(s).value = ''; });
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
-  renderList();
+  render();
 });
 $('#reload').addEventListener('click', refresh);
 $('#openSettings').addEventListener('click', () => {
