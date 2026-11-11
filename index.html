@@ -151,7 +151,10 @@
   .wcol::-webkit-scrollbar { display:none; }
   .wcol:focus-visible { outline:2px solid var(--accent); border-radius:12px; }
   .witem { height:44px; display:flex; align-items:center; justify-content:center; font-size:24px; font-variant-numeric:tabular-nums; scroll-snap-align:center; cursor:pointer; }
-  .time-row .dbtn { background:transparent; text-align:right; padding:10px 12px; }
+  .time-row .dbtn { flex:1; background:transparent; text-align:right; padding:12px 10px; }
+  .row-btn { display:flex; justify-content:space-between; align-items:center; gap:10px; border-radius:12px 12px 0 0; }
+  .row-btn::before { content:"날짜"; font-weight:600; color:var(--muted); font-size:15px; }
+  .row-btn + .sr-only + .time-row, .row-btn + .time-row { margin-top:-8px; border-radius:0 0 12px 12px; box-shadow:inset 0 1px 0 color-mix(in srgb, var(--fg) 8%, transparent); }
   .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; font-size:16px; }
   input, select, textarea { font-size:16px; }
 
@@ -217,10 +220,10 @@
   dialog.sheet > h2, dialog.sheet > .sheet-grab, dialog.sheet > .row:first-child { touch-action:none; }
   .sheet-grab { height:40px; }
   /* 날짜 버튼 (누르면 캘린더) · 시간 줄 */
-  .dbtn { grid-column:1/-1; width:100%; text-align:left; padding:14px 16px; border-radius:14px; background:var(--fill); font-size:16px; font-weight:600; }
+  .dbtn { grid-column:1/-1; width:100%; text-align:left; padding:12px 14px; border-radius:12px; background:var(--fill); font-size:16px; font-weight:600; }
   .dbtn.empty { color:var(--muted); font-weight:400; }
-  .time-row { display:flex; align-items:center; gap:10px; background:var(--fill); border-radius:14px; padding:6px 6px 6px 16px; }
-  .time-row .time-lbl { font-size:15px; font-weight:600; color:var(--muted); }
+  .time-row { display:flex; align-items:center; gap:10px; background:var(--fill); border-radius:12px; padding:0 4px 0 14px; }
+  .time-row .time-lbl { flex:none; white-space:nowrap; font-size:15px; font-weight:600; color:var(--muted); }
   .time-row .wheel { flex:1; margin-top:0; }
   .time-row .wheel select { padding:8px 6px; background:transparent; }
   .cal.pick button { min-height:48px; }
@@ -436,10 +439,10 @@
     <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
     <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
     <input name="date" type="date" required aria-label="날짜">
+    <div class="time-row full"><span class="time-lbl">시간</span><input name="time" type="time" aria-label="시간"></div>
     <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
-    <input name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
-    <div class="time-row full"><span class="time-lbl">시간</span><input name="time" type="time" aria-label="시간"></div>
+    <input class="full" name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
     <div class="row full" style="margin-top:6px">
       <button type="button" id="entryDelete" class="danger">삭제</button>
       <span style="flex:1"></span>

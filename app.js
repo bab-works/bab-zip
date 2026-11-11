@@ -838,6 +838,7 @@ $('#lCancel').addEventListener('click', () => $('#lItem').close());
 const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
 dateField($('#entryForm [name=date]'));
+$('#entryForm .dbtn').classList.add('row-btn'); // 날짜·시간을 한 묶음(왼쪽 이름, 오른쪽 값)으로
 // 날짜 칸: 한 줄 버튼(예: 2026년 11월 11일 (화))을 누르면 캘린더 창
 const DOW = '일월화수목금토';
 const fmtDate_ = v => { const [y, m, d] = v.split('-').map(Number); return `${y}년 ${m}월 ${d}일 (${DOW[new Date(y, m - 1, d).getDay()]})`; };
