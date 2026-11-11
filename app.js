@@ -778,7 +778,7 @@ const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'val
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
 function wheel(input, opt = {}) {
   const isMonth = input.type === 'month', blank = !!opt.blank;
-  const wrap = document.createElement('span'); wrap.className = 'wheel';
+  const wrap = document.createElement('span'); wrap.className = 'wheel' + (opt.full ? ' full' : '');
   const opts = (items, lead) => (blank ? [['', lead]] : []).concat(items);
   const yr = document.createElement('select'), mo = document.createElement('select'), dy = isMonth ? null : document.createElement('select');
   const label = input.getAttribute('aria-label') || '';
@@ -813,7 +813,7 @@ function wheel(input, opt = {}) {
   if (opt.into) opt.into.append(wrap); else input.after(wrap); // 입력칸 바로 뒤(원래 자리)
   show(valDesc.get.call(input));
 }
-wheel($('#entryForm [name=date]'));
+wheel($('#entryForm [name=date]'), { full: true });
 wheel($('#recForm [name=start]'));
 wheel($('#recForm [name=end]'), { blank: true });
 wheel($('#month'), { into: $('#monthWheel') });
