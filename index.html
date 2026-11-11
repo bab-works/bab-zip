@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>나의 가계부</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <meta name="theme-color" content="#eef3f1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0f0e" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,12 +16,12 @@
   /* Liquid Glass: 반투명 유리 면 + 블러 + 위쪽 빛 반사, 캡슐형 컨트롤, 떠 있는 탭 바 */
   :root { color-scheme: light dark;
     --bg:#eef3f1; --fg:#111614; --muted:#5f6864; --line:rgba(17,22,20,.08);
-    --glass:rgba(255,255,255,.58); --glass-hi:rgba(255,255,255,.85); --glass-edge:rgba(255,255,255,.75); --shadow:0 8px 30px rgba(20,40,30,.10);
+    --glass:rgba(255,255,255,.30); --glass-hi:rgba(255,255,255,.95); --glass-edge:rgba(255,255,255,.65); --shadow:0 10px 40px rgba(20,40,30,.12);
     --fill:rgba(118,128,124,.14); --accent:#1f8a5b; --accent-soft:rgba(31,138,91,.14);
     --in:#1f6fd1; --out:#d13d3d; --refund:#1f8a5b; --warn:#b76e00; }
   @media (prefers-color-scheme: dark) { :root {
     --bg:#0b0f0e; --fg:#eef2f0; --muted:#9aa4a0; --line:rgba(255,255,255,.08);
-    --glass:rgba(30,36,34,.55); --glass-hi:rgba(255,255,255,.10); --glass-edge:rgba(255,255,255,.14); --shadow:0 8px 30px rgba(0,0,0,.45);
+    --glass:rgba(40,48,45,.32); --glass-hi:rgba(255,255,255,.28); --glass-edge:rgba(255,255,255,.16); --shadow:0 10px 40px rgba(0,0,0,.5);
     --fill:rgba(160,170,166,.16); --accent:#3fbf86; --accent-soft:rgba(63,191,134,.18);
     --in:#6aa8ff; --out:#ff7676; --refund:#4fd193; --warn:#f5a524; } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -29,18 +29,25 @@
   html { background:var(--bg); }
   body { margin:0 auto; max-width:560px; min-height:100vh; color:var(--fg);
     font:16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
-    padding:calc(env(safe-area-inset-top) + 8px) 16px calc(110px + env(safe-area-inset-bottom)); }
+    padding:calc(env(safe-area-inset-top) + 8px) 16px calc(96px + env(safe-area-inset-bottom)); }
   /* 유리가 비쳐 보이도록 뒤에 은은한 색 번짐 */
   body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
-    background:radial-gradient(40vmax 40vmax at 10% 0%, rgba(63,191,134,.28), transparent 70%),
-               radial-gradient(35vmax 35vmax at 100% 30%, rgba(80,140,255,.22), transparent 70%),
-               radial-gradient(40vmax 40vmax at 30% 100%, rgba(255,170,120,.20), transparent 70%); }
+    background:radial-gradient(45vmax 45vmax at 5% 0%, rgba(63,191,134,.45), transparent 70%),
+               radial-gradient(40vmax 40vmax at 100% 25%, rgba(80,140,255,.38), transparent 70%),
+               radial-gradient(45vmax 45vmax at 20% 75%, rgba(255,160,110,.32), transparent 70%),
+               radial-gradient(35vmax 35vmax at 95% 95%, rgba(200,120,255,.28), transparent 70%); }
   .card, nav, #fab, dialog, .icon-btn, .month-pill {
-    background:var(--glass); border:1px solid var(--glass-edge); box-shadow:var(--shadow), inset 0 1px 0 var(--glass-hi);
-    -webkit-backdrop-filter:blur(24px) saturate(180%); backdrop-filter:blur(24px) saturate(180%); }
+    position:relative; background:linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,0) 45%), var(--glass);
+    border:1px solid var(--glass-edge);
+    box-shadow:var(--shadow), inset 0 1px 1px var(--glass-hi), inset 0 -1px 1px rgba(255,255,255,.18), inset 0 0 24px rgba(255,255,255,.10);
+    -webkit-backdrop-filter:blur(18px) saturate(220%) brightness(1.04); backdrop-filter:blur(18px) saturate(220%) brightness(1.04); }
+  #fab, nav, dialog { position:fixed; }
+  /* 상태바(시계) 뒤도 유리로 가려서 스크롤한 글자가 겹쳐 보이지 않게 */
+  .topglass { position:fixed; top:0; left:0; right:0; height:env(safe-area-inset-top); z-index:6; pointer-events:none;
+    -webkit-backdrop-filter:blur(18px) saturate(200%); backdrop-filter:blur(18px) saturate(200%); background:rgba(255,255,255,.12); }
   @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { .card, nav, dialog { background:var(--bg); } }
   input, select, button { font:inherit; color:inherit; }
-  input, select { width:100%; padding:11px 14px; border:0; border-radius:14px; background:var(--fill); min-width:0; outline:none; }
+  input, select { width:100%; padding:11px 14px; border:1px solid var(--glass-edge); border-radius:14px; background:var(--fill); min-width:0; outline:none; }
   input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer; transition:transform .15s, background .15s; }
   button:active { transform:scale(.95); }
@@ -131,11 +138,11 @@
   .cal .blank { visibility:hidden; }
 
   /* 탭 바 + 추가 버튼 (떠 있는 캡슐) */
-  nav { position:fixed; left:16px; right:88px; bottom:calc(14px + env(safe-area-inset-bottom)); display:flex; border-radius:999px; padding:5px; z-index:5; }
+  nav { position:fixed; left:12px; right:84px; bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); display:flex; border-radius:999px; padding:5px; z-index:5; }
   @media (min-width:592px) { nav { left:calc(50vw - 264px); right:calc(50vw - 192px); } }
   nav button { flex:1; background:none; color:var(--muted); font-size:11px; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 0; }
   nav button[aria-current="page"] { color:var(--accent); background:var(--accent-soft); font-weight:700; }
-  #fab { position:fixed; right:max(16px, calc(50vw - 264px)); bottom:calc(14px + env(safe-area-inset-bottom)); width:62px; height:62px; padding:0;
+  #fab { position:fixed; right:max(12px, calc(50vw - 264px)); bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); width:62px; height:62px; padding:0;
     display:grid; place-items:center; color:var(--accent); z-index:5; }
   #fab svg.i { width:28px; height:28px; stroke-width:2.5; }
 
@@ -166,13 +173,14 @@
   .minis { display:flex; gap:6px; flex-wrap:wrap; }
   .minis:empty { display:none; }
   .chips button[aria-pressed="true"], .minis button[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  #toast { position:fixed; left:50%; bottom:calc(92px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
+  #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
     background:rgba(20,24,22,.85); color:#fff; padding:11px 18px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none;
     -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
   #toast.show { opacity:1; }
 </style>
 </head>
 <body>
+<div class="topglass" aria-hidden="true"></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
@@ -341,8 +349,10 @@
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
     <h2>구글 시트 연결</h2>
-    <label class="f">Apps Script 웹 앱 URL<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" required></label>
-    <label class="f" style="margin-top:10px">비밀번호 (Code.gs의 TOKEN)<input name="token" type="password" required></label>
+    <label class="f">설정 링크 붙여넣기 (한 번이면 끝)<input name="link" type="url" placeholder="https://babjange1.github.io/Budget-book/#url=…"></label>
+    <p class="hint" style="text-align:center">또는 직접 입력</p>
+    <label class="f">Apps Script 웹 앱 URL<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
+    <label class="f" style="margin-top:10px">비밀번호 (Code.gs의 TOKEN)<input name="token" type="password"></label>
     <div class="row" style="justify-content:flex-end; margin-top:14px">
       <button value="cancel" formnovalidate>취소</button>
       <button class="primary" value="save">저장</button>

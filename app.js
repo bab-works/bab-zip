@@ -7,11 +7,13 @@ const store = {
 };
 let cfg = store.get('cfg', { url: '', token: '' });
 // 설정 링크(…/#url=웹앱URL&token=비밀번호)로 열면 연결 정보를 저장. 폰이 저장소를 지워도 이 링크로 열면 다시 연결됨
-const hp = new URLSearchParams(location.hash.slice(1));
-if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(hp.get('url') || '') && hp.get('token')) {
-  cfg = { url: hp.get('url'), token: hp.get('token') };
-  store.set('cfg', cfg);
+// (홈 화면 앱은 사파리와 저장소가 따로라서, 앱 안에서도 ⚙에 링크를 붙여넣을 수 있게 함)
+function cfgFrom(hash) {
+  const h = new URLSearchParams(hash), url = h.get('url') || '', token = h.get('token');
+  return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url) && token ? { url, token } : null;
 }
+const fromLink = cfgFrom(location.hash.slice(1));
+if (fromLink) { cfg = fromLink; store.set('cfg', cfg); }
 navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로 지우지 않게 요청
 // 시트(원본)의 화면용 사본. meta = 카테고리·예산·결제수단·분류규칙·반복
 let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
@@ -465,8 +467,11 @@ $('#openSettings').addEventListener('click', () => {
 });
 $('#settings').addEventListener('close', () => {
   if ($('#settings').returnValue !== 'save') return;
-  const f = $('#settingsForm');
-  cfg = { url: f.url.value.trim(), token: f.token.value };
+  const f = $('#settingsForm'), link = f.link.value.trim();
+  const c = link ? cfgFrom(link.split('#')[1] || '') : { url: f.url.value.trim(), token: f.token.value };
+  if (!c || !c.url || !c.token) { toast(link ? '설정 링크가 올바르지 않아요' : 'URL과 비밀번호를 모두 넣어주세요'); return $('#settings').showModal(); }
+  cfg = c;
+  f.link.value = '';
   store.set('cfg', cfg);
   refresh();
 });
@@ -477,4 +482,5 @@ $('#month').value = now.slice(0, 7);
 R.start.value = now.slice(0, 7);
 render();
 refresh();
+if (!cfg.url) $('#settings').showModal(); // 연결 전이면 바로 설정 창
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
