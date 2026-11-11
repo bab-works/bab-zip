@@ -1,7 +1,9 @@
 // 나의 가계부 API — 「나의 가계부」 시트의 [확장 프로그램 > Apps Script]에 붙여넣고 웹 앱으로 배포하세요.
 const TOKEN = '여기에-나만-아는-비밀번호를-적으세요'; // 앱 ⚙ 설정의 "비밀번호"와 같아야 합니다
 const TYPES = ['지출', '수입', '환불', '이체'];
-const ID_COL = 15; // 거래 탭 O열. F열과 L~N열은 시트 수식(ARRAYFORMULA)이 채우므로 절대 쓰지 않음
+// 거래 탭 열 위치 (A 날짜 · B 시간 · C 구분 · D 대분류 · E 소분류 · F 내용 · G 결제유형(수식) · H 결제수단 · I 금액 · J 메모 · K 원본분류 · L 할부 · M~O 수식 · P id)
+// G·M·N·O 열은 시트 수식이 채우므로 절대 쓰지 않음. 열 구성이 다르면 아무것도 쓰지 않고 멈춤
+const ID_COL = 16;
 const REC_HEAD = ['id', '내용', '구분', '대분류', '소분류', '결제수단', '금액', '매월(일)', '시작월', '종료월(선택)', '마지막 생성월'];
 
 const ss_ = () => SpreadsheetApp.getActiveSpreadsheet();
@@ -21,9 +23,16 @@ const txt_ = (v, n) => { const s = String(v == null ? '' : v).trim().slice(0, n 
 function tx_() {
   const sh = ss_().getSheetByName('거래');
   if (sh.getMaxColumns() < ID_COL) sh.insertColumnsAfter(sh.getMaxColumns(), ID_COL - sh.getMaxColumns());
-  if (sh.getRange(1, ID_COL).getValue() !== 'id') sh.getRange(1, ID_COL).setValue('id');
+  const head = sh.getRange(1, 1, 1, ID_COL).getValues()[0];
+  if (head[0] !== '날짜' || head[1] !== '시간' || head[2] !== '구분' || head[7] !== '결제수단' || head[8] !== '금액') {
+    throw new Error('거래 탭의 열 구성이 바뀌었어요. 저장을 멈췄어요. 열 이름을 확인해 주세요');
+  }
+  // P열(id)이 비어 있을 때만 id 제목을 씀. 다른 제목이 있으면 덮어쓰지 않음
+  if (head[ID_COL - 1] === '') sh.getRange(1, ID_COL).setValue('id');
+  else if (head[ID_COL - 1] !== 'id') throw new Error('거래 탭 P열이 id 열이 아니에요. 저장을 멈췄어요');
   return sh;
 }
+const tm_ = v => (v instanceof Date ? fmt_(v, 'HH:mm') : String(v == null ? '' : v).trim());
 // F열 수식이 아래까지 빈칸을 채우므로 getLastRow 대신 A열(날짜) 기준으로 마지막 행을 찾음
 function last_(sh) {
   const a = sh.getRange(1, 1, sh.getMaxRows(), 1).getValues();
@@ -47,9 +56,9 @@ function check_(i) {
   }
 }
 function write_(sh, row, i) {
-  sh.getRange(row, 1, 1, 5).setValues([[i.date, i.type, txt_(i.major), txt_(i.minor), txt_(i.content)]]);
-  sh.getRange(row, 7, 1, 3).setValues([[txt_(i.pay), Math.round(num_(i.amount)), txt_(i.memo)]]);
-  sh.getRange(row, 11).setValue(num_(i.inst) >= 2 ? Math.round(num_(i.inst)) : '');
+  sh.getRange(row, 1, 1, 6).setValues([[i.date, /^\d{2}:\d{2}$/.test(i.time || '') ? i.time : '', i.type, txt_(i.major), txt_(i.minor), txt_(i.content)]]);
+  sh.getRange(row, 8, 1, 3).setValues([[txt_(i.pay), Math.round(num_(i.amount)), txt_(i.memo)]]);
+  sh.getRange(row, 12).setValue(num_(i.inst) >= 2 ? Math.round(num_(i.inst)) : '');
   sh.getRange(row, ID_COL).setValue(String(i.id));
 }
 
@@ -259,9 +268,9 @@ function doGet(e) {
       ids_(sh, last);
       const v = last < 2 ? [] : sh.getRange(2, 1, last - 1, ID_COL).getValues();
       const items = v.filter(r => r[0] !== '').map(r => ({
-        id: String(r[14]), date: fmt_(r[0], 'yyyy-MM-dd'), type: String(r[1]), major: String(r[2]), minor: String(r[3]),
-        content: String(r[4]), payType: String(r[5]), pay: String(r[6]), amount: num_(r[7]), memo: String(r[8]),
-        inst: num_(r[10]) || '', instState: String(r[11]),
+        id: String(r[15]), date: fmt_(r[0], 'yyyy-MM-dd'), time: tm_(r[1]), type: String(r[2]), major: String(r[3]), minor: String(r[4]),
+        content: String(r[5]), payType: String(r[6]), pay: String(r[7]), amount: num_(r[8]), memo: String(r[9]),
+        inst: num_(r[11]) || '', instState: String(r[12]),
       }));
       return { ok: true, items, meta: meta_() };
     }));

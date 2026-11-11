@@ -186,7 +186,7 @@ function renderHome() {
     ? `<b>${mo}월 ${dailySel}일</b> ${won(per[dailySel - 1])} · <a href="#" id="dailyGo">그날 내역 보기</a>`
     : per[top] > 0 ? `가장 많이 쓴 날 <b>${mo}월 ${top + 1}일</b> ${won(per[top])} · 막대를 눌러 보세요` : '이번 달 지출이 없어요';
 
-  $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
+  $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '')).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
 let dailySel = 0;
 
@@ -194,7 +194,7 @@ function txRow(i) {
   const [cls, sign] = { 수입: ['in', '+'], 지출: ['out', '-'], 환불: ['refund', '+'], 이체: ['move', ''] }[i.type] || ['move', ''];
   const inst = i.instState ? `<span class="badge">${esc(i.instState)}</span>` : i.inst ? `<span class="badge">${esc(i.inst)}개월</span>` : '';
   return `<li data-id="${esc(i.id)}"><span class="em" aria-hidden="true">${em(i.major)}</span>
-    <div><small>${esc(i.date.slice(2).replace(/-/g, '.'))} · ${esc(i.major)}${i.minor ? '·' + esc(i.minor) : ''}${i.pay ? ' · ' + esc(i.pay) : ''}</small>
+    <div><small>${esc(i.date.slice(2).replace(/-/g, '.'))}${i.time ? ' ' + esc(i.time) : ''} · ${esc(i.major)}${i.minor ? '·' + esc(i.minor) : ''}${i.pay ? ' · ' + esc(i.pay) : ''}</small>
     <span>${esc(i.content || i.minor || i.major)}${inst}</span></div>
     <b class="${cls}">${sign}${won(i.amount)}</b></li>`;
 }
@@ -216,7 +216,7 @@ function renderFilters() {
 function renderList() {
   const m = $('#month').value, all = $('#fAll').checked, [key, dir] = $('#fSort').value.split('-');
   const list = filtered().filter(i => all || i.date.startsWith(m))
-    .sort((a, b) => (key === 'amt' ? a.amount - b.amount || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || a.amount - b.amount) * (dir === 'asc' ? 1 : -1));
+    .sort((a, b) => (key === 'amt' ? a.amount - b.amount || a.date.localeCompare(b.date) : a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || a.amount - b.amount) * (dir === 'asc' ? 1 : -1));
   const exp = list.reduce((s, i) => s + net(i), 0), inc = list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0);
   $('#listInfo').textContent = `${list.length.toLocaleString()}건 · 지출 ${won(exp)} · 수입 ${won(inc)}` +
     (list.length > SHOW_MAX ? ` · 앞의 ${SHOW_MAX}건만 표시 (검색·필터로 좁혀 보세요)` : '');
@@ -303,7 +303,7 @@ function renderCal() {
   $('#calQuickSum').textContent = tdy.length ? `지출 ${won(tds.exp)} · ${tdy.length}건 · 눌러서 추가` : '아직 입력이 없어요 · 눌러서 추가';
   renderTrend(src, m, y, mo, days, today);
 
-  const list = (byDay[selDay] || []).sort((a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || b.amount - a.amount);
+  const list = (byDay[selDay] || []).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || b.amount - a.amount);
   const [, sm, sd] = selDay.split('-').map(Number), ds = daySums(list);
   $('#dayTitle').textContent = `${sm}월 ${sd}일 ${WEEK[new Date(y, sm - 1, sd).getDay()]}요일`;
   $('#daySum').innerHTML = list.length ? `${list.length}건 · 수입 <b class="in">${won(ds.inc)}</b> · 지출 <b class="out">${won(ds.exp)}</b>` : '';
@@ -343,7 +343,7 @@ let catOpen = '';
 function renderCatSheet() {
   if (!catOpen) return;
   const m = $('#month').value, [, mo] = m.split('-').map(Number);
-  const list = inMonth(m).filter(i => i.major === catOpen && net(i)).sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
+  const list = inMonth(m).filter(i => i.major === catOpen && net(i)).sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '') || b.amount - a.amount);
   const used = list.reduce((s, i) => s + net(i), 0), budget = data.meta.budgets[catOpen];
   $('#catTitle').textContent = `${em(catOpen)} ${catOpen} · ${mo}월`;
   $('#catSum').textContent = `${list.length}건 · ${won(used)}${budget ? ` / 예산 ${won(budget)} (${Math.round(used / budget * 100)}%)` : ''} · 항목을 누르면 수정`;
@@ -385,6 +385,8 @@ function openEntry(it, date) {
   F.tid.value = it?.id || '';
   F.type.value = it?.type || '지출';
   F.date.value = it?.date || date || localISO().slice(0, 10);
+  // 새 거래는 지금 시각을 기본으로 (다른 날짜를 골랐으면 비움)
+  F.time.value = it ? (it.time || '') : (F.date.value === localISO().slice(0, 10) ? localISO().slice(11, 16) : '');
   entryCats(it?.major, it?.minor);
   fillSelect(F.pay, payments(), '결제수단 선택 안 함'); F.pay.value = ''; setSel(F.pay, it?.pay);
   F.amount.value = it?.amount || '';
@@ -410,7 +412,7 @@ F.content.addEventListener('input', () => {
 $('#entryForm').addEventListener('submit', e => {
   e.preventDefault();
   const it = {
-    id: F.tid.value || crypto.randomUUID(), date: F.date.value, type: F.type.value, major: F.major.value, minor: F.minor.value,
+    id: F.tid.value || crypto.randomUUID(), date: F.date.value, time: F.time.value || '', type: F.type.value, major: F.major.value, minor: F.minor.value,
     content: F.content.value.trim(), pay: F.pay.value, amount: Math.round(+F.amount.value), memo: F.memo.value.trim(),
     inst: +F.inst.value >= 2 ? Math.round(+F.inst.value) : '',
   };

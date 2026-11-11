@@ -55,8 +55,14 @@
   input::-webkit-date-and-time-value { text-align:left; }
   h2:focus { outline:none; }
   input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer; transition:transform .15s, background .15s; }
-  button:active { transform:scale(.95); }
+  button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer;
+    transition:transform .32s cubic-bezier(.34,1.56,.64,1), background-color .25s ease, opacity .2s ease, box-shadow .25s ease; }
+  /* 누르는 반응: 살짝 눌렸다가 튕겨 돌아오는 iOS식 움직임 */
+  button:active, .tx li[data-id]:active, .cal button:active, .chips button:active, .menu-list button:active, .budget-btn:active {
+    transform:scale(.93); opacity:.8; transition-duration:.12s; }
+  .tx li[data-id], .cal button, .chips button, .menu-list button, nav button, .seg span { transition:transform .32s cubic-bezier(.34,1.56,.64,1), background-color .25s ease, opacity .2s ease; }
+  .tx li[data-id] { border-radius:14px; }
+  .seg span { transition:background-color .25s ease, box-shadow .25s ease, font-weight .2s; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   .primary { background:var(--accent); color:#fff; font-weight:600; }
   .danger { color:var(--out); }
@@ -421,6 +427,7 @@
     <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
     <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
     <input name="date" type="date" required aria-label="날짜">
+    <input name="time" type="time" aria-label="시간">
     <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
