@@ -6,7 +6,8 @@ const REC_HEAD = ['id', '내용', '구분', '대분류', '소분류', '결제수
 
 const ss_ = () => SpreadsheetApp.getActiveSpreadsheet();
 const out_ = o => ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
-const fmt_ = (v, p) => v instanceof Date ? Utilities.formatDate(v, ss_().getSpreadsheetTimeZone(), p) : String(v == null ? '' : v).trim();
+let tz_; // 시간대는 한 번만 조회 (날짜 수천 개마다 조회하면 20초 넘게 걸림)
+const fmt_ = (v, p) => v instanceof Date ? Utilities.formatDate(v, tz_ || (tz_ = ss_().getSpreadsheetTimeZone()), p) : String(v == null ? '' : v).trim();
 const num_ = v => Number(String(v).replace(/,/g, '')) || 0;
 // 앞에 ' 를 붙여 글자로 고정 (=로 시작하는 메모가 수식으로 실행되거나 날짜로 바뀌는 것 방지). 셀 값에는 ' 가 남지 않음
 const txt_ = v => { const s = String(v == null ? '' : v).trim().slice(0, 200); return s ? "'" + s : ''; };
