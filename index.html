@@ -7,116 +7,230 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
-<meta name="theme-color" content="#1f8a5b">
+<meta name="theme-color" content="#eef3f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0f0e" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="가계부">
 <style>
-  :root { --bg:#f4f6f5; --card:#fff; --fg:#1b1f1d; --muted:#6b736f; --line:#e3e7e5; --accent:#1f8a5b;
-          --in:#1f6fd1; --out:#d14343; --refund:#1f8a5b; --warn:#c77700; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#111413; --card:#1b201e; --fg:#e8ecea; --muted:#9aa39f; --line:#2b322f;
-          --in:#6aa8ff; --out:#ff7b7b; --refund:#4fc98f; --warn:#f5a524; } }
-  * { box-sizing:border-box; }
+  /* Liquid Glass: 반투명 유리 면 + 블러 + 위쪽 빛 반사, 캡슐형 컨트롤, 떠 있는 탭 바 */
+  :root { color-scheme: light dark;
+    --bg:#eef3f1; --fg:#111614; --muted:#5f6864; --line:rgba(17,22,20,.08);
+    --glass:rgba(255,255,255,.58); --glass-hi:rgba(255,255,255,.85); --glass-edge:rgba(255,255,255,.75); --shadow:0 8px 30px rgba(20,40,30,.10);
+    --fill:rgba(118,128,124,.14); --accent:#1f8a5b; --accent-soft:rgba(31,138,91,.14);
+    --in:#1f6fd1; --out:#d13d3d; --refund:#1f8a5b; --warn:#b76e00; }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0b0f0e; --fg:#eef2f0; --muted:#9aa4a0; --line:rgba(255,255,255,.08);
+    --glass:rgba(30,36,34,.55); --glass-hi:rgba(255,255,255,.10); --glass-edge:rgba(255,255,255,.14); --shadow:0 8px 30px rgba(0,0,0,.45);
+    --fill:rgba(160,170,166,.16); --accent:#3fbf86; --accent-soft:rgba(63,191,134,.18);
+    --in:#6aa8ff; --out:#ff7676; --refund:#4fd193; --warn:#f5a524; } }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden] { display:none !important; }
-  body { margin:0 auto; max-width:560px; background:var(--bg); color:var(--fg);
-         font:16px/1.4 system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-         padding:env(safe-area-inset-top) 16px calc(90px + env(safe-area-inset-bottom)); }
-  header { display:flex; align-items:center; gap:8px; padding:14px 0 4px; }
-  header h1 { font-size:18px; margin:0; flex:1; white-space:nowrap; }
+  html { background:var(--bg); }
+  body { margin:0 auto; max-width:560px; min-height:100vh; color:var(--fg);
+    font:16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    padding:calc(env(safe-area-inset-top) + 8px) 16px calc(110px + env(safe-area-inset-bottom)); }
+  /* 유리가 비쳐 보이도록 뒤에 은은한 색 번짐 */
+  body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:radial-gradient(40vmax 40vmax at 10% 0%, rgba(63,191,134,.28), transparent 70%),
+               radial-gradient(35vmax 35vmax at 100% 30%, rgba(80,140,255,.22), transparent 70%),
+               radial-gradient(40vmax 40vmax at 30% 100%, rgba(255,170,120,.20), transparent 70%); }
+  .card, nav, #fab, dialog, .icon-btn, .month-pill {
+    background:var(--glass); border:1px solid var(--glass-edge); box-shadow:var(--shadow), inset 0 1px 0 var(--glass-hi);
+    -webkit-backdrop-filter:blur(24px) saturate(180%); backdrop-filter:blur(24px) saturate(180%); }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { .card, nav, dialog { background:var(--bg); } }
   input, select, button { font:inherit; color:inherit; }
-  input, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); min-width:0; }
-  button { border:0; border-radius:10px; padding:10px 14px; background:var(--line); cursor:pointer; }
+  input, select { width:100%; padding:11px 14px; border:0; border-radius:14px; background:var(--fill); min-width:0; outline:none; }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer; transition:transform .15s, background .15s; }
+  button:active { transform:scale(.95); }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   .primary { background:var(--accent); color:#fff; font-weight:600; }
   .danger { color:var(--out); }
-  .small { padding:6px 10px; font-size:13px; white-space:nowrap; }
-  .card { background:var(--card); border-radius:14px; padding:14px; margin:12px 0; }
-  h2 { font-size:15px; margin:0 0 8px; }
+  .small { padding:7px 12px; font-size:13px; white-space:nowrap; }
+  .sr-only { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+  svg.i { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
+
+  header { display:flex; align-items:center; gap:8px; padding:6px 0 10px; }
+  header h1 { font-size:28px; letter-spacing:-.02em; margin:0; flex:1; white-space:nowrap; }
+  .icon-btn { width:42px; height:42px; padding:0; display:grid; place-items:center; }
+  .month-row { display:flex; justify-content:center; margin-bottom:4px; }
+  .month-pill { display:flex; align-items:center; border-radius:999px; padding:3px; }
+  .month-pill button { background:none; padding:8px 12px; }
+  #monthLabel { font-weight:700; font-size:17px; min-width:120px; }
+  #status { color:var(--muted); font-size:12px; text-align:center; min-height:1.4em; margin:2px 0 0; }
+
+  .card { border-radius:24px; padding:16px; margin:12px 0; }
+  h2 { font-size:17px; margin:0 0 10px; letter-spacing:-.01em; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
   .hint { color:var(--muted); font-size:12px; margin:4px 0 8px; }
-  .sum { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center; }
-  .sum small { color:var(--muted); display:block; }
-  .sum b { font-size:15px; }
   .in { color:var(--in); } .out { color:var(--out); } .refund { color:var(--refund); } .move { color:var(--muted); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .grid2 .full { grid-column:1/-1; }
   .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
-  .grid3 select { padding:8px 4px; font-size:14px; }
-  .seg { display:flex; gap:6px; } .seg label { flex:1; position:relative; }
-  .seg input { position:absolute; opacity:0; width:1px; height:1px; }
-  .seg span { display:block; text-align:center; padding:9px 0; border-radius:10px; background:var(--line); font-size:15px; }
-  .seg input:checked + span { background:var(--accent); color:#fff; font-weight:600; }
-  .seg input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
-  ul { list-style:none; margin:0; padding:0; }
-  .alert { border-radius:10px; padding:10px 12px; margin:6px 0; font-size:14px; background:color-mix(in srgb, var(--warn) 15%, var(--card)); }
-  .alert.over { background:color-mix(in srgb, var(--out) 15%, var(--card)); }
-  #budgets li { display:grid; grid-template-columns:76px 1fr auto; gap:8px; align-items:center; padding:6px 0; font-size:14px; }
-  #budgets li.total { border-top:1px solid var(--line); margin-top:4px; padding-top:10px; font-weight:600; }
-  .bar { height:8px; border-radius:4px; background:var(--line); overflow:hidden; }
-  .bar i { display:block; height:100%; background:var(--in); width:var(--w); }
+  .grid3 select { padding:9px 8px; font-size:14px; }
+
+  /* 홈 */
+  .hero small { color:var(--muted); font-size:13px; }
+  .hero .big { font-size:34px; font-weight:800; letter-spacing:-.03em; margin:2px 0 6px; }
+  .hero .sub { display:flex; gap:16px; font-size:14px; color:var(--muted); flex-wrap:wrap; }
+  .hero .sub b { color:var(--fg); }
+  #cmp { font-size:13px; margin-top:8px; color:var(--muted); }
+  .alert { border-radius:16px; padding:11px 14px; margin:8px 0; font-size:14px; background:color-mix(in srgb, var(--warn) 16%, var(--glass)); border:1px solid var(--glass-edge); }
+  .alert.over { background:color-mix(in srgb, var(--out) 16%, var(--glass)); }
+  #dailyInfo { font-size:14px; min-height:1.5em; }
+  .daily { display:flex; align-items:flex-end; gap:2px; height:110px; margin-top:8px; border-bottom:1px solid var(--line); }
+  .daily button { flex:1; height:100%; padding:0; border-radius:0; background:none; display:flex; align-items:flex-end; min-width:0; }
+  .daily button:active { transform:none; }
+  .daily button i { display:block; width:100%; height:var(--h); min-height:2px; border-radius:4px 4px 0 0; background:var(--accent); opacity:.55; }
+  .daily button.zero i { background:var(--fill); opacity:1; }
+  .daily button[aria-pressed="true"] i { opacity:1; }
+  .daily-x { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
+  #budgets li { display:grid; grid-template-columns:28px 1fr auto; gap:4px 10px; align-items:center; padding:8px 0; font-size:14px; }
+  #budgets li .em { grid-row:span 2; font-size:20px; text-align:center; }
+  #budgets li.total { border-top:1px solid var(--line); margin-top:4px; padding-top:12px; font-weight:600; }
+  .bar { grid-column:2 / -1; height:8px; border-radius:4px; background:var(--fill); overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--accent); width:var(--w); border-radius:4px; }
   .bar.warn i { background:var(--warn); } .bar.over i { background:var(--out); }
-  .budget-btn { background:none; padding:2px 0; font-size:13px; text-align:right; }
-  .budget-btn small { display:block; color:var(--muted); }
-  .tx li, #recList li { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
-  .tx li:last-child, #recList li:last-child { border:0; }
-  .tx li { cursor:pointer; }
+  .budget-btn { background:none; padding:0; font-size:14px; font-weight:600; text-align:right; border-radius:8px; }
+  .budget-btn small { color:var(--muted); font-weight:400; }
+
+  /* 목록 */
+  .tx li, #recList li { display:flex; align-items:center; gap:12px; padding:10px 0; }
+  .tx li + li[data-id], #recList li + li { border-top:1px solid var(--line); }
+  .tx li[data-id] { cursor:pointer; }
+  .tx li[data-id]:active { background:var(--fill); }
+  .tx .em { flex:none; width:38px; height:38px; border-radius:50%; background:var(--fill); display:grid; place-items:center; font-size:19px; }
   .tx div, #recList div { flex:1; min-width:0; }
   .tx small, #recList small { color:var(--muted); display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tx span, #recList span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .badge { font-size:11px; background:var(--line); border-radius:6px; padding:1px 5px; margin-left:4px; }
-  .empty { color:var(--muted); text-align:center; padding:14px 0 !important; display:block !important; border:0 !important; }
-  #status { color:var(--muted); font-size:12px; text-align:center; min-height:1.4em; margin:0; }
+  .tx b { white-space:nowrap; }
+  .tx li.day-h { justify-content:space-between; padding:14px 2px 4px; font-size:13px; font-weight:700; color:var(--muted); }
+  ul { list-style:none; margin:0; padding:0; }
+  #dailyInfo a { color:var(--accent); font-weight:600; text-decoration:none; }
+  .badge { font-size:11px; background:var(--fill); border-radius:6px; padding:1px 6px; margin-left:4px; }
+  .empty { color:var(--muted); text-align:center; padding:16px 0 !important; display:block !important; border:0 !important; }
+  .search { display:flex; gap:8px; align-items:center; }
+  .search input { border-radius:999px; }
+  #fToggle[aria-expanded="true"] { background:var(--accent-soft); color:var(--accent); }
+  #fActive { font-size:12px; color:var(--accent); margin-top:8px; }
+  #fActive:empty { display:none; }
   .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; }
-  nav { position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; background:var(--card);
-        border-top:1px solid var(--line); padding:6px 8px calc(6px + env(safe-area-inset-bottom)); }
-  nav button { flex:1; max-width:180px; background:none; color:var(--muted); font-size:14px; }
-  nav button[aria-current="page"] { color:var(--accent); font-weight:700; }
-  #fab { position:fixed; right:max(16px, calc(50vw - 264px)); bottom:calc(70px + env(safe-area-inset-bottom)); width:56px; height:56px;
-         border-radius:50%; font-size:28px; padding:0; box-shadow:0 4px 12px rgba(0,0,0,.25); }
-  dialog { border:0; border-radius:14px; background:var(--card); color:var(--fg); width:min(94vw,440px); padding:16px; }
-  dialog::backdrop { background:rgba(0,0,0,.4); }
-  dialog label.f { display:block; font-size:13px; color:var(--muted); }
-  dialog label.f > input, dialog label.f > select { margin-top:3px; color:var(--fg); }
+
+  /* 달력 */
   .cal-head b { font-size:17px; }
-  .cal-week, .cal { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:3px; }
+  .cal-week, .cal { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:4px; }
   .cal-week span { text-align:center; font-size:12px; color:var(--muted); padding:4px 0; }
   .cal-week span:first-child, .cal .sun .d { color:var(--out); } .cal-week span:last-child, .cal .sat .d { color:var(--in); }
-  .cal button { display:flex; flex-direction:column; align-items:stretch; gap:1px; min-height:58px; padding:4px 2px; border-radius:8px;
-                background:color-mix(in srgb, var(--out) var(--heat, 0%), var(--card)); border:1px solid var(--line); text-align:center; overflow:hidden; }
-  .cal button .d { font-size:13px; font-weight:600; }
+  .cal button { display:flex; flex-direction:column; align-items:stretch; gap:1px; min-height:58px; padding:5px 2px; border-radius:14px;
+    background:color-mix(in srgb, var(--out) var(--heat, 0%), transparent); text-align:center; overflow:hidden; }
+  .cal button .d { font-size:14px; font-weight:600; }
   .cal button small { font-size:10px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cal button.today { border:2px solid var(--accent); }
-  .cal button[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); }
+  .cal button.today { box-shadow:inset 0 0 0 2px var(--accent); }
+  .cal button[aria-pressed="true"] { background:var(--accent); }
   .cal button[aria-pressed="true"] * { color:#fff !important; }
   .cal .blank { visibility:hidden; }
-  #toast { position:fixed; left:50%; bottom:calc(140px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw;
-           background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+
+  /* 탭 바 + 추가 버튼 (떠 있는 캡슐) */
+  nav { position:fixed; left:16px; right:88px; bottom:calc(14px + env(safe-area-inset-bottom)); display:flex; border-radius:999px; padding:5px; z-index:5; }
+  @media (min-width:592px) { nav { left:calc(50vw - 264px); right:calc(50vw - 192px); } }
+  nav button { flex:1; background:none; color:var(--muted); font-size:11px; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 0; }
+  nav button[aria-current="page"] { color:var(--accent); background:var(--accent-soft); font-weight:700; }
+  #fab { position:fixed; right:max(16px, calc(50vw - 264px)); bottom:calc(14px + env(safe-area-inset-bottom)); width:62px; height:62px; padding:0;
+    display:grid; place-items:center; color:var(--accent); z-index:5; }
+  #fab svg.i { width:28px; height:28px; stroke-width:2.5; }
+
+  /* 입력 시트 */
+  dialog { border-radius:28px 28px 0 0; margin:auto auto 0; width:100%; max-width:560px; max-height:92vh; overflow:auto; color:var(--fg);
+    padding:10px 18px calc(18px + env(safe-area-inset-bottom)); border-bottom:0; animation:up .25s ease-out; }
+  dialog::before { content:""; display:block; width:40px; height:5px; border-radius:3px; background:var(--fill); margin:0 auto 10px; }
+  dialog::backdrop { background:rgba(0,0,0,.30); }
+  @keyframes up { from { transform:translateY(40px); opacity:.4; } }
+  #settings { border-radius:28px; margin:auto; width:min(94vw,440px); border-bottom:1px solid var(--glass-edge); }
+  dialog label.f { display:block; font-size:13px; color:var(--muted); }
+  dialog label.f > input, dialog label.f > select { margin-top:4px; color:var(--fg); }
+  .seg { display:flex; gap:2px; background:var(--fill); border-radius:999px; padding:3px; }
+  .seg label { flex:1; position:relative; }
+  .seg input { position:absolute; opacity:0; width:1px; height:1px; }
+  .seg span { display:block; text-align:center; padding:8px 0; border-radius:999px; font-size:15px; }
+  .seg input:checked + span { background:var(--glass-hi); box-shadow:0 2px 8px rgba(0,0,0,.12); font-weight:700; }
+  @media (prefers-color-scheme: dark) { .seg input:checked + span { background:rgba(255,255,255,.18); } }
+  .seg input:focus-visible + span { outline:2px solid var(--accent); }
+  .amount { display:flex; align-items:baseline; justify-content:center; gap:4px; margin:6px 0 2px; }
+  .amount input { font-size:36px; font-weight:800; text-align:right; background:none; padding:4px 0; width:auto; max-width:75%; letter-spacing:-.02em; }
+  .amount span { font-size:22px; font-weight:700; }
+  .quick { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .quick button { flex:none; }
+  .chips { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+  .chips button { border-radius:16px; padding:8px 2px; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .chips button .em { font-size:22px; }
+  .minis { display:flex; gap:6px; flex-wrap:wrap; }
+  .minis:empty { display:none; }
+  .chips button[aria-pressed="true"], .minis button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  #toast { position:fixed; left:50%; bottom:calc(92px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
+    background:rgba(20,24,22,.85); color:#fff; padding:11px 18px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none;
+    -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
   #toast.show { opacity:1; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-rep" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12v-1a5 5 0 0 1 5-5h13M7 22l-4-4 4-4"/><path d="M21 12v1a5 5 0 0 1-5 5H3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
+</svg>
+
 <header>
   <h1>나의 가계부</h1>
-  <input id="month" type="month" style="width:auto; min-width:150px; padding:8px" aria-label="조회 월">
-  <button id="reload" aria-label="시트에서 새로고침">⟳</button>
-  <button id="openSettings" aria-label="설정">⚙</button>
+  <button id="reload" class="icon-btn" aria-label="시트에서 새로고침"><svg class="i"><use href="#i-sync"/></svg></button>
+  <button id="openSettings" class="icon-btn" aria-label="설정"><svg class="i"><use href="#i-gear"/></svg></button>
 </header>
+<div class="month-row">
+  <div class="month-pill">
+    <button id="mPrev" aria-label="이전 달">‹</button>
+    <button id="monthLabel" aria-label="월 선택"></button>
+    <button id="mNext" aria-label="다음 달">›</button>
+  </div>
+  <input id="month" type="month" class="sr-only" tabindex="-1" aria-hidden="true">
+</div>
 <p id="status" role="status"></p>
 
 <main>
   <section id="v-home">
-    <div class="card sum">
-      <div><small>수입</small><b id="inc" class="in">0원</b></div>
-      <div><small>지출 (환불 차감)</small><b id="exp" class="out">0원</b></div>
-      <div><small>남은 돈</small><b id="bal">0원</b></div>
+    <div class="card hero">
+      <small>이번 달 지출 · 환불 차감, 이체 제외</small>
+      <div id="exp" class="big">0원</div>
+      <div class="sub"><span>수입 <b id="inc">0원</b></span><span>남은 돈 <b id="bal">0원</b></span></div>
+      <div id="cmp"></div>
     </div>
     <div id="alerts"></div>
     <div class="card">
-      <div class="row"><h2>예산</h2><button id="notifyBtn" class="small" hidden>🔔 예산 알림 켜기</button></div>
-      <p class="hint">금액을 누르면 월 예산을 바꿀 수 있어요 · 80%에서 경고, 100%에서 초과 알림</p>
+      <h2>일별 지출</h2>
+      <div id="dailyInfo" aria-live="polite"></div>
+      <div id="daily" class="daily" role="group" aria-label="일별 지출 막대"></div>
+      <div id="dailyX" class="daily-x" aria-hidden="true"></div>
+    </div>
+    <div class="card">
+      <div class="row"><h2>어디에 썼나 · 예산</h2><button id="notifyBtn" class="small" hidden>🔔 알림 켜기</button></div>
+      <p class="hint">금액을 누르면 월 예산을 바꿔요 · 80% 주황, 100% 빨강</p>
       <ul id="budgets"></ul>
+    </div>
+    <div class="card">
+      <div class="row"><h2>최근 거래</h2><button id="toList" class="small">전체 보기</button></div>
+      <ul id="recent" class="tx"></ul>
     </div>
   </section>
 
   <div id="filters" class="card" hidden>
+    <div class="search">
       <input id="q" type="search" placeholder="검색: 내용·메모·카테고리·결제수단" aria-label="검색">
+      <button id="fToggle" class="icon-btn" aria-label="필터·정렬" aria-expanded="false" aria-controls="fPanel"><svg class="i"><use href="#i-filter"/></svg></button>
+    </div>
+    <div id="fPanel" hidden>
       <div class="grid3">
         <select id="fType" aria-label="구분 필터"></select>
         <select id="fMajor" aria-label="대분류 필터"></select>
@@ -128,9 +242,10 @@
           <option value="amt-desc">금액 큰순</option><option value="amt-asc">금액 작은순</option>
         </select>
         <label class="chk list-only"><input type="checkbox" id="fAll"> 전체 기간</label>
-        <span id="fActive" class="hint" style="margin:0;flex:1"></span>
         <button id="fReset" class="small">초기화</button>
       </div>
+    </div>
+    <div id="fActive"></div>
   </div>
 
   <section id="v-cal" hidden>
@@ -152,7 +267,7 @@
   </section>
 
   <section id="v-list" hidden>
-    <p id="listInfo" class="hint"></p>
+    <p id="listInfo" class="hint" style="padding:0 4px"></p>
     <div class="card"><ul id="list" class="tx"></ul></div>
   </section>
 
@@ -180,17 +295,17 @@
   </section>
 </main>
 
-<button id="fab" class="primary" aria-label="거래 추가">＋</button>
-<nav>
-  <button data-view="home" aria-current="page">홈</button>
-  <button data-view="cal">달력</button>
-  <button data-view="list">내역</button>
-  <button data-view="rec">반복</button>
+<button id="fab" aria-label="거래 추가"><svg class="i"><use href="#i-plus"/></svg></button>
+<nav aria-label="화면 이동">
+  <button data-view="home" aria-current="page"><svg class="i"><use href="#i-home"/></svg>홈</button>
+  <button data-view="cal"><svg class="i"><use href="#i-cal"/></svg>달력</button>
+  <button data-view="list"><svg class="i"><use href="#i-list"/></svg>내역</button>
+  <button data-view="rec"><svg class="i"><use href="#i-rep"/></svg>반복</button>
 </nav>
 
 <dialog id="entry">
   <form id="entryForm" class="grid2">
-    <h2 id="entryTitle" class="full">거래 추가</h2>
+    <h2 id="entryTitle" class="full" style="text-align:center;margin:0">거래 추가</h2>
     <input type="hidden" name="tid">
     <div class="seg full" role="radiogroup" aria-label="구분">
       <label><input type="radio" name="type" value="지출" checked><span>지출</span></label>
@@ -198,19 +313,27 @@
       <label><input type="radio" name="type" value="환불"><span>환불</span></label>
       <label><input type="radio" name="type" value="이체"><span>이체</span></label>
     </div>
-    <input name="date" type="date" required aria-label="날짜">
-    <input name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="금액" required aria-label="금액">
+    <div class="amount full"><input name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required aria-label="금액"><span>원</span></div>
+    <div class="quick full" id="quick" role="group" aria-label="금액 빠르게 더하기">
+      <button type="button" data-add="1000">+1천</button><button type="button" data-add="5000">+5천</button>
+      <button type="button" data-add="10000">+1만</button><button type="button" data-add="50000">+5만</button>
+      <button type="button" data-add="100000">+10만</button><button type="button" data-add="0">지우기</button>
+    </div>
     <input class="full" name="content" placeholder="내용 (예: 스타벅스) · 분류규칙으로 자동 분류" maxlength="200" aria-label="내용">
-    <select name="major" aria-label="대분류"></select>
-    <select name="minor" aria-label="소분류"></select>
-    <select class="full" name="pay" aria-label="결제수단"></select>
+    <div id="majorChips" class="chips full" role="group" aria-label="대분류"></div>
+    <div id="minorChips" class="minis full" role="group" aria-label="소분류"></div>
+    <!-- 칩 버튼이 이 두 select 값을 바꿈 (저장 로직은 select를 그대로 읽음) -->
+    <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
+    <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
+    <input name="date" type="date" required aria-label="날짜">
+    <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
-    <div class="row full" style="margin-top:4px">
+    <div class="row full" style="margin-top:6px">
       <button type="button" id="entryDelete" class="danger">삭제</button>
       <span style="flex:1"></span>
       <button type="button" id="entryCancel">닫기</button>
-      <button class="primary">저장</button>
+      <button class="primary" style="padding:12px 28px">저장</button>
     </div>
   </form>
 </dialog>

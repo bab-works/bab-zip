@@ -78,6 +78,9 @@ function majorsFor(type) {
 }
 const minorsFor = major => data.meta.cats.filter(c => c[0] === major && c[1]).map(c => c[1]);
 const payments = () => data.meta.payments.map(p => p[0]);
+const EMOJI = { 식비: '🍚', '카페·간식': '☕', '술·유흥': '🍺', 생활: '🧺', 교통: '🚌', 자동차: '🚗', '주거·통신': '🏠', '의료·건강': '💊',
+  '의복·미용': '👕', '문화·여가': '🎬', 구독: '📺', '선물·경조사': '🎁', 교육: '📚', 기타: '📦', 수입: '💰', 이체: '🔁' };
+const em = major => EMOJI[major] || '•';
 
 function fillSelect(sel, opts, blank) {
   const v = sel.value;
@@ -122,25 +125,51 @@ function renderHome() {
   const total = Object.values(b).reduce((s, v) => s + (v || 0), 0);
   const cls = lv => ['', 'warn', 'over'][lv];
   const pct = (u, t) => t ? Math.min(100, u / t * 100).toFixed(1) : 0;
+  const lvTxt = lv => ['', ' · ⚠️ 80% 넘음', ' · 🚨 초과'][lv];
   $('#budgets').innerHTML = rows.map(r => `<li>
-      <span>${esc(r.k)}</span>
+      <span class="em" aria-hidden="true">${em(r.k)}</span>
+      <span>${esc(r.k)}<small class="hint">${lvTxt(level(r.used, r.budget))}</small></span>
+      <button class="budget-btn" data-major="${esc(r.k)}" aria-label="${esc(r.k)} 예산 수정">${won(r.used)} <small>/ ${r.budget ? compact(r.budget) : '예산 없음'}</small></button>
       <span class="bar ${cls(level(r.used, r.budget))}"><i style="--w:${pct(r.used, r.budget)}%"></i></span>
-      <button class="budget-btn" data-major="${esc(r.k)}" aria-label="${esc(r.k)} 예산 수정">${won(r.used)}<small>/ ${r.budget ? won(r.budget) : '예산 없음'}</small></button>
-    </li>`).join('') + (total ? `<li class="total"><span>전체</span>
-      <span class="bar ${cls(level(exp, total))}"><i style="--w:${pct(exp, total)}%"></i></span>
-      <span style="text-align:right;font-size:13px">${won(exp)}<small style="display:block;color:var(--muted)">/ ${won(total)}</small></span></li>` : '')
+    </li>`).join('') + (total ? `<li class="total"><span class="em" aria-hidden="true">Σ</span><span>전체</span>
+      <span style="text-align:right">${won(exp)} <small class="hint">/ ${compact(total)}</small></span>
+      <span class="bar ${cls(level(exp, total))}"><i style="--w:${pct(exp, total)}%"></i></span></li>` : '')
     || '<li class="empty">이번 달 지출 없음</li>';
 
-  $('#alerts').innerHTML = rows.filter(r => level(r.used, r.budget)).map(r => level(r.used, r.budget) === 2
-    ? `<div class="alert over">🚨 <b>${esc(r.k)}</b> 예산 초과 · ${won(r.used - r.budget)} 넘었어요 (${Math.round(r.used / r.budget * 100)}%)</div>`
-    : `<div class="alert">⚠️ <b>${esc(r.k)}</b> 예산 ${Math.round(r.used / r.budget * 100)}% 사용 · ${won(r.budget - r.used)} 남았어요</div>`).join('');
+  // 경고는 단계별로 한 줄씩 묶어서 (여러 개가 화면을 밀어내지 않게)
+  const names = lv => rows.filter(r => level(r.used, r.budget) === lv).map(r => `${esc(r.k)} ${Math.round(r.used / r.budget * 100)}%`);
+  const over = names(2), warn = names(1);
+  $('#alerts').innerHTML = (over.length ? `<div class="alert over">🚨 <b>예산 초과 ${over.length}개</b> · ${over.join(', ')}</div>` : '') +
+    (warn.length ? `<div class="alert">⚠️ <b>80% 넘음 ${warn.length}개</b> · ${warn.join(', ')}</div>` : '');
   $('#notifyBtn').hidden = !('Notification' in window) || Notification.permission !== 'default';
+
+  // 지난달 같은 기간(이번 달이면 오늘 날짜까지)과 비교
+  const [y, mo] = m.split('-').map(Number), today = localISO().slice(0, 10);
+  const cut = today.startsWith(m) ? +today.slice(8) : 31, pd = new Date(y, mo - 2, 1);
+  const pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const prev = inMonth(pm).filter(i => +i.date.slice(8) <= cut).reduce((s, i) => s + net(i), 0);
+  $('#cmp').textContent = prev > 0 ? `지난달 ${cut < 31 ? cut + '일까지' : '전체'} ${won(prev)} 대비 ${exp >= prev ? '▲' : '▼'} ${Math.abs(Math.round((exp - prev) / prev * 100))}%` : '';
+
+  // 일별 지출 막대 (한 가지 색, 높이 = 그날 지출)
+  const days = new Date(y, mo, 0).getDate(), per = Array(days).fill(0);
+  list.forEach(i => { per[+i.date.slice(8) - 1] += net(i); });
+  const max = Math.max(1, ...per);
+  $('#daily').innerHTML = per.map((v, d) => `<button type="button" data-d="${d + 1}" class="${v > 0 ? '' : 'zero'}" aria-pressed="${d + 1 === dailySel}"
+    aria-label="${mo}월 ${d + 1}일 지출 ${won(v)}"><i style="--h:${v > 0 ? (v / max * 100).toFixed(1) : 0}%"></i></button>`).join('');
+  $('#dailyX').innerHTML = [1, 8, 15, 22, days].map(d => `<span>${d}일</span>`).join('');
+  const top = per.indexOf(Math.max(...per));
+  $('#dailyInfo').innerHTML = dailySel
+    ? `<b>${mo}월 ${dailySel}일</b> ${won(per[dailySel - 1])} · <a href="#" id="dailyGo">그날 내역 보기</a>`
+    : per[top] > 0 ? `가장 많이 쓴 날 <b>${mo}월 ${top + 1}일</b> ${won(per[top])} · 막대를 눌러 보세요` : '이번 달 지출이 없어요';
+
+  $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
+let dailySel = 0;
 
 function txRow(i) {
   const [cls, sign] = { 수입: ['in', '+'], 지출: ['out', '-'], 환불: ['refund', '+'], 이체: ['move', ''] }[i.type] || ['move', ''];
   const inst = i.instState ? `<span class="badge">${esc(i.instState)}</span>` : i.inst ? `<span class="badge">${esc(i.inst)}개월</span>` : '';
-  return `<li data-id="${esc(i.id)}">
+  return `<li data-id="${esc(i.id)}"><span class="em" aria-hidden="true">${em(i.major)}</span>
     <div><small>${esc(i.date.slice(2).replace(/-/g, '.'))} · ${esc(i.major)}${i.minor ? '·' + esc(i.minor) : ''}${i.pay ? ' · ' + esc(i.pay) : ''}</small>
     <span>${esc(i.content || i.minor || i.major)}${inst}</span></div>
     <b class="${cls}">${sign}${won(i.amount)}</b></li>`;
@@ -157,6 +186,8 @@ function renderFilters() {
   fillSelect($('#fPay'), payments(), '결제수단 전체');
   const on = ['#q', '#fType', '#fMajor', '#fPay'].map(s => $(s).value.trim()).filter(Boolean);
   $('#fActive').textContent = on.length ? `필터 적용 중: ${on.join(' · ')}` : '';
+  const [y, mo] = $('#month').value.split('-').map(Number);
+  $('#monthLabel').textContent = `${y}년 ${mo}월`;
 }
 function renderList() {
   const m = $('#month').value, all = $('#fAll').checked, [key, dir] = $('#fSort').value.split('-');
@@ -165,7 +196,14 @@ function renderList() {
   const exp = list.reduce((s, i) => s + net(i), 0), inc = list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0);
   $('#listInfo').textContent = `${list.length.toLocaleString()}건 · 지출 ${won(exp)} · 수입 ${won(inc)}` +
     (list.length > SHOW_MAX ? ` · 앞의 ${SHOW_MAX}건만 표시 (검색·필터로 좁혀 보세요)` : '');
-  $('#list').innerHTML = list.slice(0, SHOW_MAX).map(txRow).join('') || '<li class="empty">조건에 맞는 내역이 없어요</li>';
+  let last = '';
+  $('#list').innerHTML = list.slice(0, SHOW_MAX).map(i => {
+    if (key !== 'date' || i.date === last) return txRow(i);
+    last = i.date;
+    const ds = daySums(list.filter(x => x.date === i.date)), [yy, mm, dd] = i.date.split('-').map(Number);
+    return `<li class="day-h"><span>${mm}월 ${dd}일 ${WEEK[new Date(yy, mm - 1, dd).getDay()]}요일</span>
+      <span>${ds.inc ? `<span class="in" style="display:inline">+${won(ds.inc)}</span> ` : ''}${ds.exp ? `-${won(ds.exp)}` : ''}</span></li>` + txRow(i);
+  }).join('') || '<li class="empty">조건에 맞는 내역이 없어요</li>';
 }
 
 function renderRec() {
@@ -222,6 +260,7 @@ function renderCal() {
 function moveMonth(k) {
   const [y, mo] = $('#month').value.split('-').map(Number), d = new Date(y, mo - 1 + k, 1);
   $('#month').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  dailySel = 0;
   render();
 }
 
@@ -232,7 +271,27 @@ const F = $('#entryForm').elements;
 function entryCats(major, minor) {
   fillSelect(F.major, majorsFor(F.type.value)); setSel(F.major, major);
   fillSelect(F.minor, minorsFor(F.major.value), '소분류 없음'); setSel(F.minor, minor);
+  renderChips();
 }
+// 숨긴 select 두 개를 칩 버튼으로 보여줌
+function renderChips() {
+  const chip = (sel, cls) => [...sel.options].filter(o => o.value).map(o => `<button type="button" data-v="${esc(o.value)}" aria-pressed="${o.value === sel.value}">${
+    cls === 'major' ? `<span class="em" aria-hidden="true">${em(o.value)}</span>` : ''}${esc(o.value)}</button>`).join('');
+  $('#majorChips').innerHTML = chip(F.major, 'major');
+  $('#minorChips').innerHTML = chip(F.minor);
+}
+$('#majorChips').addEventListener('click', e => {
+  const v = e.target.closest('[data-v]')?.dataset.v;
+  if (v) entryCats(v);
+});
+$('#minorChips').addEventListener('click', e => {
+  const v = e.target.closest('[data-v]')?.dataset.v;
+  if (v) { F.minor.value = F.minor.value === v ? '' : v; renderChips(); }
+});
+$('#quick').addEventListener('click', e => {
+  const a = e.target.dataset.add;
+  if (a != null) F.amount.value = +a ? (+F.amount.value || 0) + +a : '';
+});
 function openEntry(it, date) {
   $('#entryForm').reset();
   F.tid.value = it?.id || '';
@@ -250,7 +309,6 @@ function openEntry(it, date) {
 }
 $('#entryForm').addEventListener('change', e => {
   if (e.target.name === 'type') entryCats();
-  if (e.target.name === 'major') fillSelect(F.minor, minorsFor(F.major.value), '소분류 없음');
 });
 // 내용을 치면 「분류규칙」 탭의 키워드로 구분·대분류·소분류 자동 선택 (새 거래만)
 F.content.addEventListener('input', () => {
@@ -351,14 +409,33 @@ $('#recList').addEventListener('click', e => {
 });
 
 // ── 공통 ──
-document.querySelector('nav').addEventListener('click', e => {
-  const v = e.target.dataset.view;
-  if (!v) return;
-  document.querySelectorAll('nav button').forEach(b => b === e.target ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+function show(v) {
+  document.querySelectorAll('nav button').forEach(b => b.dataset.view === v ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
   $('#fab').hidden = v === 'rec' || v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
+  window.scrollTo(0, 0);
+}
+document.querySelector('nav').addEventListener('click', e => { const v = e.target.closest('[data-view]')?.dataset.view; if (v) show(v); });
+$('#toList').addEventListener('click', () => show('list'));
+$('#mPrev').addEventListener('click', () => moveMonth(-1));
+$('#mNext').addEventListener('click', () => moveMonth(1));
+$('#monthLabel').addEventListener('click', () => { try { $('#month').showPicker(); } catch { moveMonth(0); } });
+$('#fToggle').addEventListener('click', () => {
+  const open = $('#fPanel').hidden;
+  $('#fPanel').hidden = !open;
+  $('#fToggle').setAttribute('aria-expanded', open);
+});
+$('#daily').addEventListener('click', e => {
+  const d = +e.target.closest('[data-d]')?.dataset.d;
+  if (d) { dailySel = dailySel === d ? 0 : d; renderHome(); }
+});
+$('#dailyInfo').addEventListener('click', e => {
+  if (e.target.id !== 'dailyGo') return;
+  e.preventDefault();
+  selDay = `${$('#month').value}-${String(dailySel).padStart(2, '0')}`;
+  show('cal'); renderCal();
 });
 ['#month', '#fType', '#fMajor', '#fPay', '#fSort', '#fAll'].forEach(s => $(s).addEventListener('change', render));
 $('#q').addEventListener('input', () => { renderFilters(); renderCal(); renderList(); });
