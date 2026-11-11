@@ -56,17 +56,21 @@ async function sync() {
   return true;
 }
 async function refresh() {
-  setStatus('불러오는 중…');
-  if (await sync()) {
-    try {
-      const r = await api();
-      data = { items: r.items, meta: r.meta };
-      persist();
-      setStatus(`시트와 동기화됨 · ${data.items.length.toLocaleString()}건`);
-    } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
-  }
-  render();
+  try {
+    busy(true);
+    if (await sync()) {
+      try {
+        const r = await api();
+        data = { items: r.items, meta: r.meta };
+        persist();
+        setStatus(`시트와 동기화됨 · ${data.items.length.toLocaleString()}건`);
+      } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
+    }
+    render();
+  } finally { busy(false); }
 }
+// 불러오는 동안은 문구 대신 새로고침 버튼이 회전
+const busy = on => $('#reload').classList.toggle('spin', on);
 function queue(op) {
   pending.push(op);
   persist();
@@ -624,17 +628,18 @@ function renderLists() {
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 async function refreshLists() {
-  setStatus('불러오는 중…');
-  if (await sync()) {
-    try {
-      const r = await api(null, '&what=lists');
-      if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
-      else { lists = r.lists; store.set('lists', lists); setStatus('시트와 동기화됨'); }
-    } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
-  }
-  renderLists();
-}
-function setSection(k) {
+  try {
+    busy(true);
+    if (await sync()) {
+      try {
+        const r = await api(null, '&what=lists');
+        if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
+        else { lists = r.lists; store.set('lists', lists); setStatus('시트와 동기화됨'); }
+      } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
+    }
+    renderLists();
+  } finally { busy(false); }
+}function setSection(k) {
   sec = k;
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;

@@ -66,6 +66,8 @@
 
   header { display:flex; align-items:center; gap:8px; padding:6px 0 10px; }
   header h1 { font-size:28px; letter-spacing:-.02em; margin:0; flex:1; white-space:nowrap; }
+  #reload.spin svg { animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
   .icon-btn { width:42px; height:42px; padding:0; display:grid; place-items:center; }
   .month-row { display:flex; justify-content:center; margin-bottom:4px; }
   .month-pill { display:flex; align-items:center; border-radius:999px; padding:3px; }
