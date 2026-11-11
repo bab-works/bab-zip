@@ -528,6 +528,11 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
+// 창 바깥(어두운 부분)을 누르면 닫기
+document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
+  const r = d.getBoundingClientRect();
+  if (e.target === d && (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right)) d.close();
+}));
 
 // ── 홈 화면 편집: 카드 순서를 ▲▼로 바꾸고 이 기기에 저장 ──
 const home = $('#v-home'), cards = () => [...home.querySelectorAll(':scope > [data-card]')];

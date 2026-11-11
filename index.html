@@ -13,6 +13,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="가계부">
 <style>
+  /* Pretendard (SIL Open Font License) — 파일을 앱에 같이 둬서 오프라인에서도 적용 */
+  @font-face { font-family:"Pretendard Variable"; font-weight:45 920; font-display:swap; src:url("PretendardVariable.woff2") format("woff2-variations"); }
   /* Liquid Glass: 반투명 유리 면 + 블러 + 위쪽 빛 반사, 캡슐형 컨트롤, 떠 있는 탭 바 */
   :root { color-scheme: light dark;
     --bg:#eef3f1; --fg:#111614; --muted:#5f6864; --line:rgba(17,22,20,.08);
@@ -28,7 +30,7 @@
   [hidden] { display:none !important; }
   html { background:var(--bg); }
   body { margin:0 auto; max-width:560px; min-height:100vh; color:var(--fg);
-    font:16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    font:16px/1.4 "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
     padding:calc(env(safe-area-inset-top) + 8px) 16px calc(96px + env(safe-area-inset-bottom)); }
   /* 유리가 비쳐 보이도록 뒤에 은은한 색 번짐 */
   body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
