@@ -586,29 +586,29 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
-// 창 위쪽 바(손잡이)를 아래로 끌면 닫기
-document.querySelectorAll('dialog').forEach(d => {
+// 바텀시트 손잡이를 아래로 끌면 닫기 (손잡이 영역에서만 시작)
+document.querySelectorAll('dialog.sheet').forEach(d => {
+  const g = d.querySelector('.sheet-grab'); if (!g) return;
   let y0 = null, dy = 0;
   const reset = () => { d.style.transition = ''; d.style.transform = ''; d.style.animation = ''; };
-  d.addEventListener('pointerdown', e => {
-    if (e.clientY - d.getBoundingClientRect().top > 44 || e.target.closest('button,input,select,a,textarea')) return; // 위쪽 바에서만, 버튼 위에서는 시작 안 함
+  g.addEventListener('pointerdown', e => {
     y0 = e.clientY; dy = 0; d.style.animation = 'none'; d.style.transition = 'none';
-    d.setPointerCapture(e.pointerId);
+    g.setPointerCapture(e.pointerId);
   });
-  d.addEventListener('pointermove', e => {
+  g.addEventListener('pointermove', e => {
     if (y0 === null) return;
     dy = Math.max(0, e.clientY - y0);
     d.style.transform = `translateY(${dy}px)`;
   });
   const end = () => {
     if (y0 === null) return;
-    const close = dy > 90; y0 = null;
+    const close = dy > 80; y0 = null;
     d.style.transition = 'transform .25s ease';
     if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { d.close(); reset(); }, 230); }
     else { d.style.transform = ''; setTimeout(reset, 260); }
   };
-  d.addEventListener('pointerup', end);
-  d.addEventListener('pointercancel', end);
+  g.addEventListener('pointerup', end);
+  g.addEventListener('pointercancel', end);
 });
 // 창 바깥(어두운 부분)을 누르면 닫기
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
@@ -842,6 +842,28 @@ function wheel(input, opt = {}) {
   show(valDesc.get.call(input));
 }
 wheel($('#entryForm [name=date]'), { full: true });
+// 시간 휠: 시·분 두 칸 (숨긴 time input이 값을 담음). 빈 값은 '--'
+const pad2 = n => String(n).padStart(2, '0');
+function wheelTime(input) {
+  const wrap = document.createElement('span'); wrap.className = 'wheel';
+  const hs = document.createElement('select'), ms = document.createElement('select');
+  hs.setAttribute('aria-label', '시'); ms.setAttribute('aria-label', '분');
+  hs.innerHTML = '<option value="">--시</option>' + range(0, 23).map(h => `<option value="${pad2(h)}">${pad2(h)}시</option>`).join('');
+  ms.innerHTML = '<option value="">--분</option>' + range(0, 59).map(m => `<option value="${pad2(m)}">${pad2(m)}분</option>`).join('');
+  wrap.append(hs, ms);
+  const show = v => { const [h = '', m = ''] = (v || '').split(':'); hs.value = h; ms.value = m; };
+  const push = () => {
+    const v = hs.value && ms.value ? `${hs.value}:${ms.value}` : '';
+    if (valDesc.get.call(input) !== v) { valDesc.set.call(input, v); input.dispatchEvent(new Event('change', { bubbles: true })); }
+  };
+  hs.addEventListener('change', push); ms.addEventListener('change', push);
+  Object.defineProperty(input, 'value', { configurable: true,
+    get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
+  input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
+  input.after(wrap);
+  show(valDesc.get.call(input));
+}
+wheelTime($('#entryForm [name=time]'));
 wheel($('#recForm [name=start]'));
 wheel($('#recForm [name=end]'), { blank: true });
 wheel($('#month'), { into: $('#monthWheel') });

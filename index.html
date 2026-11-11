@@ -207,7 +207,10 @@
   /* 입력 시트 */
   dialog { border-radius:28px 28px 0 0; margin:auto auto 0; width:100%; max-width:560px; max-height:92vh; overflow:auto; color:var(--fg);
     padding:10px 18px calc(18px + env(safe-area-inset-bottom)); border-bottom:0; animation:up .25s ease-out; }
-  dialog::before { content:""; display:block; width:40px; height:5px; border-radius:3px; background:var(--fill); margin:0 auto 10px; }
+  /* 바텀시트 손잡이: 넓은 터치 영역 + 눈에 보이는 바 */
+  .sheet-grab { height:30px; margin:-10px -18px 6px; display:flex; align-items:center; justify-content:center; touch-action:none; cursor:grab; }
+  .sheet-grab span { width:46px; height:5px; border-radius:3px; background:var(--muted); opacity:.5; }
+  dialog.sheet { max-height:88vh; }
   dialog::backdrop { background:rgba(0,0,0,.30); }
   @keyframes up { from { transform:translateY(40px); opacity:.4; } }
   /* 왼쪽에서 나오는 메뉴 */
@@ -405,7 +408,8 @@
   <button data-view="rec"><svg class="i"><use href="#i-rep"/></svg>반복</button>
 </nav>
 
-<dialog id="entry">
+<dialog id="entry" class="sheet">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <form id="entryForm" class="grid2">
     <h2 id="entryTitle" class="full" style="text-align:center;margin:0" tabindex="-1" autofocus>거래 추가</h2>
     <input type="hidden" name="tid">
@@ -446,7 +450,8 @@
   <div id="menuList" class="menu-list"></div>
 </dialog>
 
-<dialog id="lItem">
+<dialog id="lItem" class="sheet">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <form id="lForm" class="grid2">
     <h2 id="lTitle" class="full" style="text-align:center;margin:0" tabindex="-1" autofocus></h2>
     <div id="lFields" class="full grid2"></div>
@@ -459,7 +464,8 @@
   </form>
 </dialog>
 
-<dialog id="catSheet">
+<dialog id="catSheet" class="sheet">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <div class="row"><h2 id="catTitle" style="margin:0"></h2><button id="catClose" class="small">닫기</button></div>
   <p id="catSum" class="hint"></p>
   <ul id="catList" class="tx"></ul>
