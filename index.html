@@ -151,10 +151,6 @@
   .wcol::-webkit-scrollbar { display:none; }
   .wcol:focus-visible { outline:2px solid var(--accent); border-radius:12px; }
   .witem { height:44px; display:flex; align-items:center; justify-content:center; font-size:24px; font-variant-numeric:tabular-nums; scroll-snap-align:center; cursor:pointer; }
-  .time-row .dbtn { flex:1; background:transparent; text-align:right; padding:12px 10px; }
-  .row-btn { display:flex; justify-content:space-between; align-items:center; gap:10px; border-radius:12px 12px 0 0; }
-  .row-btn::before { content:"날짜"; font-weight:600; color:var(--muted); font-size:15px; }
-  .row-btn + .sr-only + .time-row, .row-btn + .time-row { margin-top:-8px; border-radius:0 0 12px 12px; box-shadow:inset 0 1px 0 color-mix(in srgb, var(--fg) 8%, transparent); }
   .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; font-size:16px; }
   input, select, textarea { font-size:16px; }
 
@@ -222,10 +218,10 @@
   /* 날짜 버튼 (누르면 캘린더) · 시간 줄 */
   .dbtn { grid-column:1/-1; width:100%; text-align:left; padding:12px 14px; border-radius:12px; background:var(--fill); font-size:16px; font-weight:600; }
   .dbtn.empty { color:var(--muted); font-weight:400; }
-  .time-row { display:flex; align-items:center; gap:10px; background:var(--fill); border-radius:12px; padding:0 4px 0 14px; }
-  .time-row .time-lbl { flex:none; white-space:nowrap; font-size:15px; font-weight:600; color:var(--muted); }
-  .time-row .wheel { flex:1; margin-top:0; }
-  .time-row .wheel select { padding:8px 6px; background:transparent; }
+  /* 날짜 | 시간 한 줄 (가운데 세로 구분선) */
+  .dt-row { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); background:var(--fill); border-radius:12px; }
+  .dt-row .dbtn { grid-column:auto; background:transparent; border-radius:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dt-row .dbtn + .sr-only + .dbtn, .dt-row .dbtn:last-child { text-align:center; box-shadow:inset 1px 0 0 color-mix(in srgb, var(--fg) 10%, transparent); border-radius:0 12px 12px 0; }
   .cal.pick button { min-height:48px; }
   dialog::backdrop { background:rgba(0,0,0,.40); }
   @keyframes up { from { transform:translateY(40px); opacity:.4; } }
@@ -438,8 +434,7 @@
     <!-- 칩 버튼이 이 두 select 값을 바꿈 (저장 로직은 select를 그대로 읽음) -->
     <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
     <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
-    <input name="date" type="date" required aria-label="날짜">
-    <div class="time-row full"><span class="time-lbl">시간</span><input name="time" type="time" aria-label="시간"></div>
+    <div class="dt-row full"><input name="date" type="date" required aria-label="날짜"><input name="time" type="time" aria-label="시간"></div>
     <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input class="full" name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">

@@ -837,16 +837,17 @@ $('#lCancel').addEventListener('click', () => $('#lItem').close());
 // 숨긴 원래 input이 값의 원천이라 기존 코드(.value 읽기·쓰기, change 이벤트)는 그대로 동작
 const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
-dateField($('#entryForm [name=date]'));
-$('#entryForm .dbtn').classList.add('row-btn'); // 날짜·시간을 한 묶음(왼쪽 이름, 오른쪽 값)으로
+dateField($('#entryForm [name=date]'), { short: true });
 // 날짜 칸: 한 줄 버튼(예: 2026년 11월 11일 (화))을 누르면 캘린더 창
 const DOW = '일월화수목금토';
 const fmtDate_ = v => { const [y, m, d] = v.split('-').map(Number); return `${y}년 ${m}월 ${d}일 (${DOW[new Date(y, m - 1, d).getDay()]})`; };
-function dateField(input) {
+function dateField(input, opt = {}) {
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'dbtn';
   btn.setAttribute('aria-label', (input.getAttribute('aria-label') || '날짜') + ' 선택');
-  const show = v => { btn.textContent = v ? fmtDate_(v) : '날짜를 선택하세요'; btn.classList.toggle('empty', !v); };
+  // short: 올해 날짜는 연도 빼고 짧게 (좌우로 좁은 칸용)
+  const fmt = v => opt.short && v.slice(0, 4) === localISO().slice(0, 4) ? fmtDate_(v).replace(/^\d+년 /, '') : fmtDate_(v);
+  const show = v => { btn.textContent = v ? fmt(v) : '날짜를 선택하세요'; btn.classList.toggle('empty', !v); };
   Object.defineProperty(input, 'value', { configurable: true,
     get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
   input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
