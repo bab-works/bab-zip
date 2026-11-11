@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>가계부</title>
+<title>나의 가계부</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -11,86 +11,188 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="가계부">
 <style>
-  :root { --bg:#f4f6f5; --card:#fff; --fg:#1b1f1d; --muted:#6b736f; --line:#e3e7e5; --accent:#1f8a5b; --in:#1f6fd1; --out:#d14343; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#111413; --card:#1b201e; --fg:#e8ecea; --muted:#9aa39f; --line:#2b322f; --in:#6aa8ff; --out:#ff7b7b; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-         padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom)); max-width:560px; margin-inline:auto; }
-  header { display:flex; align-items:center; gap:8px; padding:14px 0 8px; }
-  header h1 { font-size:20px; margin:0; flex:1; white-space:nowrap; }
+  :root { --bg:#f4f6f5; --card:#fff; --fg:#1b1f1d; --muted:#6b736f; --line:#e3e7e5; --accent:#1f8a5b;
+          --in:#1f6fd1; --out:#d14343; --refund:#1f8a5b; --warn:#c77700; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111413; --card:#1b201e; --fg:#e8ecea; --muted:#9aa39f; --line:#2b322f;
+          --in:#6aa8ff; --out:#ff7b7b; --refund:#4fc98f; --warn:#f5a524; } }
+  * { box-sizing:border-box; }
+  body { margin:0 auto; max-width:560px; background:var(--bg); color:var(--fg);
+         font:16px/1.4 system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+         padding:env(safe-area-inset-top) 16px calc(90px + env(safe-area-inset-bottom)); }
+  header { display:flex; align-items:center; gap:8px; padding:14px 0 4px; }
+  header h1 { font-size:18px; margin:0; flex:1; white-space:nowrap; }
   input, select, button { font:inherit; color:inherit; }
   input, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); min-width:0; }
   button { border:0; border-radius:10px; padding:10px 14px; background:var(--line); cursor:pointer; }
   .primary { background:var(--accent); color:#fff; font-weight:600; }
+  .danger { color:var(--out); }
+  .small { padding:6px 10px; font-size:13px; white-space:nowrap; }
   .card { background:var(--card); border-radius:14px; padding:14px; margin:12px 0; }
+  h2 { font-size:15px; margin:0 0 8px; }
+  .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+  .hint { color:var(--muted); font-size:12px; margin:4px 0 8px; }
   .sum { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center; }
   .sum small { color:var(--muted); display:block; }
   .sum b { font-size:15px; }
-  .in { color:var(--in); } .out { color:var(--out); }
-  form { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  form .full { grid-column:1/-1; }
-  .seg { display:flex; gap:6px; } .seg label { flex:1; }
+  .in { color:var(--in); } .out { color:var(--out); } .refund { color:var(--refund); } .move { color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .grid2 .full { grid-column:1/-1; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px; }
+  .grid3 select { padding:8px 4px; font-size:14px; }
+  .seg { display:flex; gap:6px; } .seg label { flex:1; position:relative; }
   .seg input { position:absolute; opacity:0; width:1px; height:1px; }
-  .seg input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; } .seg span { display:block; text-align:center; padding:10px; border-radius:10px; background:var(--line); }
+  .seg span { display:block; text-align:center; padding:9px 0; border-radius:10px; background:var(--line); font-size:15px; }
   .seg input:checked + span { background:var(--accent); color:#fff; font-weight:600; }
+  .seg input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
   ul { list-style:none; margin:0; padding:0; }
-  #cats li { display:grid; grid-template-columns:80px 1fr auto; gap:8px; align-items:center; padding:4px 0; font-size:14px; }
-  .bar { height:8px; border-radius:4px; background:linear-gradient(90deg, var(--out) var(--w), var(--line) var(--w)); }
-  #list li { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
-  #list li:last-child { border:0; }
-  #list div { flex:1; min-width:0; } #list small { color:var(--muted); display:block; font-size:12px; }
-  #list span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #list button { background:none; color:var(--muted); padding:4px 8px; font-size:18px; }
-  .empty { color:var(--muted); text-align:center; padding:12px 0 !important; display:block !important; }
-  #status { color:var(--muted); font-size:12px; text-align:center; min-height:1.4em; }
-  dialog { border:0; border-radius:14px; background:var(--card); color:var(--fg); width:min(92vw,420px); }
-  dialog label { display:block; margin:10px 0; font-size:14px; }
-  h2 { font-size:15px; margin:0 0 8px; }
+  .alert { border-radius:10px; padding:10px 12px; margin:6px 0; font-size:14px; background:color-mix(in srgb, var(--warn) 15%, var(--card)); }
+  .alert.over { background:color-mix(in srgb, var(--out) 15%, var(--card)); }
+  #budgets li { display:grid; grid-template-columns:76px 1fr auto; gap:8px; align-items:center; padding:6px 0; font-size:14px; }
+  #budgets li.total { border-top:1px solid var(--line); margin-top:4px; padding-top:10px; font-weight:600; }
+  .bar { height:8px; border-radius:4px; background:var(--line); overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--in); width:var(--w); }
+  .bar.warn i { background:var(--warn); } .bar.over i { background:var(--out); }
+  .budget-btn { background:none; padding:2px 0; font-size:13px; text-align:right; }
+  .budget-btn small { display:block; color:var(--muted); }
+  .tx li, #recList li { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .tx li:last-child, #recList li:last-child { border:0; }
+  .tx li { cursor:pointer; }
+  .tx div, #recList div { flex:1; min-width:0; }
+  .tx small, #recList small { color:var(--muted); display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tx span, #recList span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge { font-size:11px; background:var(--line); border-radius:6px; padding:1px 5px; margin-left:4px; }
+  .empty { color:var(--muted); text-align:center; padding:14px 0 !important; display:block !important; border:0 !important; }
+  #status { color:var(--muted); font-size:12px; text-align:center; min-height:1.4em; margin:0; }
+  .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; }
+  nav { position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; background:var(--card);
+        border-top:1px solid var(--line); padding:6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  nav button { flex:1; max-width:180px; background:none; color:var(--muted); font-size:14px; }
+  nav button[aria-current="page"] { color:var(--accent); font-weight:700; }
+  #fab { position:fixed; right:max(16px, calc(50vw - 264px)); bottom:calc(70px + env(safe-area-inset-bottom)); width:56px; height:56px;
+         border-radius:50%; font-size:28px; padding:0; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+  dialog { border:0; border-radius:14px; background:var(--card); color:var(--fg); width:min(94vw,440px); padding:16px; }
+  dialog::backdrop { background:rgba(0,0,0,.4); }
+  dialog label.f { display:block; font-size:13px; color:var(--muted); }
+  dialog label.f > input, dialog label.f > select { margin-top:3px; color:var(--fg); }
+  #toast { position:fixed; left:50%; bottom:calc(140px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw;
+           background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
 </style>
 </head>
 <body>
 <header>
-  <h1>가계부</h1>
-  <input id="month" type="month" style="width:auto" aria-label="월 선택">
-  <button id="reload" aria-label="새로고침">⟳</button>
+  <h1>나의 가계부</h1>
+  <input id="month" type="month" style="width:auto; min-width:150px; padding:8px" aria-label="조회 월">
+  <button id="reload" aria-label="시트에서 새로고침">⟳</button>
   <button id="openSettings" aria-label="설정">⚙</button>
 </header>
 <p id="status" role="status"></p>
 
-<section class="card sum">
-  <div><small>수입</small><b id="inc" class="in">0원</b></div>
-  <div><small>지출</small><b id="exp" class="out">0원</b></div>
-  <div><small>잔액</small><b id="bal">0원</b></div>
-</section>
+<main>
+  <section id="v-home">
+    <div class="card sum">
+      <div><small>수입</small><b id="inc" class="in">0원</b></div>
+      <div><small>지출 (환불 차감)</small><b id="exp" class="out">0원</b></div>
+      <div><small>남은 돈</small><b id="bal">0원</b></div>
+    </div>
+    <div id="alerts"></div>
+    <div class="card">
+      <div class="row"><h2>예산</h2><button id="notifyBtn" class="small" hidden>🔔 예산 알림 켜기</button></div>
+      <p class="hint">금액을 누르면 월 예산을 바꿀 수 있어요 · 80%에서 경고, 100%에서 초과 알림</p>
+      <ul id="budgets"></ul>
+    </div>
+  </section>
 
-<section class="card">
-  <form id="form">
-    <div class="seg full">
+  <section id="v-list" hidden>
+    <div class="card">
+      <input id="q" type="search" placeholder="검색: 내용·메모·카테고리·결제수단" aria-label="검색">
+      <div class="grid3">
+        <select id="fType" aria-label="구분 필터"></select>
+        <select id="fMajor" aria-label="대분류 필터"></select>
+        <select id="fPay" aria-label="결제수단 필터"></select>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="fSort" aria-label="정렬">
+          <option value="date-desc">최신순</option><option value="date-asc">오래된순</option>
+          <option value="amt-desc">금액 큰순</option><option value="amt-asc">금액 작은순</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="fAll"> 전체 기간</label>
+        <button id="fReset" class="small">초기화</button>
+      </div>
+    </div>
+    <p id="listInfo" class="hint"></p>
+    <div class="card"><ul id="list" class="tx"></ul></div>
+  </section>
+
+  <section id="v-rec" hidden>
+    <div class="card">
+      <h2>반복 거래</h2>
+      <p class="hint">매월 정한 날이 지나면 「거래」 탭에 자동으로 기록돼요 (앱을 열 때 확인)</p>
+      <ul id="recList"></ul>
+    </div>
+    <div class="card">
+      <h2>반복 추가</h2>
+      <form id="recForm" class="grid2">
+        <input class="full" name="content" placeholder="내용 (예: 휴대폰 요금)" required maxlength="200" aria-label="내용">
+        <select name="type" aria-label="구분"><option>지출</option><option>수입</option><option>이체</option></select>
+        <input name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="금액" required aria-label="금액">
+        <select name="major" aria-label="대분류"></select>
+        <select name="minor" aria-label="소분류"></select>
+        <select class="full" name="pay" aria-label="결제수단"></select>
+        <label class="f">매월 며칠<input name="day" type="number" min="1" max="31" value="1" required></label>
+        <label class="f">시작 월<input name="start" type="month" required></label>
+        <label class="f full">종료 월 (선택)<input name="end" type="month"></label>
+        <button class="primary full">반복 추가</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<button id="fab" class="primary" aria-label="거래 추가">＋</button>
+<nav>
+  <button data-view="home" aria-current="page">홈</button>
+  <button data-view="list">내역</button>
+  <button data-view="rec">반복</button>
+</nav>
+
+<dialog id="entry">
+  <form id="entryForm" class="grid2">
+    <h2 id="entryTitle" class="full">거래 추가</h2>
+    <input type="hidden" name="tid">
+    <div class="seg full" role="radiogroup" aria-label="구분">
       <label><input type="radio" name="type" value="지출" checked><span>지출</span></label>
       <label><input type="radio" name="type" value="수입"><span>수입</span></label>
+      <label><input type="radio" name="type" value="환불"><span>환불</span></label>
+      <label><input type="radio" name="type" value="이체"><span>이체</span></label>
     </div>
     <input name="date" type="date" required aria-label="날짜">
-    <select name="category" aria-label="카테고리"></select>
-    <input class="full" name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="금액" required aria-label="금액">
-    <input class="full" name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
-    <button class="primary full">추가</button>
+    <input name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="금액" required aria-label="금액">
+    <input class="full" name="content" placeholder="내용 (예: 스타벅스) · 분류규칙으로 자동 분류" maxlength="200" aria-label="내용">
+    <select name="major" aria-label="대분류"></select>
+    <select name="minor" aria-label="소분류"></select>
+    <select class="full" name="pay" aria-label="결제수단"></select>
+    <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
+    <input name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
+    <div class="row full" style="margin-top:4px">
+      <button type="button" id="entryDelete" class="danger">삭제</button>
+      <span style="flex:1"></span>
+      <button type="button" id="entryCancel">닫기</button>
+      <button class="primary">저장</button>
+    </div>
   </form>
-</section>
-
-<section class="card"><h2>카테고리별 지출</h2><ul id="cats"></ul></section>
-<section class="card"><h2>내역</h2><ul id="list"></ul></section>
+</dialog>
 
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
     <h2>구글 시트 연결</h2>
-    <label>Apps Script 웹 앱 URL<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" required></label>
-    <label>비밀번호 (Code.gs의 TOKEN)<input name="token" type="password" required></label>
-    <div style="display:flex; gap:8px; justify-content:flex-end">
+    <label class="f">Apps Script 웹 앱 URL<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" required></label>
+    <label class="f" style="margin-top:10px">비밀번호 (Code.gs의 TOKEN)<input name="token" type="password" required></label>
+    <div class="row" style="justify-content:flex-end; margin-top:14px">
       <button value="cancel" formnovalidate>취소</button>
       <button class="primary" value="save">저장</button>
     </div>
   </form>
 </dialog>
+<div id="toast" role="alert"></div>
 <script src="app.js"></script>
 </body>
 </html>
