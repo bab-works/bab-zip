@@ -213,6 +213,17 @@
   .sheet-grab { height:30px; margin:-10px -18px 6px; display:flex; align-items:center; justify-content:center; touch-action:none; cursor:grab; }
   .sheet-grab span { width:46px; height:5px; border-radius:3px; background:var(--muted); opacity:.5; }
   dialog.sheet { max-height:88vh; }
+  /* 손잡이 주변 넓은 영역(제목 포함)에서 아래로 끌기 */
+  dialog.sheet > h2, dialog.sheet > .sheet-grab, dialog.sheet > .row:first-child { touch-action:none; }
+  .sheet-grab { height:40px; }
+  /* 날짜 버튼 (누르면 캘린더) · 시간 줄 */
+  .dbtn { grid-column:1/-1; width:100%; text-align:left; padding:14px 16px; border-radius:14px; background:var(--fill); font-size:16px; font-weight:600; }
+  .dbtn.empty { color:var(--muted); font-weight:400; }
+  .time-row { display:flex; align-items:center; gap:10px; background:var(--fill); border-radius:14px; padding:6px 6px 6px 16px; }
+  .time-row .time-lbl { font-size:15px; font-weight:600; color:var(--muted); }
+  .time-row .wheel { flex:1; margin-top:0; }
+  .time-row .wheel select { padding:8px 6px; background:transparent; }
+  .cal.pick button { min-height:48px; }
   dialog::backdrop { background:rgba(0,0,0,.30); }
   @keyframes up { from { transform:translateY(40px); opacity:.4; } }
   /* 왼쪽에서 나오는 메뉴 */
@@ -434,10 +445,10 @@
     <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
     <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
     <input name="date" type="date" required aria-label="날짜">
-    <input name="time" type="time" aria-label="시간">
     <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
+    <div class="time-row full"><span class="time-lbl">시간</span><input name="time" type="time" aria-label="시간"></div>
     <div class="row full" style="margin-top:6px">
       <button type="button" id="entryDelete" class="danger">삭제</button>
       <span style="flex:1"></span>
@@ -472,6 +483,13 @@
   <div class="row"><h2 id="catTitle" style="margin:0"></h2><button id="catClose" class="small">닫기</button></div>
   <p id="catSum" class="hint"></p>
   <ul id="catList" class="tx"></ul>
+</dialog>
+
+<dialog id="calPick" class="sheet" aria-label="날짜 선택">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <div class="row cal-head"><button type="button" id="cpPrev" class="small" aria-label="이전 달">‹</button><b id="cpTitle"></b><button type="button" id="cpNext" class="small" aria-label="다음 달">›</button></div>
+  <div class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+  <div id="cpGrid" class="cal pick" role="grid" aria-label="날짜"></div>
 </dialog>
 
 <dialog id="settings">

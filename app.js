@@ -586,16 +586,17 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
-// 바텀시트 손잡이를 아래로 끌면 닫기 (손잡이 영역에서만 시작)
+// 바텀시트 위쪽(손잡이·제목 영역)을 아래로 끌면 닫기. 버튼·입력칸 위에서는 끌기 시작 안 함
 document.querySelectorAll('dialog.sheet').forEach(d => {
-  const g = d.querySelector('.sheet-grab'); if (!g) return;
   let y0 = null, dy = 0;
   const reset = () => { d.style.transition = ''; d.style.transform = ''; d.style.animation = ''; };
-  g.addEventListener('pointerdown', e => {
+  d.addEventListener('pointerdown', e => {
+    if (e.clientY - d.getBoundingClientRect().top > 96) return;
+    if (e.target.closest('button,input,select,textarea,a,label')) return;
     y0 = e.clientY; dy = 0; d.style.animation = 'none'; d.style.transition = 'none';
-    g.setPointerCapture(e.pointerId);
+    d.setPointerCapture(e.pointerId);
   });
-  g.addEventListener('pointermove', e => {
+  d.addEventListener('pointermove', e => {
     if (y0 === null) return;
     dy = Math.max(0, e.clientY - y0);
     d.style.transform = `translateY(${dy}px)`;
@@ -607,8 +608,8 @@ document.querySelectorAll('dialog.sheet').forEach(d => {
     if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { d.close(); reset(); }, 230); }
     else { d.style.transform = ''; setTimeout(reset, 260); }
   };
-  g.addEventListener('pointerup', end);
-  g.addEventListener('pointercancel', end);
+  d.addEventListener('pointerup', end);
+  d.addEventListener('pointercancel', end);
 });
 // 창 바깥(어두운 부분)을 누르면 닫기
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
@@ -771,7 +772,7 @@ function openItem(it) {
   const f = $('#lForm').elements, today = localISO();
   const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '완독', date: today.slice(0, 10), kind: '추천받은 책' };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
-  $('#lFields').querySelectorAll('input[type=date]').forEach(i => wheel(i));
+  $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
@@ -847,7 +848,50 @@ function wheel(input, opt = {}) {
   if (opt.into) opt.into.append(wrap); else input.after(wrap); // 입력칸 바로 뒤(원래 자리)
   show(valDesc.get.call(input));
 }
-wheel($('#entryForm [name=date]'), { full: true });
+dateField($('#entryForm [name=date]'));
+// 날짜 칸: 한 줄 버튼(예: 2026년 11월 11일 (화))을 누르면 캘린더 창
+const DOW = '일월화수목금토';
+const fmtDate_ = v => { const [y, m, d] = v.split('-').map(Number); return `${y}년 ${m}월 ${d}일 (${DOW[new Date(y, m - 1, d).getDay()]})`; };
+function dateField(input) {
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'dbtn';
+  btn.setAttribute('aria-label', (input.getAttribute('aria-label') || '날짜') + ' 선택');
+  const show = v => { btn.textContent = v ? fmtDate_(v) : '날짜를 선택하세요'; btn.classList.toggle('empty', !v); };
+  Object.defineProperty(input, 'value', { configurable: true,
+    get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
+  input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
+  input.after(btn);
+  btn.addEventListener('click', () => openCal(input));
+  show(valDesc.get.call(input));
+}
+let cpInput = null, cpY = 0, cpM = 0;
+function cpRender() {
+  $('#cpTitle').textContent = `${cpY}년 ${cpM}월`;
+  const first = new Date(cpY, cpM - 1, 1).getDay(), days = new Date(cpY, cpM, 0).getDate(), sel = cpInput ? valDesc.get.call(cpInput) : '';
+  const today = localISO().slice(0, 10);
+  let html = '<span class="blank"></span>'.repeat(first);
+  for (let d = 1; d <= days; d++) {
+    const ds = `${cpY}-${String(cpM).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    html += `<button type="button" data-d="${ds}" class="${ds === today ? 'today' : ''}" aria-pressed="${ds === sel}"><span class="d">${d}</span></button>`;
+  }
+  $('#cpGrid').innerHTML = html;
+}
+function openCal(input) {
+  cpInput = input;
+  const v = valDesc.get.call(input) || localISO().slice(0, 10);
+  cpY = +v.slice(0, 4); cpM = +v.slice(5, 7);
+  cpRender(); $('#calPick').showModal();
+}
+const cpMove = k => { cpM += k; if (cpM < 1) { cpM = 12; cpY--; } if (cpM > 12) { cpM = 1; cpY++; } cpRender(); };
+$('#cpPrev').addEventListener('click', () => cpMove(-1));
+$('#cpNext').addEventListener('click', () => cpMove(1));
+$('#cpGrid').addEventListener('click', e => {
+  const d = e.target.closest('[data-d]')?.dataset.d;
+  if (!d || !cpInput) return;
+  cpInput.value = d; cpInput.dispatchEvent(new Event('change', { bubbles: true }));
+  $('#calPick').close();
+});
+
 // 시간 휠: 시·분 두 칸 (숨긴 time input이 값을 담음). 빈 값은 '--'
 const pad2 = n => String(n).padStart(2, '0');
 function wheelTime(input) {
