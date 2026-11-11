@@ -457,7 +457,11 @@ grab.addEventListener('pointercancel', grabEnd);
 grab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); calOpen = !calOpen; calPlace(calOpen ? calFull() : calRow(), true); } });
 $('#calGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-day]')?.dataset.day;
-  if (d) { selDay = d; renderCal(); window.scrollTo({ top: $('#dayTitle').getBoundingClientRect().top + scrollY - 96, behavior: 'smooth' }); } // 내역 제목이 상단 바 아래에 오도록
+  if (d) {
+    selDay = d; renderCal();
+    // 화면을 다시 그린 직후 스크롤하면 iOS가 무시하는 경우가 있어 한 프레임 뒤에 실행
+    requestAnimationFrame(() => window.scrollTo({ top: $('#dayTitle').getBoundingClientRect().top + scrollY - 96, behavior: 'smooth' })); // 내역 제목이 상단 바 아래에 오도록
+  }
 });
 $('#dayAdd').addEventListener('click', () => openEntry(null, selDay));
 $('#calTabs').addEventListener('click', e => {
