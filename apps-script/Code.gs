@@ -168,86 +168,107 @@ function setupDaily() {
 }
 function daily() { withLock_(runRecurring_); }
 
-// ── 취미 목록 (독서·방탈출·보드게임): 기존 시트의 탭을 그대로 저장소로 사용 ──
-// 목록 탭은 모두 이 가계부 파일 안에 있음 (Apps Script가 붙은 시트 자체를 씀)
-// cols: 필드 → [열 번호, 종류]. head = 제목 줄, width = 앱이 다루는 열 범위, idCol = 수정·삭제용 id 열
-// no = 새 줄에 자동으로 매기는 번호 열
+// ── 취미 목록 (독서·방탈출·보드게임·영화·연극): 이 가계부 파일 안의 탭 ──
+// 열은 "제목 줄의 글자"로 찾아요. 시트에 열을 끼워 넣어도 자동으로 맞춰져요.
+// f: 필드 → [열 제목, 종류, 제목이 없을 때 쓸 열 번호]. 열이 없으면 그 필드는 건너뜀
+// image: 표지·포스터 열 (=IMAGE("주소") 수식이나 http 주소를 읽어서 앱에 보여 줌)
 const LISTS = {
-  book: { tab: '독서 기록', head: 1, key: 'title', width: 9, idCol: 29, no: [1],
-    cols: { year: [2], month: [3], seq: [4, 'num'], title: [5], author: [6], status: [7], stars: [8], memo: [9] } },
-  buy: { tab: '구매 목록', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
-    cols: { title: [2], author: [3], done: [4, 'bool'], memo: [5] } },
-  wish: { tab: '추천·관심 도서', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
-    cols: { title: [2], author: [3], kind: [4], memo: [5] } },
-  escape: { tab: '방탈출 기록', head: 3, key: 'theme', width: 12, idCol: 14,
-    cols: { date: [1, 'date'], theme: [2], shop: [3], area: [4], result: [5], people: [6, 'num'], hints: [7, 'num'], left: [8, 'num'],
-      cost: [9, 'num'], rating: [10], with: [11], review: [12] } }, // 평점은 이모지 문자열
-  board: { tab: '보드게임 기록', head: 1, key: 'name', width: 7, idCol: 1,
-    cols: { date: [2, 'date'], kind: [3], name: [4], place: [5], with: [6], review: [7] } },
-  movie: { tab: '영화 기록', head: 1, key: 'title', width: 8, idCol: 9, no: [1],
-    cols: { title: [2], director: [3], date: [4, 'date'], place: [5], rating: [6], with: [7], review: [8] } },
-  play: { tab: '연극·뮤지컬 기록', head: 1, key: 'title', width: 9, idCol: 10, no: [1],
-    cols: { title: [2], kind: [3], date: [4, 'date'], place: [5], cast: [6], rating: [7], with: [8], review: [9] } },
+  book: { tab: '독서 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
+    year: ['기록 시기'], month: ['', '', 3], seq: ['순번', 'num'], title: ['책 제목'], author: ['저자'], status: ['독서 상태'],
+    stars: ['별점'], memo: ['메모'], image: ['표지'] } },
+  buy: { tab: '구매 목록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
+    title: ['책 제목'], author: ['저자'], done: ['구매 완료', 'bool'], memo: ['메모'], image: ['표지'] } },
+  wish: { tab: '추천·관심 도서', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
+    title: ['책 제목'], author: ['저자'], kind: ['구분'], memo: ['메모'], image: ['표지'] } },
+  escape: { tab: '방탈출 기록', head: 3, key: 'theme', idHead: 'id', f: {
+    date: ['방문일', 'date'], theme: ['테마'], image: ['포스터'], shop: ['매장'], area: ['지역'], result: ['결과'], people: ['인원', 'num'],
+    hints: ['힌트 수', 'num'], left: ['남은 시간(분)', 'num'], cost: ['비용(원)', 'num'], rating: ['평점(1~5)'], with: ['함께한 사람'], review: ['후기'] } },
+  board: { tab: '보드게임 기록', head: 1, key: 'name', idHead: '기록 ID', f: {
+    date: ['날짜', 'date'], kind: ['종류'], name: ['테마·보드게임'], place: ['장소'], with: ['함께한 사람'], review: ['후기'], image: ['이미지'] } },
+  movie: { tab: '영화 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
+    title: ['영화 제목'], director: ['감독'], date: ['관람일', 'date'], place: ['극장'], rating: ['평점'], with: ['함께한 사람'], review: ['후기'], image: ['포스터'] } },
+  play: { tab: '연극·뮤지컬 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
+    title: ['작품명'], kind: ['종류'], date: ['관람일', 'date'], place: ['극장'], cast: ['출연'], rating: ['평점'], with: ['함께한 사람'], review: ['후기'], image: ['포스터'] } },
 };
+// 제목 줄에서 각 필드의 열 번호를 찾음 (없으면 0)
+function listMap_(sh, c) {
+  const head = sh.getRange(c.head, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(v => String(v).trim());
+  const col = name => { const i = head.indexOf(name); return i < 0 ? 0 : i + 1; };
+  const m = {};
+  for (const k in c.f) {
+    const [name, type, fixed] = c.f[k];
+    m[k] = { col: name ? col(name) : (fixed || 0), type: type || '' };
+  }
+  m.__id = col(c.idHead);
+  m.__no = c.no ? col(c.no) : 0;
+  if (!m.__id) throw new Error('목록 탭 "' + c.tab + '"에 "' + c.idHead + '" 열이 없어요');
+  if (!m[c.key].col) throw new Error('목록 탭 "' + c.tab + '"의 열 이름을 확인해 주세요');
+  return m;
+}
 function listSheet_(k) {
   const c = LISTS[k];
   if (!c) throw new Error('알 수 없는 목록');
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(c.tab);
   if (!sh) throw new Error('탭 없음: ' + c.tab);
-  if (sh.getMaxColumns() < c.idCol) sh.insertColumnsAfter(sh.getMaxColumns(), c.idCol - sh.getMaxColumns());
-  if (c.idCol > c.width && sh.getRange(c.head, c.idCol).getValue() !== 'id') sh.getRange(c.head, c.idCol).setValue('id');
-  return sh;
+  return { sh, c, m: listMap_(sh, c) };
 }
-function listLast_(sh, c) {
-  const a = sh.getRange(1, c.cols[c.key][0], sh.getMaxRows(), 1).getValues();
+function listLast_(sh, c, m) {
+  const a = sh.getRange(1, m[c.key].col, sh.getMaxRows(), 1).getValues();
   for (let i = a.length - 1; i >= c.head; i--) if (a[i][0] !== '') return i + 1;
   return c.head;
 }
-function listIds_(sh, c, last) {
+function listIds_(sh, c, m, last) {
   if (last <= c.head) return [];
-  const r = sh.getRange(c.head + 1, c.idCol, last - c.head, 1), v = r.getValues();
+  const r = sh.getRange(c.head + 1, m.__id, last - c.head, 1), v = r.getValues();
   let changed = false;
   v.forEach(x => { if (!x[0]) { x[0] = Utilities.getUuid(); changed = true; } });
   if (changed) r.setValues(v);
   return v.map(x => String(x[0]));
 }
+// =IMAGE("주소") 수식에서 주소 꺼내기
+const imgOf_ = f => { const m = String(f || '').match(/IMAGE\(\s*"([^"]+)"/i); return m ? m[1] : ''; };
 function listRead_(k) {
-  const c = LISTS[k], sh = listSheet_(k), last = listLast_(sh, c), ids = listIds_(sh, c, last);
+  const { sh, c, m } = listSheet_(k), last = listLast_(sh, c, m), ids = listIds_(sh, c, m, last);
   if (!ids.length) return [];
-  return sh.getRange(c.head + 1, 1, last - c.head, c.width).getValues().map((r, i) => {
-    const o = { id: ids[i] };
-    for (const f in c.cols) {
-      const col = c.cols[f][0], t = c.cols[f][1], x = r[col - 1];
+  const n = last - c.head, vals = sh.getRange(c.head + 1, 1, n, sh.getLastColumn()).getValues();
+  const imgCol = m.image ? m.image.col : 0;
+  const forms = imgCol ? sh.getRange(c.head + 1, imgCol, n, 1).getFormulas() : [];
+  return vals.map((r, i) => {
+    const o = { id: String(r[m.__id - 1]) };
+    for (const f in c.f) {
+      if (f === 'image' || !m[f].col) continue;
+      const x = r[m[f].col - 1], t = m[f].type;
       o[f] = t === 'bool' ? x === true : t === 'num' ? (x === '' ? '' : num_(x)) : t === 'date' ? fmt_(x, 'yyyy-MM-dd') : String(x == null ? '' : x);
     }
+    const raw = imgCol ? String(r[imgCol - 1]) : '';
+    o.image = imgOf_(forms[i] && forms[i][0]) || (/^https?:\/\//.test(raw) ? raw : '');
     return o;
   }).filter(o => o[c.key] !== '');
 }
 function listSave_(k, item) {
-  const c = LISTS[k];
-  if (!c) throw new Error('알 수 없는 목록');
+  const { sh, c, m } = listSheet_(k);
   if (!item || !item.id || !String(item[c.key] || '').trim()) throw new Error('입력값 오류');
-  const sh = listSheet_(k), last = listLast_(sh, c), idx = listIds_(sh, c, last).indexOf(String(item.id));
+  const last = listLast_(sh, c, m), idx = listIds_(sh, c, m, last).indexOf(String(item.id));
   const row = idx >= 0 ? c.head + 1 + idx : last + 1;
   if (row > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 100);
-  for (const f in c.cols) {
-    if (!(f in item)) continue;
-    const col = c.cols[f][0], t = c.cols[f][1], x = item[f];
-    sh.getRange(row, col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
+  for (const f in c.f) {
+    if (f === 'image' || !(f in item) || !m[f].col) continue; // 사진은 시트에서 직접 넣음
+    const t = m[f].type, x = item[f];
+    sh.getRange(row, m[f].col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
       : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, 1000));
   }
-  if (idx < 0) (c.no || []).forEach(col => sh.getRange(row, col).setValue((row > c.head + 1 ? num_(sh.getRange(row - 1, col).getValue()) : 0) + 1));
-  sh.getRange(row, c.idCol).setValue(String(item.id));
+  if (idx < 0 && m.__no) sh.getRange(row, m.__no).setValue((row > c.head + 1 ? num_(sh.getRange(row - 1, m.__no).getValue()) : 0) + 1);
+  sh.getRange(row, m.__id).setValue(String(item.id));
 }
 function listDelete_(k, id) {
-  const c = LISTS[k];
-  if (!c) throw new Error('알 수 없는 목록');
-  const sh = listSheet_(k), idx = listIds_(sh, c, listLast_(sh, c)).indexOf(String(id));
+  const { sh, c, m } = listSheet_(k), idx = listIds_(sh, c, m, listLast_(sh, c, m)).indexOf(String(id));
   if (idx < 0) return;
   const row = c.head + 1 + idx;
-  // 줄 전체가 아니라 목록 칸만 지우고 위로 당김 (같은 줄 옆에 있는 요약 표를 보존)
-  sh.getRange(row, 1, 1, c.width).deleteCells(SpreadsheetApp.Dimension.ROWS);
-  if (c.idCol > c.width) sh.getRange(row, c.idCol).deleteCells(SpreadsheetApp.Dimension.ROWS);
+  const cols = Object.keys(c.f).map(f => m[f].col).filter(Boolean).concat(m.__no ? [m.__no] : []);
+  const lastC = Math.max(...cols);
+  // 목록 칸만 위로 당김 (같은 열 바깥의 요약 표는 건드리지 않음)
+  sh.getRange(row, 1, 1, lastC).deleteCells(SpreadsheetApp.Dimension.ROWS);
+  if (m.__id > lastC) sh.getRange(row, m.__id).deleteCells(SpreadsheetApp.Dimension.ROWS);
 }
 
 function withLock_(fn) {

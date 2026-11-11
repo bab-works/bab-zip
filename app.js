@@ -668,6 +668,7 @@ const LIST_FIELDS = {
     ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
+const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭' };
 // 목록 한 줄: [제목, 설명, 오른쪽 표시]
 const LIST_ROW = {
   book: i => [i.title, joinDot([i.author, [i.year, i.month].filter(Boolean).join(' '), i.memo]), i.stars || i.status],
@@ -703,7 +704,7 @@ function renderLists() {
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
-    return `<li data-id="${esc(i.id)}"><div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 async function refreshLists() {
@@ -774,6 +775,7 @@ function openItem(it) {
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
+  $('#lPreview').innerHTML = it?.image ? `<img class="thumb big" src="${esc(it.image)}" alt="">` : '';
   $('#lItem').showModal();
 }
 $('#lList').addEventListener('click', e => {
