@@ -457,7 +457,7 @@ grab.addEventListener('pointercancel', grabEnd);
 grab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); calOpen = !calOpen; calPlace(calOpen ? calFull() : calRow(), true); } });
 $('#calGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-day]')?.dataset.day;
-  if (d) { selDay = d; renderCal(); $('#dayTitle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  if (d) { selDay = d; renderCal(); window.scrollTo({ top: $('#dayTitle').getBoundingClientRect().top + scrollY - 96, behavior: 'smooth' }); } // 내역 제목이 상단 바 아래에 오도록
 });
 $('#dayAdd').addEventListener('click', () => openEntry(null, selDay));
 $('#calTabs').addEventListener('click', e => {
@@ -582,6 +582,30 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
+// 창 위쪽 바(손잡이)를 아래로 끌면 닫기
+document.querySelectorAll('dialog').forEach(d => {
+  let y0 = null, dy = 0;
+  const reset = () => { d.style.transition = ''; d.style.transform = ''; d.style.animation = ''; };
+  d.addEventListener('pointerdown', e => {
+    if (e.clientY - d.getBoundingClientRect().top > 44 || e.target.closest('button,input,select,a,textarea')) return; // 위쪽 바에서만, 버튼 위에서는 시작 안 함
+    y0 = e.clientY; dy = 0; d.style.animation = 'none'; d.style.transition = 'none';
+    d.setPointerCapture(e.pointerId);
+  });
+  d.addEventListener('pointermove', e => {
+    if (y0 === null) return;
+    dy = Math.max(0, e.clientY - y0);
+    d.style.transform = `translateY(${dy}px)`;
+  });
+  const end = () => {
+    if (y0 === null) return;
+    const close = dy > 90; y0 = null;
+    d.style.transition = 'transform .25s ease';
+    if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { d.close(); reset(); }, 230); }
+    else { d.style.transform = ''; setTimeout(reset, 260); }
+  };
+  d.addEventListener('pointerup', end);
+  d.addEventListener('pointercancel', end);
+});
 // 창 바깥(어두운 부분)을 누르면 닫기
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
   const r = d.getBoundingClientRect();
