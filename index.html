@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>나의 가계부</title>
+<title>BAB:ZIP</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#0b0f0e" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="가계부">
+<meta name="apple-mobile-web-app-title" content="BAB:ZIP">
 <style>
   /* Pretendard (SIL Open Font License) — 파일을 앱에 같이 둬서 오프라인에서도 적용 */
   @font-face { font-family:"Pretendard Variable"; font-weight:45 920; font-display:swap; src:url("PretendardVariable.woff2") format("woff2-variations"); }
@@ -181,6 +181,16 @@
   dialog::before { content:""; display:block; width:40px; height:5px; border-radius:3px; background:var(--fill); margin:0 auto 10px; }
   dialog::backdrop { background:rgba(0,0,0,.30); }
   @keyframes up { from { transform:translateY(40px); opacity:.4; } }
+  /* 왼쪽에서 나오는 메뉴 */
+  #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0 28px 28px 0; border-left:0;
+    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .22s ease-out; }
+  #menu::before { display:none; }
+  @keyframes side { from { transform:translateX(-40px); opacity:.4; } }
+  .menu-list { display:flex; flex-direction:column; gap:6px; }
+  .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:17px; font-weight:600; background:none; }
+  .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
+  .menu-list .em { font-size:22px; }
+  #lFields label.f.full, #lFields .chk { grid-column:1/-1; }
   #settings { border-radius:28px; margin:auto; width:min(94vw,440px); border-bottom:1px solid var(--glass-edge); }
   dialog label.f { display:block; font-size:13px; color:var(--muted); }
   dialog label.f > input, dialog label.f > select { margin-top:4px; color:var(--fg); }
@@ -218,15 +228,17 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
   <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
 </svg>
 
 <header>
-  <h1>나의 가계부</h1>
+  <button id="menuBtn" class="icon-btn" aria-label="메뉴 열기"><svg class="i"><use href="#i-menu"/></svg></button>
+  <h1 id="appTitle">MONEY</h1>
   <button id="reload" class="icon-btn" aria-label="시트에서 새로고침"><svg class="i"><use href="#i-sync"/></svg></button>
   <button id="openSettings" class="icon-btn" aria-label="설정"><svg class="i"><use href="#i-gear"/></svg></button>
 </header>
-<div class="month-row">
+<div class="month-row" id="monthRow">
   <div class="month-pill">
     <button id="mPrev" aria-label="이전 달">‹</button>
     <button id="monthLabel" aria-label="월 선택"></button>
@@ -308,6 +320,15 @@
     <div class="card"><ul id="list" class="tx"></ul></div>
   </section>
 
+  <section id="v-lists" hidden>
+    <div class="card">
+      <div class="search"><input id="lq" type="search" placeholder="검색" aria-label="목록 검색"></div>
+      <div id="lTabs" class="tabs" role="group" aria-label="목록 종류" style="margin-top:8px"></div>
+    </div>
+    <p id="lInfo" class="hint" style="padding:0 4px"></p>
+    <div class="card"><ul id="lList" class="tx"></ul></div>
+  </section>
+
   <section id="v-rec" hidden>
     <div class="card">
       <h2>반복 거래</h2>
@@ -370,6 +391,24 @@
       <button type="button" id="entryDelete" class="danger">삭제</button>
       <span style="flex:1"></span>
       <button type="button" id="entryCancel">닫기</button>
+      <button class="primary" style="padding:12px 28px">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="menu" aria-label="메뉴">
+  <h2 style="font-size:22px;margin:8px 4px 14px">BAB:ZIP</h2>
+  <div id="menuList" class="menu-list"></div>
+</dialog>
+
+<dialog id="lItem">
+  <form id="lForm" class="grid2">
+    <h2 id="lTitle" class="full" style="text-align:center;margin:0" tabindex="-1" autofocus></h2>
+    <div id="lFields" class="full grid2"></div>
+    <div class="row full" style="margin-top:6px">
+      <button type="button" id="lDelete" class="danger">삭제</button>
+      <span style="flex:1"></span>
+      <button type="button" id="lCancel">닫기</button>
       <button class="primary" style="padding:12px 28px">저장</button>
     </div>
   </form>

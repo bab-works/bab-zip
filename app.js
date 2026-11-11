@@ -32,12 +32,12 @@ function toast(t) {
 }
 
 // ── 시트 통신 ──
-async function api(body) {
+async function api(body, qs = '') {
   if (!cfg.url) throw new Error('⚙ 설정에서 시트를 연결하세요');
   const res = body
     // text/plain 이어야 Apps Script가 CORS 사전요청 없이 받음
     ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: cfg.token }) })
-    : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token));
+    : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token) + qs);
   const r = await res.json();
   if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호/.test(r.error) });
   return r;
@@ -321,7 +321,7 @@ function renderCatSheet() {
 $('#catClose').addEventListener('click', () => $('#catSheet').close());
 $('#catSheet').addEventListener('close', () => { catOpen = ''; });
 
-function render() { renderFilters(); renderHome(); renderCal(); renderList(); renderRec(); renderCatSheet(); }
+function render() { renderFilters(); renderHome(); renderCal(); renderList(); renderRec(); renderCatSheet(); renderLists(); }
 
 // ── 거래 입력·수정 ──
 const F = $('#entryForm').elements;
@@ -399,7 +399,7 @@ $('#entryDelete').addEventListener('click', () => {
   queue({ action: 'delete', id }).then(ok => ok && setStatus('삭제됨'));
 });
 $('#entryCancel').addEventListener('click', () => $('#entry').close());
-$('#fab').addEventListener('click', () => openEntry(null, $('#v-cal').hidden ? '' : selDay));
+$('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#v-cal').hidden ? '' : selDay) : openItem());
 ['#list', '#dayList', '#recent', '#catList'].forEach(s => $(s).addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
@@ -476,7 +476,9 @@ $('#recList').addEventListener('click', e => {
 });
 
 // ── 공통 ──
+let curView = 'home';
 function show(v) {
+  curView = v;
   document.querySelectorAll('nav button').forEach(b => b.dataset.view === v ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
   $('#filters').hidden = v !== 'list' && v !== 'cal';
@@ -511,7 +513,7 @@ $('#fReset').addEventListener('click', () => {
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
   render();
 });
-$('#reload').addEventListener('click', refresh);
+$('#reload').addEventListener('click', () => sec === 'money' ? refresh() : refreshLists());
 $('#openSettings').addEventListener('click', () => {
   const f = $('#settingsForm');
   f.url.value = cfg.url; f.token.value = cfg.token;
@@ -553,10 +555,164 @@ $('#homeEdit').addEventListener('click', () => {
   $('#homeEdit').textContent = on ? '✓ 편집 완료' : '✎ 홈 화면 편집';
 });
 
+// ── BAB:ZIP 섹션: MONEY · 독서 · 방탈출 · 보드게임 ──
+const SECTIONS = {
+  money: { title: 'MONEY', icon: '💰' },
+  book: { title: '독서', icon: '📚', tabs: [['book', '독서 기록'], ['buy', '구매 목록'], ['wish', '추천·관심']] },
+  escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록']] },
+  board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
+};
+let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
+let sec = 'money', curList = 'book';
+const L = k => (lists[k] || []).filter(i => k !== 'board' || i.kind === '보드게임'); // 취미 기록 탭에서 보드게임만
+const yearOpts = () => [...new Set([localISO().slice(0, 4) + '년', ...L('book').map(i => i.year).filter(Boolean)])].sort().reverse();
+// 필드: [이름, 라벨, 종류, 선택지]
+const LIST_FIELDS = {
+  book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
+    ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => String(k + 1).padStart(2, '0') + '월')]],
+    ['status', '독서 상태', 'select', ['완독', '읽는 중', '보류', '중도포기']], ['stars', '별점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']], ['memo', '메모', 'text']],
+  buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text']],
+  wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text']],
+  escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
+    ['rating', '평점', 'select', ['', '1', '2', '3', '4', '5']], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
+    ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+  board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+};
+const joinDot = a => a.filter(Boolean).join(' · ');
+// 목록 한 줄: [제목, 설명, 오른쪽 표시]
+const LIST_ROW = {
+  book: i => [i.title, joinDot([i.author, [i.year, i.month].filter(Boolean).join(' '), i.memo]), i.stars || i.status],
+  buy: i => [i.title, joinDot([i.author, i.memo]), i.done ? '✅ 구매함' : '미구매'],
+  wish: i => [i.title, joinDot([i.author, i.kind, i.memo]), ''],
+  escape: i => [i.theme, joinDot([i.date, i.shop, i.area, i.with, i.review]), joinDot([i.result, i.rating && '★' + i.rating])],
+  board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), ''],
+};
+function listSorted(k) {
+  const a = [...L(k)].reverse(); // 시트 아래쪽(최근 입력)이 위로
+  if (k === 'escape' || k === 'board') a.sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+  if (k === 'buy') a.sort((x, y) => x.done - y.done);
+  return a;
+}
+function listInfo(k, a) {
+  const n = a.length;
+  if (k === 'book') { const y = localISO().slice(0, 4) + '년'; return `${n}권 · 완독 ${a.filter(i => i.status === '완독').length}권 · 올해 완독 ${a.filter(i => i.status === '완독' && i.year === y).length}권`; }
+  if (k === 'buy') return `${n}권 · 아직 안 산 책 ${a.filter(i => !i.done).length}권`;
+  if (k === 'wish') return `${n}권`;
+  if (k === 'escape') return `${n}개 테마${a.some(i => i.result) ? ` · 성공 ${a.filter(i => i.result === '성공').length}` : ''}`;
+  return `${n}개 기록`;
+}
+function renderLists() {
+  if (sec === 'money') return;
+  const tabs = SECTIONS[sec].tabs;
+  $('#lTabs').hidden = tabs.length < 2;
+  $('#lTabs').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" aria-pressed="${k === curList}">${label}</button>`).join('');
+  const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
+  const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
+  $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
+  $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
+    return `<li data-id="${esc(i.id)}"><div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
+}
+async function refreshLists() {
+  setStatus('불러오는 중…');
+  if (await sync()) {
+    try {
+      const r = await api(null, '&what=lists');
+      if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
+      else { lists = r.lists; store.set('lists', lists); setStatus('시트와 동기화됨'); }
+    } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
+  }
+  renderLists();
+}
+function setSection(k) {
+  sec = k;
+  store.set('sec', k);
+  $('#appTitle').textContent = SECTIONS[k].title;
+  const money = k === 'money';
+  $('#monthRow').hidden = !money;
+  document.querySelector('nav').hidden = !money;
+  $('#v-lists').hidden = money;
+  if (money) show(curView);
+  else {
+    ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
+    $('#filters').hidden = true;
+    $('#fab').hidden = false;
+    curList = SECTIONS[k].tabs[0][0];
+    $('#lq').value = '';
+    renderLists();
+    refreshLists();
+    window.scrollTo(0, 0);
+  }
+}
+$('#menuBtn').addEventListener('click', () => {
+  $('#menuList').innerHTML = Object.entries(SECTIONS).map(([k, v]) =>
+    `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><span class="em" aria-hidden="true">${v.icon}</span>${v.title}</button>`).join('');
+  $('#menu').showModal();
+});
+$('#menuList').addEventListener('click', e => {
+  const k = e.target.closest('[data-sec]')?.dataset.sec;
+  if (k) { $('#menu').close(); setSection(k); }
+});
+$('#lTabs').addEventListener('click', e => {
+  const k = e.target.closest('[data-list]')?.dataset.list;
+  if (k) { curList = k; renderLists(); }
+});
+$('#lq').addEventListener('input', renderLists);
+
+// 목록 항목 추가·수정 창 (필드 표로 자동 생성)
+function openItem(it) {
+  const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
+  $('#lFields').innerHTML = fs.map(([n, lab, type, opts], k) => {
+    if (type === 'bool') return `<label class="chk"><input type="checkbox" name="${n}"> ${lab}</label>`;
+    const full = k === 0 || n === 'memo' || n === 'review' ? ' full' : '';
+    if (type === 'select') {
+      const o = [...new Set([...(typeof opts === 'function' ? opts() : opts), ...(it && it[n] ? [String(it[n])] : [])])];
+      return `<label class="f${full}">${lab}<select name="${n}">${o.map(v => `<option value="${esc(v)}">${esc(v) || '선택 안 함'}</option>`).join('')}</select></label>`;
+    }
+    return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${type === 'number' ? 'inputmode="numeric" min="0"' : 'maxlength="1000"'} ${k === 0 ? 'required' : ''}></label>`;
+  }).join('');
+  const f = $('#lForm').elements, today = localISO();
+  const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '완독', date: today.slice(0, 10), kind: '추천받은 책' };
+  fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
+  $('#lForm').dataset.id = it?.id || '';
+  $('#lDelete').hidden = !it;
+  $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
+  $('#lItem').showModal();
+}
+$('#lList').addEventListener('click', e => {
+  const id = e.target.closest('li[data-id]')?.dataset.id, it = id && L(curList).find(i => i.id === id);
+  if (it) openItem(it);
+});
+$('#lForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target.elements, id = e.target.dataset.id, item = { id: id || crypto.randomUUID() };
+  LIST_FIELDS[curList].forEach(([n, , type]) => { item[n] = type === 'bool' ? f[n].checked : type === 'number' ? (f[n].value === '' ? '' : Math.round(+f[n].value)) : f[n].value.trim(); });
+  if (!item[LIST_FIELDS[curList][0][0]]) return;
+  if (curList === 'board') item.kind = '보드게임';
+  if (curList === 'escape' && item.rating !== '') item.rating = +item.rating;
+  const arr = lists[curList] = lists[curList] || [], idx = arr.findIndex(i => i.id === item.id);
+  // 독서 기록의 순번 = 같은 연·월 안에서 몇 번째 책인지 (새로 추가할 때만 매김)
+  if (curList === 'book' && idx < 0) item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;
+  if (idx >= 0) arr[idx] = { ...arr[idx], ...item }; else arr.push(item);
+  store.set('lists', lists);
+  $('#lItem').close();
+  queue({ action: 'listSave', list: curList, item });
+});
+$('#lDelete').addEventListener('click', () => {
+  if (!confirm('이 기록을 시트에서 삭제할까요?')) return;
+  const id = $('#lForm').dataset.id;
+  lists[curList] = (lists[curList] || []).filter(i => i.id !== id);
+  store.set('lists', lists);
+  $('#lItem').close();
+  queue({ action: 'listDelete', list: curList, id }).then(ok => ok && setStatus('삭제됨'));
+});
+$('#lCancel').addEventListener('click', () => $('#lItem').close());
+
 const now = localISO();
 $('#month').value = now.slice(0, 7);
 R.start.value = now.slice(0, 7);
 render();
 refresh();
 if (!cfg.url) $('#settings').showModal(); // 연결 전이면 바로 설정 창
+if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

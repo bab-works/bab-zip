@@ -1,6 +1,6 @@
 {
-  "name": "가계부",
-  "short_name": "가계부",
+  "name": "BAB:ZIP",
+  "short_name": "BAB:ZIP",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

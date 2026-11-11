@@ -16,7 +16,7 @@ function fmt_(v, p) {
 }
 const num_ = v => Number(String(v).replace(/,/g, '')) || 0;
 // 앞에 ' 를 붙여 글자로 고정 (=로 시작하는 메모가 수식으로 실행되거나 날짜로 바뀌는 것 방지). 셀 값에는 ' 가 남지 않음
-const txt_ = v => { const s = String(v == null ? '' : v).trim().slice(0, 200); return s ? "'" + s : ''; };
+const txt_ = (v, n) => { const s = String(v == null ? '' : v).trim().slice(0, n || 200); return s ? "'" + s : ''; };
 
 function tx_() {
   const sh = ss_().getSheetByName('거래');
@@ -159,6 +159,85 @@ function setupDaily() {
 }
 function daily() { withLock_(runRecurring_); }
 
+// ── 취미 목록 (독서·방탈출·보드게임): 기존 시트의 탭을 그대로 저장소로 사용 ──
+const BOOK_SS = '1HQ94tsImX76jgJbnM2jwAIchoitK8aj1VH8MHzr9-mY';  // 나의 독서 목록
+const HOBBY_SS = '1eggucX5eNjeQzlP5b5r658ZCOcGeHkHlyh-Sc6hrHk0'; // 나의 방탈출 기록
+// cols: 필드 → [열 번호, 종류]. head = 제목 줄, width = 앱이 다루는 열 범위 (그 밖의 요약 수식 등은 건드리지 않음)
+// no = 새 줄에 자동으로 매기는 번호 열, idCol = 수정·삭제용 id 열
+const LISTS = {
+  book: { ss: BOOK_SS, tab: '독서 기록', head: 1, key: 'title', width: 9, idCol: 29, no: [1],
+    cols: { year: [2], month: [3], seq: [4, 'num'], title: [5], author: [6], status: [7], stars: [8], memo: [9] } },
+  buy: { ss: BOOK_SS, tab: '구매 목록', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
+    cols: { title: [2], author: [3], done: [4, 'bool'], memo: [5] } },
+  wish: { ss: BOOK_SS, tab: '추천·관심 도서', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
+    cols: { title: [2], author: [3], kind: [4], memo: [5] } },
+  escape: { ss: HOBBY_SS, tab: '방탈출 기록', head: 3, key: 'theme', width: 12, idCol: 14,
+    cols: { date: [1, 'date'], theme: [2], shop: [3], area: [4], result: [5], people: [6, 'num'], hints: [7, 'num'], left: [8, 'num'],
+      cost: [9, 'num'], rating: [10, 'num'], with: [11], review: [12] } },
+  board: { ss: HOBBY_SS, tab: '취미 기록', head: 1, key: 'name', width: 7, idCol: 1,
+    cols: { date: [2, 'date'], kind: [3], name: [4], place: [5], with: [6], review: [7] } },
+};
+function listSheet_(k) {
+  const c = LISTS[k];
+  if (!c) throw new Error('알 수 없는 목록');
+  const sh = SpreadsheetApp.openById(c.ss).getSheetByName(c.tab);
+  if (!sh) throw new Error('탭 없음: ' + c.tab);
+  if (sh.getMaxColumns() < c.idCol) sh.insertColumnsAfter(sh.getMaxColumns(), c.idCol - sh.getMaxColumns());
+  if (c.idCol > c.width && sh.getRange(c.head, c.idCol).getValue() !== 'id') sh.getRange(c.head, c.idCol).setValue('id');
+  return sh;
+}
+function listLast_(sh, c) {
+  const a = sh.getRange(1, c.cols[c.key][0], sh.getMaxRows(), 1).getValues();
+  for (let i = a.length - 1; i >= c.head; i--) if (a[i][0] !== '') return i + 1;
+  return c.head;
+}
+function listIds_(sh, c, last) {
+  if (last <= c.head) return [];
+  const r = sh.getRange(c.head + 1, c.idCol, last - c.head, 1), v = r.getValues();
+  let changed = false;
+  v.forEach(x => { if (!x[0]) { x[0] = Utilities.getUuid(); changed = true; } });
+  if (changed) r.setValues(v);
+  return v.map(x => String(x[0]));
+}
+function listRead_(k) {
+  const c = LISTS[k], sh = listSheet_(k), last = listLast_(sh, c), ids = listIds_(sh, c, last);
+  if (!ids.length) return [];
+  return sh.getRange(c.head + 1, 1, last - c.head, c.width).getValues().map((r, i) => {
+    const o = { id: ids[i] };
+    for (const f in c.cols) {
+      const col = c.cols[f][0], t = c.cols[f][1], x = r[col - 1];
+      o[f] = t === 'bool' ? x === true : t === 'num' ? (x === '' ? '' : num_(x)) : t === 'date' ? fmt_(x, 'yyyy-MM-dd') : String(x == null ? '' : x);
+    }
+    return o;
+  }).filter(o => o[c.key] !== '');
+}
+function listSave_(k, item) {
+  const c = LISTS[k];
+  if (!c) throw new Error('알 수 없는 목록');
+  if (!item || !item.id || !String(item[c.key] || '').trim()) throw new Error('입력값 오류');
+  const sh = listSheet_(k), last = listLast_(sh, c), idx = listIds_(sh, c, last).indexOf(String(item.id));
+  const row = idx >= 0 ? c.head + 1 + idx : last + 1;
+  if (row > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 100);
+  for (const f in c.cols) {
+    if (!(f in item)) continue;
+    const col = c.cols[f][0], t = c.cols[f][1], x = item[f];
+    sh.getRange(row, col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
+      : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, 1000));
+  }
+  if (idx < 0) (c.no || []).forEach(col => sh.getRange(row, col).setValue((row > c.head + 1 ? num_(sh.getRange(row - 1, col).getValue()) : 0) + 1));
+  sh.getRange(row, c.idCol).setValue(String(item.id));
+}
+function listDelete_(k, id) {
+  const c = LISTS[k];
+  if (!c) throw new Error('알 수 없는 목록');
+  const sh = listSheet_(k), idx = listIds_(sh, c, listLast_(sh, c)).indexOf(String(id));
+  if (idx < 0) return;
+  const row = c.head + 1 + idx;
+  // 줄 전체가 아니라 목록 칸만 지우고 위로 당김 (같은 줄 옆에 있는 요약 표를 보존)
+  sh.getRange(row, 1, 1, c.width).deleteCells(SpreadsheetApp.Dimension.ROWS);
+  if (c.idCol > c.width) sh.getRange(row, c.idCol).deleteCells(SpreadsheetApp.Dimension.ROWS);
+}
+
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -168,6 +247,9 @@ function withLock_(fn) {
 function doGet(e) {
   if (e.parameter.token !== TOKEN) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
+    if (e.parameter.what === 'lists') {
+      return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
+    }
     return out_(withLock_(() => {
       runRecurring_();
       const sh = tx_(), last = last_(sh);
@@ -196,11 +278,13 @@ function doPost(e) {
       else if (b.action === 'recSave') saveRec_(b.rule);
       else if (b.action === 'recDelete') deleteRec_(b.id);
       else if (b.action === 'budget') budget_(b.major, b.amount);
+      else if (b.action === 'listSave') listSave_(b.list, b.item);
+      else if (b.action === 'listDelete') listDelete_(b.list, b.id);
       else throw new Error('알 수 없는 동작');
     });
     return out_({ ok: true });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
-    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류/.test(err.message) });
+    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음/.test(err.message) });
   }
 }
