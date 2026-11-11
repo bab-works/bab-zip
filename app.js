@@ -236,35 +236,69 @@ let selDay = localISO().slice(0, 10);
 function daySums(list) {
   return { inc: list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0), exp: list.reduce((s, i) => s + net(i), 0) };
 }
+let calPay = ''; // 달력 결제유형 탭 ('' = 전체)
 function renderCal() {
   const m = $('#month').value;
   if (!m) return;
   const [y, mo] = m.split('-').map(Number), first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate();
   if (!selDay.startsWith(m)) selDay = m + '-01';
+  const types = [...new Set(data.meta.payments.map(p => p[1]).filter(Boolean))];
+  $('#calTabs').innerHTML = ['', ...types].map(t => `<button type="button" data-pt="${esc(t)}" aria-pressed="${t === calPay}">${t ? esc(t) : '전체'}</button>`).join('');
+  // 결제유형은 「카테고리」 탭의 결제수단→유형 표로 판단 (방금 입력해 시트 수식이 아직 안 돈 거래도 포함되게)
+  const ptOf = Object.fromEntries(data.meta.payments);
+  const src = filtered().filter(i => !calPay || (ptOf[i.pay] || i.payType) === calPay);
   const byDay = {};
-  filtered().filter(i => i.date.startsWith(m)).forEach(i => (byDay[i.date] = byDay[i.date] || []).push(i));
+  src.filter(i => i.date.startsWith(m)).forEach(i => (byDay[i.date] = byDay[i.date] || []).push(i));
   const sums = {};
   Object.keys(byDay).forEach(d => { sums[d] = daySums(byDay[d]); });
-  const maxExp = Math.max(1, ...Object.values(sums).map(s => s.exp));
+  // 평소보다 크게 쓴 날(지출일 중앙값의 3배 이상, 100만원 이상)은 빨간색
+  const exps = Object.values(sums).map(s => s.exp).filter(v => v > 0).sort((a, b) => a - b);
+  const bigCut = Math.max(1e6, 3 * (exps[Math.floor(exps.length / 2)] || 0));
   const today = localISO().slice(0, 10);
-  const month = daySums(Object.values(byDay).flat());
-  $('#calTitle').textContent = `${y}년 ${mo}월`;
-  $('#calSum').innerHTML = `수입 <b class="in">${won(month.inc)}</b> · 지출 <b class="out">${won(month.exp)}</b>`;
-  let html = '<span class="blank"></span>'.repeat(first);
+  // 칸이 좁아서 100만 이상만 줄여 쓰고, 그 아래는 전부 표시
+  const amt = n => Math.abs(n) >= 1e6 ? compact(n) : Math.abs(Math.round(n)).toLocaleString('ko-KR');
+  const pd = new Date(y, mo - 1, 0).getDate();
+  let html = '';
+  for (let k = first - 1; k >= 0; k--) html += `<span class="other" aria-hidden="true">${pd - k}</span>`;
   for (let d = 1; d <= days; d++) {
     const ds = `${m}-${String(d).padStart(2, '0')}`, s = sums[ds], wd = (first + d - 1) % 7;
-    const heat = s && s.exp > 0 ? Math.round(4 + s.exp / maxExp * 26) : 0; // 지출이 많은 날일수록 진하게
-    html += `<button type="button" data-day="${ds}" class="${ds === today ? 'today ' : ''}${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}"
-      style="--heat:${heat}%" aria-pressed="${ds === selDay}" aria-label="${mo}월 ${d}일${s ? ` 수입 ${won(s.inc)} 지출 ${won(s.exp)}` : ''}">
-      <span class="d">${d}</span>${s && s.inc ? `<small class="in">+${compact(s.inc)}</small>` : ''}${s && s.exp ? (s.exp > 0 ? `<small class="out">-${compact(s.exp)}</small>` : `<small class="refund">+${compact(s.exp)}</small>`) : ''}</button>`;
+    const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
+    html += `<button type="button" data-day="${ds}" class="${cls}" aria-pressed="${ds === selDay}" aria-label="${mo}월 ${d}일${s ? ` 수입 ${won(s.inc)} 지출 ${won(s.exp)}` : ''}">
+      <span class="d">${d}</span>${s && s.inc ? `<small class="in">+${amt(s.inc)}</small>` : ''}${s && s.exp ? (s.exp > 0
+        ? `<small class="${s.exp >= bigCut ? 'big' : 'spend'}">-${amt(s.exp)}</small>` : `<small class="refund">+${amt(s.exp)}</small>`) : ''}</button>`;
   }
+  const tail = (7 - (first + days) % 7) % 7;
+  for (let d = 1; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
   $('#calGrid').innerHTML = html;
+  renderTrend(src, m, y, mo, days, today);
 
   const list = (byDay[selDay] || []).sort((a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || b.amount - a.amount);
   const [, sm, sd] = selDay.split('-').map(Number), ds = daySums(list);
-  $('#dayTitle').textContent = `${sm}월 ${sd}일 (${WEEK[new Date(y, sm - 1, sd).getDay()]})`;
+  $('#dayTitle').textContent = `${sm}월 ${sd}일 ${WEEK[new Date(y, sm - 1, sd).getDay()]}요일`;
   $('#daySum').innerHTML = list.length ? `${list.length}건 · 수입 <b class="in">${won(ds.inc)}</b> · 지출 <b class="out">${won(ds.exp)}</b>` : '';
   $('#dayList').innerHTML = list.map(txRow).join('') || '<li class="empty">이날 기록이 없어요</li>';
+}
+// 이번 달 누적 지출(선) vs 지난달 누적(회색 면): 같은 날짜 기준으로 비교
+function renderTrend(src, m, y, mo, days, today) {
+  const pd = new Date(y, mo - 2, 1), pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const cum = (mm, n) => { const a = Array(n).fill(0); src.filter(i => i.date.startsWith(mm)).forEach(i => { a[+i.date.slice(8) - 1] += net(i); });
+    for (let k = 1; k < n; k++) a[k] += a[k - 1]; return a; };
+  const pdays = new Date(y, mo - 1, 0).getDate(), cur = cum(m, days), prev = cum(pm, pdays);
+  const upto = today.startsWith(m) ? +today.slice(8) : today > m ? days : 0;
+  if (!upto) { $('#calTrend').innerHTML = '<div><small>아직 시작하지 않은 달이에요</small></div>'; return; }
+  const diff = cur[upto - 1] - prev[Math.min(upto, pdays) - 1];
+  const W = 104, H = 52, max = Math.max(1, cur[days - 1], prev[pdays - 1]);
+  const pts = (a, n) => a.slice(0, n).map((v, k) => `${(k / (Math.max(days, pdays) - 1) * W).toFixed(1)},${(H - v / max * H).toFixed(1)}`).join(' ');
+  const lx = ((upto - 1) / (Math.max(days, pdays) - 1) * W).toFixed(1), ly = (H - cur[upto - 1] / max * H).toFixed(1);
+  $('#calTrend').innerHTML = `<div><b>지난달보다 <span class="${diff > 0 ? 'out' : 'refund'}">${compact(diff)}원</span> ${diff > 0 ? '더' : '덜'} 쓰는 중</b>
+      <small>${upto}일까지 ${won(cur[upto - 1])} · 지난달 ${won(prev[Math.min(upto, pdays) - 1])}</small></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="누적 지출 비교: 빨간 선 이번 달, 회색 면 지난달">
+      <polygon points="0,${H} ${pts(prev, pdays)} ${(((pdays - 1) / (Math.max(days, pdays) - 1)) * W).toFixed(1)},${H}" fill="currentColor" opacity=".12"/>
+      <polyline points="${pts(prev, pdays)}" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="2"/>
+      <polyline points="${pts(cur, upto)}" fill="none" stroke="var(--out)" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${lx}" cy="${ly}" r="8" fill="var(--out)" opacity=".18"/><circle cx="${lx}" cy="${ly}" r="3.5" fill="var(--out)"/>
+      <text x="${W}" y="${H + 11}" text-anchor="end" font-size="9" fill="currentColor" opacity=".6">— 이번 달 ▒ 지난달</text>
+    </svg>`;
 }
 function moveMonth(k) {
   const [y, mo] = $('#month').value.split('-').map(Number), d = new Date(y, mo - 1 + k, 1);
@@ -362,8 +396,10 @@ $('#calGrid').addEventListener('click', e => {
   if (d) { selDay = d; renderCal(); $('#dayTitle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 });
 $('#dayAdd').addEventListener('click', () => openEntry(null, selDay));
-$('#calPrev').addEventListener('click', () => moveMonth(-1));
-$('#calNext').addEventListener('click', () => moveMonth(1));
+$('#calTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-pt]');
+  if (b) { calPay = b.dataset.pt; renderCal(); }
+});
 $('#calToday').addEventListener('click', () => {
   selDay = localISO().slice(0, 10);
   $('#month').value = selDay.slice(0, 7);
