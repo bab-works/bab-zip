@@ -527,9 +527,23 @@ $('#budgets').addEventListener('click', e => {
 });
 $('#notifyBtn').addEventListener('click', async () => {
   const p = await Notification.requestPermission();
-  toast(p === 'granted' ? '예산 알림을 켰어요' : '알림이 허용되지 않았어요');
+  toast(p === 'granted' ? '알림을 켰어요 · 아침 9시·10시 반, 평일 6시 50분' : '알림이 허용되지 않았어요');
+  if (p === 'granted') pushSubscribe();
   renderHome();
 });
+// 아침·퇴근 전 알림: 이 기기를 알림 서버(push/worker.js)에 등록. 바뀐 경우에만 다시 보냄
+const PUSH_URL = '', PUSH_KEY = 'BCc58JIGOOvCKS3pAfrDBnACqjJw778mxlpUUqc2Dv9QL_7jwrRigs5tSaGNGqMmKl-A54TekHTMn57_u4eLnak';
+async function pushSubscribe() {
+  if (!PUSH_URL || !cfg.token || !('PushManager' in window) || Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const key = Uint8Array.from(atob(PUSH_KEY.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    if (store.get('pushSent') === sub.endpoint + cfg.token) return;
+    const r = await fetch(PUSH_URL + '/subscribe', { method: 'POST', body: JSON.stringify({ token: cfg.token, sub }) });
+    if (r.ok) store.set('pushSent', sub.endpoint + cfg.token);
+  } catch (err) { console.warn('알림 등록 실패', err); }
+}
 
 // ── 반복 ──
 const R = $('#recForm').elements;
@@ -999,6 +1013,7 @@ if (['home', 'cal', 'list', 'rec'].includes(qp.get('view'))) show(qp.get('view')
 if (qp.has('add')) setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 if ('serviceWorker' in navigator) {
+  pushSubscribe();
   const hadSW = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => {
     // 홈 화면 앱은 껐다 켜도 멈춘 화면을 다시 보여 주기만 해서, 돌아올 때마다 새 버전을 확인
