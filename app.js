@@ -586,30 +586,48 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
-// 바텀시트 위쪽(손잡이·제목 영역)을 아래로 끌면 닫기. 버튼·입력칸 위에서는 끌기 시작 안 함
+// 바텀시트 끌어 닫기
+// 손가락: 내용이 맨 위까지 올라가 있으면 본문 어디를 잡고 내려도 시트가 따라 내려오고, 충분히 내리면 닫힘
+// 마우스: 위쪽(손잡이·제목) 영역에서 끌기
 document.querySelectorAll('dialog.sheet').forEach(d => {
-  let y0 = null, dy = 0;
+  let y0 = null, dy = 0, dragging = false, t0 = 0;
   const reset = () => { d.style.transition = ''; d.style.transform = ''; d.style.animation = ''; };
-  d.addEventListener('pointerdown', e => {
-    if (e.clientY - d.getBoundingClientRect().top > 96) return;
-    if (e.target.closest('button,input,select,textarea,a,label')) return;
-    y0 = e.clientY; dy = 0; d.style.animation = 'none'; d.style.transition = 'none';
-    d.setPointerCapture(e.pointerId);
-  });
-  d.addEventListener('pointermove', e => {
-    if (y0 === null) return;
-    dy = Math.max(0, e.clientY - y0);
-    d.style.transform = `translateY(${dy}px)`;
-  });
-  const end = () => {
-    if (y0 === null) return;
-    const close = dy > 80; y0 = null;
+  const begin = () => { dragging = true; d.style.animation = 'none'; d.style.transition = 'none'; };
+  const move = y => { dy = Math.max(0, y - y0); d.style.transform = `translateY(${dy}px)`; };
+  const finish = () => {
+    if (!dragging) { y0 = null; return; }
+    const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > 0.6; // 빠르게 튕기면 짧게 내려도 닫힘
+    const close = dy > 110 || fast;
+    y0 = null; dragging = false;
     d.style.transition = 'transform .25s ease';
     if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { d.close(); reset(); }, 230); }
     else { d.style.transform = ''; setTimeout(reset, 260); }
   };
-  d.addEventListener('pointerup', end);
-  d.addEventListener('pointercancel', end);
+  d.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; dragging = false; t0 = Date.now();
+  }, { passive: true });
+  d.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    const now = e.touches[0].clientY;
+    if (!dragging) {
+      if (now - y0 > 6 && d.scrollTop <= 0) begin();            // 아래로 + 맨 위 → 시트 끌기
+      else if (Math.abs(now - y0) > 6) { y0 = null; return; }    // 그 밖엔 평소처럼 스크롤
+      else return;
+    }
+    e.preventDefault();
+    move(now);
+  }, { passive: false });
+  d.addEventListener('touchend', finish);
+  d.addEventListener('touchcancel', finish);
+  d.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'mouse') return;
+    if (e.clientY - d.getBoundingClientRect().top > 96 || e.target.closest('button,input,select,textarea,a,label')) return;
+    y0 = e.clientY; dy = 0; t0 = Date.now(); begin();
+    d.setPointerCapture(e.pointerId);
+  });
+  d.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && dragging) move(e.clientY); });
+  d.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') finish(); });
 });
 // 창 바깥(어두운 부분)을 누르면 닫기
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
