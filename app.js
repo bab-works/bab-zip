@@ -20,6 +20,34 @@ let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, paymen
 let pending = store.get('pending', []); // 아직 시트에 못 보낸 작업 (오프라인 대비, 순서대로 전송)
 
 const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+// ── 움직임 도우미 ──
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// 같은 애니메이션을 다시 재생 (클래스를 뗐다 붙임)
+function replay(el, cls, dx) {
+  if (!el || calm()) return;
+  if (dx) el.style.setProperty('--dx', dx);
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+// 숫자를 이전 값에서 새 값까지 굴리기
+function countTo(el, to) {
+  const from = +(el.dataset.n || 0); el.dataset.n = to;
+  if (calm() || from === to) { el.textContent = won(to); return; }
+  const t0 = performance.now(), dur = 520;
+  const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = won(from + (to - from) * e); if (p < 1 && el.dataset.n == to) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+// 창 닫기: 내려가는(사라지는) 애니메이션이 끝난 뒤 실제로 닫음
+const realClose = HTMLDialogElement.prototype.close;
+const closeNow = d => realClose.call(d);
+HTMLDialogElement.prototype.close = function (rv) {
+  if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
+  this.classList.add('closing');
+  setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, 220);
+};
+// ESC·뒤로가기로 닫을 때도 같은 애니메이션
+document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogElement) { e.preventDefault(); e.target.close(); } }, true);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const localISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString(); };
 const persist = () => { store.set('data2', data); store.set('pending', pending); };
@@ -69,6 +97,7 @@ async function sync() {
 async function refresh() {
   try {
     busy(true);
+    document.body.classList.toggle('loading', !data.items.length);
     if (await sync()) {
       try {
         const r = await api();
@@ -78,7 +107,7 @@ async function refresh() {
       } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
     }
     render();
-  } finally { busy(false); }
+  } finally { busy(false); document.body.classList.remove('loading'); }
 }
 // 불러오는 동안은 문구 대신 새로고침 버튼이 회전
 const busy = on => $('#reload').classList.toggle('spin', on);
@@ -136,9 +165,7 @@ function renderHome() {
   const m = $('#month').value, list = inMonth(m);
   const inc = list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0);
   const exp = list.reduce((s, i) => s + net(i), 0);
-  $('#inc').textContent = won(inc);
-  $('#exp').textContent = won(exp);
-  $('#bal').textContent = won(inc - exp);
+  countTo($('#inc'), inc); countTo($('#exp'), exp); countTo($('#bal'), inc - exp);
 
   const byMajor = {};
   list.forEach(i => { if (net(i)) byMajor[i.major] = (byMajor[i.major] || 0) + net(i); });
@@ -336,6 +363,7 @@ function moveMonth(k) {
   $('#month').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   dailySel = 0;
   render();
+  if (k) replay(document.querySelector('main'), 'slide', k > 0 ? '24px' : '-24px');
 }
 
 // ── 카테고리 내역 시트 (홈 「어디에 썼나」에서 열림) ──
@@ -539,6 +567,7 @@ function show(v) {
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
   $('#fab').hidden = v === 'rec' || v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
   if (v === 'cal') calFit();
+  replay($('#v-' + v), 'enter');
   window.scrollTo(0, 0);
 }
 document.querySelector('nav').addEventListener('click', e => { const v = e.target.closest('[data-view]')?.dataset.view; if (v) show(v); });
@@ -599,7 +628,7 @@ document.querySelectorAll('dialog.sheet').forEach(d => {
     const close = dy > 110 || fast;
     y0 = null; dragging = false;
     d.style.transition = 'transform .25s ease';
-    if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { d.close(); reset(); }, 230); }
+    if (close) { d.style.transform = 'translateY(100%)'; setTimeout(() => { closeNow(d); reset(); }, 230); }
     else { d.style.transform = ''; setTimeout(reset, 260); }
   };
   d.addEventListener('touchstart', e => {
@@ -728,6 +757,7 @@ function renderLists() {
 async function refreshLists() {
   try {
     busy(true);
+    document.body.classList.toggle('loading', !(lists[curList] || []).length);
     if (await sync()) {
       try {
         const r = await api(null, '&what=lists');
@@ -736,8 +766,9 @@ async function refreshLists() {
       } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
     }
     renderLists();
-  } finally { busy(false); }
-}function setSection(k) {
+  } finally { busy(false); document.body.classList.remove('loading'); }
+}
+function setSection(k) {
   sec = k;
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
@@ -745,6 +776,7 @@ async function refreshLists() {
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
   $('#v-lists').hidden = money;
+  if (!money) replay($('#v-lists'), 'enter');
   if (money) show(curView);
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
