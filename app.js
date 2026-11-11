@@ -285,6 +285,8 @@ function renderCal() {
   const tail = (7 - (first + days) % 7) % 7;
   for (let d = 1; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
   $('#calGrid').innerHTML = html;
+  const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
+  $('#calQuickSum').textContent = tdy.length ? `지출 ${won(tds.exp)} · ${tdy.length}건 · 눌러서 추가` : '아직 입력이 없어요 · 눌러서 추가';
   renderTrend(src, m, y, mo, days, today);
 
   const list = (byDay[selDay] || []).sort((a, b) => TYPES.indexOf(a.type) - TYPES.indexOf(b.type) || b.amount - a.amount);
@@ -789,4 +791,11 @@ render();
 refresh();
 if (!cfg.url) $('#settings').showModal(); // 연결 전이면 바로 설정 창
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
+$('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
+// 앱 아이콘 길게 누르기 메뉴(안드로이드)가 여는 주소: ?add=1 · ?view=cal · ?sec=book&add=1
+const qp = new URLSearchParams(location.search);
+if (qp.get('sec') && SECTIONS[qp.get('sec')]) setSection(qp.get('sec'));
+if (['home', 'cal', 'list', 'rec'].includes(qp.get('view'))) show(qp.get('view'));
+if (qp.has('add')) setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
+if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
