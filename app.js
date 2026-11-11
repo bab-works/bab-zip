@@ -722,7 +722,7 @@ function renderLists() {
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
-    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 async function refreshLists() {
@@ -771,6 +771,15 @@ $('#lTabs').addEventListener('click', e => {
   if (k) { curList = k; renderLists(); }
 });
 $('#lq').addEventListener('input', renderLists);
+// 사진 서버가 막거나 주소가 틀려 못 불러오면 깨진 아이콘 대신 목록 이모지(편집 창에선 숨김)
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains('thumb')) return;
+  if (img.classList.contains('big')) { img.remove(); return; }
+  const em = document.createElement('span');
+  em.className = 'em'; em.setAttribute('aria-hidden', 'true'); em.textContent = LIST_ICON[curList] || '🖼️';
+  img.replaceWith(em);
+}, true);
 
 // 목록 항목 추가·수정 창 (필드 표로 자동 생성)
 function openItem(it) {
@@ -793,7 +802,7 @@ function openItem(it) {
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
-  $('#lPreview').innerHTML = it?.image ? `<img class="thumb big" src="${esc(it.image)}" alt="">` : '';
+  $('#lPreview').innerHTML = it?.image ? `<img class="thumb big" src="${esc(it.image)}" alt="" referrerpolicy="no-referrer">` : '';
   $('#lItem').showModal();
 }
 $('#lList').addEventListener('click', e => {
