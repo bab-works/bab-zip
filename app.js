@@ -964,4 +964,13 @@ if (qp.get('sec') && SECTIONS[qp.get('sec')]) setSection(qp.get('sec'));
 if (['home', 'cal', 'list', 'rec'].includes(qp.get('view'))) show(qp.get('view'));
 if (qp.has('add')) setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  const hadSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // 홈 화면 앱은 껐다 켜도 멈춘 화면을 다시 보여 주기만 해서, 돌아올 때마다 새 버전을 확인
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+  });
+  // 새 버전으로 바뀌면 한 번 새로고침 (입력 창이 열려 있으면 닫힐 때까지 기다림)
+  const reloadWhenIdle = () => (document.querySelector('dialog[open]') ? setTimeout(reloadWhenIdle, 1500) : location.reload());
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW) reloadWhenIdle(); });
+}
