@@ -139,6 +139,11 @@
   #fToggle[aria-expanded="true"] { background:var(--accent-soft); color:var(--accent); }
   #fActive { font-size:12px; color:var(--accent); margin-top:8px; }
   #fActive:empty { display:none; }
+  /* 날짜 칸: iOS 스크롤 휠 (숨긴 input이 값을 담고, 휠 select가 화면을 담당) */
+  .wheel { display:flex; gap:4px; min-width:0; margin-top:4px; }
+  .wheel select { flex:1; min-width:0; padding:11px 6px; font-size:15px; }
+  #monthPick { margin:auto; border-radius:28px; width:min(86vw,340px); }
+  #monthWheel .wheel { margin-top:0; }
   .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; }
 
   /* 달력 */
@@ -246,7 +251,12 @@
     <button id="monthLabel" aria-label="월 선택"></button>
     <button id="mNext" aria-label="다음 달">›</button>
   </div>
-  <input id="month" type="month" class="sr-only" tabindex="-1" aria-hidden="true">
+  <input id="month" type="month" class="sr-only" tabindex="-1" aria-hidden="true" aria-label="조회 월">
+  <dialog id="monthPick" aria-label="월 선택">
+    <h2 style="text-align:center;margin:4px 0 8px">조회 월</h2>
+    <div id="monthWheel"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="monthPickOk" class="primary">확인</button></div>
+  </dialog>
 </div>
 <p id="status" role="status"></p>
 

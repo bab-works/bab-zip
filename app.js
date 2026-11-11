@@ -494,7 +494,8 @@ document.querySelector('nav').addEventListener('click', e => { const v = e.targe
 $('#toList').addEventListener('click', () => show('list'));
 $('#mPrev').addEventListener('click', () => moveMonth(-1));
 $('#mNext').addEventListener('click', () => moveMonth(1));
-$('#monthLabel').addEventListener('click', () => { try { $('#month').showPicker(); } catch { moveMonth(0); } });
+$('#monthLabel').addEventListener('click', () => $('#monthPick').showModal());
+$('#monthPickOk').addEventListener('click', () => $('#monthPick').close());
 $('#fToggle').addEventListener('click', () => {
   const open = $('#fPanel').hidden;
   $('#fPanel').hidden = !open;
@@ -689,6 +690,7 @@ function openItem(it) {
   const f = $('#lForm').elements, today = localISO();
   const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '완독', date: today.slice(0, 10), kind: '추천받은 책' };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
+  $('#lFields').querySelectorAll('input[type=date]').forEach(i => wheel(i));
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
@@ -722,6 +724,52 @@ $('#lDelete').addEventListener('click', () => {
   queue({ action: 'listDelete', list: curList, id }).then(ok => ok && setStatus('삭제됨'));
 });
 $('#lCancel').addEventListener('click', () => $('#lItem').close());
+
+// ── 날짜 스크롤 휠: 날짜·월 칸을 년·월·일 선택 상자(iOS 휠)로 바꿈 ──
+// 숨긴 원래 input이 값의 원천이라 기존 코드(.value 읽기·쓰기, change 이벤트)는 그대로 동작
+const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
+function wheel(input, opt = {}) {
+  const isMonth = input.type === 'month', blank = !!opt.blank;
+  const wrap = document.createElement('span'); wrap.className = 'wheel';
+  const opts = (items, lead) => (blank ? [['', lead]] : []).concat(items);
+  const yr = document.createElement('select'), mo = document.createElement('select'), dy = isMonth ? null : document.createElement('select');
+  const label = input.getAttribute('aria-label') || '';
+  yr.setAttribute('aria-label', label + ' 년'); mo.setAttribute('aria-label', label + ' 월'); if (dy) dy.setAttribute('aria-label', label + ' 일');
+  const fill = (sel, list) => { sel.innerHTML = list.map(([v, t]) => `<option value="${v}">${t}</option>`).join(''); };
+  const nowY = new Date().getFullYear();
+  fill(yr, opts(range(2015, nowY + 1).map(y => [String(y), y + '년']), '--'));
+  fill(mo, opts(range(1, 12).map(m => [String(m).padStart(2, '0'), m + '월']), '--'));
+  wrap.append(yr, mo); if (dy) wrap.append(dy);
+  const fillDays = () => {
+    if (!dy) return;
+    const keep = dy.value, n = yr.value && mo.value ? new Date(+yr.value, +mo.value, 0).getDate() : 31;
+    fill(dy, opts(range(1, n).map(d => [String(d).padStart(2, '0'), d + '일']), '--'));
+    if (keep && +keep <= n) dy.value = keep;
+  };
+  const show = v => {
+    const [y = '', m = '', d = ''] = (v || '').split('-');
+    if (y && ![...yr.options].some(o => o.value === y)) yr.add(new Option(y + '년', y));
+    yr.value = y; mo.value = m; fillDays(); if (dy) dy.value = d;
+  };
+  const push = () => {
+    fillDays();
+    const y = yr.value, m = mo.value, d = dy ? dy.value : '01';
+    const v = !y || !m || (dy && !d) ? '' : isMonth ? `${y}-${m}` : `${y}-${m}-${d}`;
+    if (valDesc.get.call(input) !== v) { valDesc.set.call(input, v); input.dispatchEvent(new Event('change', { bubbles: true })); }
+  };
+  [yr, mo, dy].forEach(s => s && s.addEventListener('change', push));
+  // 코드에서 input.value = … 로 바꿔도 휠이 같이 바뀜
+  Object.defineProperty(input, 'value', { configurable: true,
+    get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
+  input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
+  if (opt.into) opt.into.append(wrap); else input.after(wrap); // 입력칸 바로 뒤(원래 자리)
+  show(valDesc.get.call(input));
+}
+wheel($('#entryForm [name=date]'));
+wheel($('#recForm [name=start]'));
+wheel($('#recForm [name=end]'), { blank: true });
+wheel($('#month'), { into: $('#monthWheel') });
 
 const now = localISO();
 $('#month').value = now.slice(0, 7);
