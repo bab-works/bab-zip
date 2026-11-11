@@ -252,6 +252,18 @@ function daySums(list) {
   return { inc: list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0), exp: list.reduce((s, i) => s + net(i), 0) };
 }
 let calPay = ''; // 달력 결제유형 탭 ('' = 전체)
+// 달력 손잡이: 펼침(한 달) ↔ 접힘(선택한 주 한 줄). 끌면 그 사이 높이로 움직임
+let calOpen = true, calWeek = 0;
+const clip = $('#calClip'), calGrid = $('#calGrid');
+const calRow = () => (calGrid.querySelector('button, .other')?.offsetHeight || 60) + 2;
+const calFull = () => calGrid.scrollHeight;
+const calFit = () => { if (!clip.offsetParent) return; calPlace(calOpen ? calFull() : calRow(), false); }; // 숨긴 상태에선 높이를 못 재므로 보일 때 다시 맞춤
+function calPlace(h, animate) {
+  const rh = calRow(), full = calFull(), t = full > rh ? Math.min(1, Math.max(0, (h - rh) / (full - rh))) : 1;
+  clip.classList.toggle('anim', animate); calGrid.classList.toggle('anim', animate);
+  clip.style.height = h + 'px';
+  calGrid.style.transform = `translateY(${-(1 - t) * calWeek * rh}px)`;
+}
 function renderCal() {
   const m = $('#month').value;
   if (!m) return;
@@ -284,7 +296,9 @@ function renderCal() {
   }
   const tail = (7 - (first + days) % 7) % 7;
   for (let d = 1; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
-  $('#calGrid').innerHTML = html;
+  calGrid.innerHTML = html;
+  calWeek = Math.floor((first + +selDay.slice(8) - 1) / 7);
+  calFit();
   const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
   $('#calQuickSum').textContent = tdy.length ? `지출 ${won(tds.exp)} · ${tdy.length}건 · 눌러서 추가` : '아직 입력이 없어요 · 눌러서 추가';
   renderTrend(src, m, y, mo, days, today);
@@ -422,6 +436,23 @@ $('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#
   const it = id && data.items.find(i => i.id === id);
   if (it) openEntry(it);
 }));
+let grabDrag = null;
+const grab = $('#calGrab');
+grab.addEventListener('pointerdown', e => { grabDrag = { y: e.clientY, h: clip.offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); });
+grab.addEventListener('pointermove', e => {
+  if (!grabDrag) return;
+  const dy = e.clientY - grabDrag.y; if (Math.abs(dy) > 4) grabDrag.moved = true;
+  calPlace(Math.min(calFull(), Math.max(calRow(), grabDrag.h + dy)), false);
+});
+const grabEnd = () => {
+  if (!grabDrag) return;
+  const moved = grabDrag.moved; grabDrag = null;
+  calOpen = moved ? clip.offsetHeight > (calRow() + calFull()) / 2 : !calOpen; // 끌었으면 가까운 쪽으로, 눌렀으면 토글
+  calPlace(calOpen ? calFull() : calRow(), true);
+};
+grab.addEventListener('pointerup', grabEnd);
+grab.addEventListener('pointercancel', grabEnd);
+grab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); calOpen = !calOpen; calPlace(calOpen ? calFull() : calRow(), true); } });
 $('#calGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-day]')?.dataset.day;
   if (d) { selDay = d; renderCal(); $('#dayTitle').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
@@ -501,6 +532,7 @@ function show(v) {
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
   $('#fab').hidden = v === 'rec' || v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
+  if (v === 'cal') calFit();
   window.scrollTo(0, 0);
 }
 document.querySelector('nav').addEventListener('click', e => { const v = e.target.closest('[data-view]')?.dataset.view; if (v) show(v); });
