@@ -160,27 +160,30 @@ function setupDaily() {
 function daily() { withLock_(runRecurring_); }
 
 // ── 취미 목록 (독서·방탈출·보드게임): 기존 시트의 탭을 그대로 저장소로 사용 ──
-const BOOK_SS = '1HQ94tsImX76jgJbnM2jwAIchoitK8aj1VH8MHzr9-mY';  // 나의 독서 목록
-const HOBBY_SS = '1eggucX5eNjeQzlP5b5r658ZCOcGeHkHlyh-Sc6hrHk0'; // 나의 방탈출 기록
-// cols: 필드 → [열 번호, 종류]. head = 제목 줄, width = 앱이 다루는 열 범위 (그 밖의 요약 수식 등은 건드리지 않음)
-// no = 새 줄에 자동으로 매기는 번호 열, idCol = 수정·삭제용 id 열
+// 목록 탭은 모두 이 가계부 파일 안에 있음 (Apps Script가 붙은 시트 자체를 씀)
+// cols: 필드 → [열 번호, 종류]. head = 제목 줄, width = 앱이 다루는 열 범위, idCol = 수정·삭제용 id 열
+// no = 새 줄에 자동으로 매기는 번호 열
 const LISTS = {
-  book: { ss: BOOK_SS, tab: '독서 기록', head: 1, key: 'title', width: 9, idCol: 29, no: [1],
+  book: { tab: '독서 기록', head: 1, key: 'title', width: 9, idCol: 29, no: [1],
     cols: { year: [2], month: [3], seq: [4, 'num'], title: [5], author: [6], status: [7], stars: [8], memo: [9] } },
-  buy: { ss: BOOK_SS, tab: '구매 목록', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
+  buy: { tab: '구매 목록', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
     cols: { title: [2], author: [3], done: [4, 'bool'], memo: [5] } },
-  wish: { ss: BOOK_SS, tab: '추천·관심 도서', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
+  wish: { tab: '추천·관심 도서', head: 1, key: 'title', width: 5, idCol: 7, no: [1],
     cols: { title: [2], author: [3], kind: [4], memo: [5] } },
-  escape: { ss: HOBBY_SS, tab: '방탈출 기록', head: 3, key: 'theme', width: 12, idCol: 14,
+  escape: { tab: '방탈출 기록', head: 3, key: 'theme', width: 12, idCol: 14,
     cols: { date: [1, 'date'], theme: [2], shop: [3], area: [4], result: [5], people: [6, 'num'], hints: [7, 'num'], left: [8, 'num'],
       cost: [9, 'num'], rating: [10, 'num'], with: [11], review: [12] } },
-  board: { ss: HOBBY_SS, tab: '취미 기록', head: 1, key: 'name', width: 7, idCol: 1,
+  board: { tab: '보드게임 기록', head: 1, key: 'name', width: 7, idCol: 1,
     cols: { date: [2, 'date'], kind: [3], name: [4], place: [5], with: [6], review: [7] } },
+  movie: { tab: '영화 기록', head: 1, key: 'title', width: 8, idCol: 9, no: [1],
+    cols: { title: [2], director: [3], date: [4, 'date'], place: [5], rating: [6], with: [7], review: [8] } },
+  play: { tab: '연극·뮤지컬 기록', head: 1, key: 'title', width: 9, idCol: 10, no: [1],
+    cols: { title: [2], kind: [3], date: [4, 'date'], place: [5], cast: [6], rating: [7], with: [8], review: [9] } },
 };
 function listSheet_(k) {
   const c = LISTS[k];
   if (!c) throw new Error('알 수 없는 목록');
-  const sh = SpreadsheetApp.openById(c.ss).getSheetByName(c.tab);
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(c.tab);
   if (!sh) throw new Error('탭 없음: ' + c.tab);
   if (sh.getMaxColumns() < c.idCol) sh.insertColumnsAfter(sh.getMaxColumns(), c.idCol - sh.getMaxColumns());
   if (c.idCol > c.width && sh.getRange(c.head, c.idCol).getValue() !== 'id') sh.getRange(c.head, c.idCol).setValue('id');

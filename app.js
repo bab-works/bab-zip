@@ -561,10 +561,12 @@ const SECTIONS = {
   book: { title: '독서', icon: '📚', tabs: [['book', '독서 기록'], ['buy', '구매 목록'], ['wish', '추천·관심']] },
   escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록']] },
   board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
+  movie: { title: '영화', icon: '🎬', tabs: [['movie', '영화 기록']] },
+  play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '연극·뮤지컬 기록']] },
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
 let sec = 'money', curList = 'book';
-const L = k => (lists[k] || []).filter(i => k !== 'board' || i.kind === '보드게임'); // 취미 기록 탭에서 보드게임만
+const L = k => (lists[k] || []).filter(i => k !== 'board' || i.kind === '보드게임');
 const yearOpts = () => [...new Set([localISO().slice(0, 4) + '년', ...L('book').map(i => i.year).filter(Boolean)])].sort().reverse();
 // 필드: [이름, 라벨, 종류, 선택지]
 const LIST_FIELDS = {
@@ -577,6 +579,10 @@ const LIST_FIELDS = {
     ['rating', '평점', 'select', ['', '1', '2', '3', '4', '5']], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
     ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
   board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+  movie: [['title', '영화 제목', 'text'], ['director', '감독', 'text'], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['rating', '평점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']],
+    ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+  play: [['title', '작품명', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['cast', '출연', 'text'],
+    ['rating', '평점', 'select', ['', '★', '★★', '★★★', '★★★★', '★★★★★']], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
 // 목록 한 줄: [제목, 설명, 오른쪽 표시]
@@ -586,10 +592,12 @@ const LIST_ROW = {
   wish: i => [i.title, joinDot([i.author, i.kind, i.memo]), ''],
   escape: i => [i.theme, joinDot([i.date, i.shop, i.area, i.with, i.review]), joinDot([i.result, i.rating && '★' + i.rating])],
   board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), ''],
+  movie: i => [i.title, joinDot([i.director, i.date, i.place, i.with, i.review]), i.rating],
+  play: i => [i.title, joinDot([i.kind, i.date, i.place, i.cast, i.with, i.review]), i.rating || i.kind],
 };
 function listSorted(k) {
   const a = [...L(k)].reverse(); // 시트 아래쪽(최근 입력)이 위로
-  if (k === 'escape' || k === 'board') a.sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+  if (['escape', 'board', 'movie', 'play'].includes(k)) a.sort((x, y) => (y.date || '').localeCompare(x.date || ''));
   if (k === 'buy') a.sort((x, y) => x.done - y.done);
   return a;
 }
@@ -599,6 +607,8 @@ function listInfo(k, a) {
   if (k === 'buy') return `${n}권 · 아직 안 산 책 ${a.filter(i => !i.done).length}권`;
   if (k === 'wish') return `${n}권`;
   if (k === 'escape') return `${n}개 테마${a.some(i => i.result) ? ` · 성공 ${a.filter(i => i.result === '성공').length}` : ''}`;
+  if (k === 'movie') return `${n}편 · 올해 ${a.filter(i => (i.date || '').startsWith(localISO().slice(0, 4))).length}편`;
+  if (k === 'play') return `${n}편 · 뮤지컬 ${a.filter(i => i.kind === '뮤지컬').length} · 연극 ${a.filter(i => i.kind === '연극').length}`;
   return `${n}개 기록`;
 }
 function renderLists() {
