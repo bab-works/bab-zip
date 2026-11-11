@@ -545,8 +545,7 @@ document.querySelector('nav').addEventListener('click', e => { const v = e.targe
 $('#toList').addEventListener('click', () => show('list'));
 $('#mPrev').addEventListener('click', () => moveMonth(-1));
 $('#mNext').addEventListener('click', () => moveMonth(1));
-$('#monthLabel').addEventListener('click', () => $('#monthPick').showModal());
-$('#monthPickOk').addEventListener('click', () => $('#monthPick').close());
+$('#monthLabel').addEventListener('click', () => openWheel($('#month'), 'month', '조회 월'));
 $('#fToggle').addEventListener('click', () => {
   const open = $('#fPanel').hidden;
   $('#fPanel').hidden = !open;
@@ -604,7 +603,7 @@ document.querySelectorAll('dialog.sheet').forEach(d => {
     else { d.style.transform = ''; setTimeout(reset, 260); }
   };
   d.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { y0 = null; return; }
+    if (e.touches.length !== 1 || e.target.closest('.wcol')) { y0 = null; return; }
     y0 = e.touches[0].clientY; dy = 0; dragging = false; t0 = Date.now();
   }, { passive: true });
   d.addEventListener('touchmove', e => {
@@ -825,47 +824,10 @@ $('#lDelete').addEventListener('click', () => {
 });
 $('#lCancel').addEventListener('click', () => $('#lItem').close());
 
-// ── 날짜 스크롤 휠: 날짜·월 칸을 년·월·일 선택 상자(iOS 휠)로 바꿈 ──
+// ── 날짜·시간·월 입력 ──
 // 숨긴 원래 input이 값의 원천이라 기존 코드(.value 읽기·쓰기, change 이벤트)는 그대로 동작
 const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
-function wheel(input, opt = {}) {
-  const isMonth = input.type === 'month', blank = !!opt.blank;
-  const wrap = document.createElement('span'); wrap.className = 'wheel' + (opt.full ? ' full' : '');
-  const opts = (items, lead) => (blank ? [['', lead]] : []).concat(items);
-  const yr = document.createElement('select'), mo = document.createElement('select'), dy = isMonth ? null : document.createElement('select');
-  const label = input.getAttribute('aria-label') || '';
-  yr.setAttribute('aria-label', label + ' 년'); mo.setAttribute('aria-label', label + ' 월'); if (dy) dy.setAttribute('aria-label', label + ' 일');
-  const fill = (sel, list) => { sel.innerHTML = list.map(([v, t]) => `<option value="${v}">${t}</option>`).join(''); };
-  const nowY = new Date().getFullYear();
-  fill(yr, opts(range(2015, nowY + 1).map(y => [String(y), y + '년']), '--'));
-  fill(mo, opts(range(1, 12).map(m => [String(m).padStart(2, '0'), m + '월']), '--'));
-  wrap.append(yr, mo); if (dy) wrap.append(dy);
-  const fillDays = () => {
-    if (!dy) return;
-    const keep = dy.value, n = yr.value && mo.value ? new Date(+yr.value, +mo.value, 0).getDate() : 31;
-    fill(dy, opts(range(1, n).map(d => [String(d).padStart(2, '0'), d + '일']), '--'));
-    if (keep && +keep <= n) dy.value = keep;
-  };
-  const show = v => {
-    const [y = '', m = '', d = ''] = (v || '').split('-');
-    if (y && ![...yr.options].some(o => o.value === y)) yr.add(new Option(y + '년', y));
-    yr.value = y; mo.value = m; fillDays(); if (dy) dy.value = d;
-  };
-  const push = () => {
-    fillDays();
-    const y = yr.value, m = mo.value, d = dy ? dy.value : '01';
-    const v = !y || !m || (dy && !d) ? '' : isMonth ? `${y}-${m}` : `${y}-${m}-${d}`;
-    if (valDesc.get.call(input) !== v) { valDesc.set.call(input, v); input.dispatchEvent(new Event('change', { bubbles: true })); }
-  };
-  [yr, mo, dy].forEach(s => s && s.addEventListener('change', push));
-  // 코드에서 input.value = … 로 바꿔도 휠이 같이 바뀜
-  Object.defineProperty(input, 'value', { configurable: true,
-    get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
-  input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
-  if (opt.into) opt.into.append(wrap); else input.after(wrap); // 입력칸 바로 뒤(원래 자리)
-  show(valDesc.get.call(input));
-}
 dateField($('#entryForm [name=date]'));
 // 날짜 칸: 한 줄 버튼(예: 2026년 11월 11일 (화))을 누르면 캘린더 창
 const DOW = '일월화수목금토';
@@ -910,31 +872,74 @@ $('#cpGrid').addEventListener('click', e => {
   $('#calPick').close();
 });
 
-// 시간 휠: 시·분 두 칸 (숨긴 time input이 값을 담음). 빈 값은 '--'
+// 시간·월: 한 줄 버튼을 누르면 휠 시트(✕ · 제목 · ✓)가 올라옴. 가운데 띠에 온 값이 선택값
 const pad2 = n => String(n).padStart(2, '0');
-function wheelTime(input) {
-  const wrap = document.createElement('span'); wrap.className = 'wheel';
-  const hs = document.createElement('select'), ms = document.createElement('select');
-  hs.setAttribute('aria-label', '시'); ms.setAttribute('aria-label', '분');
-  hs.innerHTML = '<option value="">--시</option>' + range(0, 23).map(h => `<option value="${pad2(h)}">${pad2(h)}시</option>`).join('');
-  ms.innerHTML = '<option value="">--분</option>' + range(0, 59).map(m => `<option value="${pad2(m)}">${pad2(m)}분</option>`).join('');
-  wrap.append(hs, ms);
-  const show = v => { const [h = '', m = ''] = (v || '').split(':'); hs.value = h; ms.value = m; };
-  const push = () => {
-    const v = hs.value && ms.value ? `${hs.value}:${ms.value}` : '';
-    if (valDesc.get.call(input) !== v) { valDesc.set.call(input, v); input.dispatchEvent(new Event('change', { bubbles: true })); }
-  };
-  hs.addEventListener('change', push); ms.addEventListener('change', push);
+const W_ITEM = 44; // 휠 한 칸 높이(px)
+const ws = { input: null, kind: '', cols: [] };
+function wheelCols(kind, v, blank) {
+  if (kind === 'time') {
+    const [h = '', m = ''] = (v || '').split(':');
+    return [{ label: '시', items: [['', '--'], ...range(0, 23).map(n => [pad2(n), pad2(n)])], val: h },
+            { label: '분', items: range(0, 59).map(n => [pad2(n), pad2(n)]), val: m || '00' }];
+  }
+  const [y = '', m = ''] = (v || '').split('-'), now = new Date(), lead = blank ? [['', '--']] : [];
+  const years = range(2015, now.getFullYear() + 1).map(n => [String(n), n + '년']);
+  if (y && !years.some(i => i[0] === y)) years.push([y, y + '년']);
+  return [{ label: '년', items: [...lead, ...years], val: y || (blank ? '' : String(now.getFullYear())) },
+          { label: '월', items: [...lead, ...range(1, 12).map(n => [pad2(n), n + '월'])], val: m || (blank ? '' : pad2(now.getMonth() + 1)) }];
+}
+// 가운데에서 멀수록 흐리고 작게
+function wPaint(col) {
+  const c = col.scrollTop / W_ITEM;
+  [...col.children].forEach((el, i) => {
+    const d = Math.abs(i - c);
+    el.style.opacity = Math.max(0.2, 1 - d * 0.28);
+    el.style.transform = `scale(${Math.max(0.78, 1 - d * 0.08)})`;
+  });
+}
+function openWheel(input, kind, title) {
+  ws.input = input; ws.kind = kind;
+  ws.cols = wheelCols(kind, valDesc.get.call(input), input.dataset.blank === '1');
+  $('#wsTitle').textContent = title;
+  $('#wsCols').innerHTML = ws.cols.map(c => `<div class="wcol" role="listbox" tabindex="0" aria-label="${c.label}">${
+    c.items.map(([v, l]) => `<div class="witem" role="option" data-v="${v}">${l}</div>`).join('')}</div>`).join('');
+  $('#wheelSheet').showModal();
+  [...$('#wsCols').children].forEach((col, k) => {
+    const idx = Math.max(0, ws.cols[k].items.findIndex(i => i[0] === ws.cols[k].val));
+    col.scrollTop = idx * W_ITEM; wPaint(col);
+    col.addEventListener('scroll', () => requestAnimationFrame(() => wPaint(col)), { passive: true });
+    col.addEventListener('click', e => { const it = e.target.closest('.witem'); if (it) col.scrollTo({ top: [...col.children].indexOf(it) * W_ITEM, behavior: 'smooth' }); });
+    col.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); col.scrollBy({ top: e.key === 'ArrowDown' ? W_ITEM : -W_ITEM, behavior: 'smooth' }); } });
+  });
+}
+$('#wsCancel').addEventListener('click', () => $('#wheelSheet').close());
+$('#wsOk').addEventListener('click', () => {
+  const vals = [...$('#wsCols').children].map((col, k) => {
+    const items = ws.cols[k].items;
+    return items[Math.min(items.length - 1, Math.max(0, Math.round(col.scrollTop / W_ITEM)))][0];
+  });
+  const v = ws.kind === 'time' ? (vals[0] && vals[1] ? `${vals[0]}:${vals[1]}` : '') : (vals[0] && vals[1] ? `${vals[0]}-${vals[1]}` : '');
+  ws.input.value = v; ws.input.dispatchEvent(new Event('change', { bubbles: true }));
+  $('#wheelSheet').close();
+});
+// 숨긴 input 옆에 버튼을 달고, 코드에서 .value를 바꾸면 버튼 글자도 같이 바뀌게
+function pickerField(input, kind, title, opt = {}) {
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'dbtn';
+  btn.setAttribute('aria-label', title + ' 선택');
+  if (opt.blank) input.dataset.blank = '1';
+  const fmt = v => kind === 'time' ? v : `${+v.slice(0, 4)}년 ${+v.slice(5, 7)}월`;
+  const show = v => { btn.textContent = v ? fmt(v) : (opt.empty || '선택 안 함'); btn.classList.toggle('empty', !v); };
   Object.defineProperty(input, 'value', { configurable: true,
     get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
   input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
-  input.after(wrap);
+  input.after(btn);
+  btn.addEventListener('click', () => openWheel(input, kind, title));
   show(valDesc.get.call(input));
 }
-wheelTime($('#entryForm [name=time]'));
-wheel($('#recForm [name=start]'));
-wheel($('#recForm [name=end]'), { blank: true });
-wheel($('#month'), { into: $('#monthWheel') });
+pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
+pickerField($('#recForm [name=start]'), 'month', '시작 월');
+pickerField($('#recForm [name=end]'), 'month', '종료 월', { blank: true, empty: '종료 없음' });
 
 const now = localISO();
 $('#month').value = now.slice(0, 7);

@@ -139,8 +139,19 @@
   .wheel { display:flex; gap:4px; min-width:0; margin-top:4px; }
   .wheel select { flex:1; min-width:0; padding:11px 6px; }
   .grid2 .wheel.full { grid-column:1/-1; }
-  #monthPick { margin:auto; border-radius:28px; width:min(86vw,340px); }
-  #monthWheel .wheel { margin-top:0; }
+  /* 휠 시트: 가운데 띠에 온 값이 선택값, 위아래는 흐리고 작게 */
+  .ws-head { padding:4px 0 0; }
+  .ws-head b { font-size:17px; }
+  .ws-btn { width:46px; height:46px; padding:0; border-radius:50%; font-size:20px; display:grid; place-items:center; }
+  .ws-ok { background:var(--accent); color:#fff; }
+  .wpick { position:relative; display:flex; justify-content:center; gap:4px; height:220px; margin:10px 0 6px; }
+  .wpick::before { content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); border-radius:12px; background:var(--fill); pointer-events:none; }
+  .wcol { position:relative; width:96px; height:100%; overflow-y:scroll; scroll-snap-type:y mandatory; padding:88px 0; scrollbar-width:none; overscroll-behavior:contain;
+    -webkit-mask-image:linear-gradient(transparent, #000 32%, #000 68%, transparent); mask-image:linear-gradient(transparent, #000 32%, #000 68%, transparent); }
+  .wcol::-webkit-scrollbar { display:none; }
+  .wcol:focus-visible { outline:2px solid var(--accent); border-radius:12px; }
+  .witem { height:44px; display:flex; align-items:center; justify-content:center; font-size:24px; font-variant-numeric:tabular-nums; scroll-snap-align:center; cursor:pointer; }
+  .time-row .dbtn { background:transparent; text-align:right; padding:10px 12px; }
   .chk { display:flex; align-items:center; gap:6px; font-size:14px; white-space:nowrap; } .chk input { width:auto; font-size:16px; }
   input, select, textarea { font-size:16px; }
 
@@ -280,11 +291,6 @@
     <button id="mNext" aria-label="다음 달">›</button>
   </div>
   <input id="month" type="month" class="sr-only" tabindex="-1" aria-hidden="true" aria-label="조회 월">
-  <dialog id="monthPick" aria-label="월 선택">
-    <h2 style="text-align:center;margin:4px 0 8px">조회 월</h2>
-    <div id="monthWheel"></div>
-    <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="monthPickOk" class="primary">확인</button></div>
-  </dialog>
 </div>
 <p id="status" role="status"></p>
 
@@ -475,6 +481,15 @@
   <div class="row cal-head"><button type="button" id="cpPrev" class="small" aria-label="이전 달">‹</button><b id="cpTitle"></b><button type="button" id="cpNext" class="small" aria-label="다음 달">›</button></div>
   <div class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
   <div id="cpGrid" class="cal pick" role="grid" aria-label="날짜"></div>
+</dialog>
+
+<dialog id="wheelSheet" class="sheet" aria-label="휠 선택">
+  <div class="row ws-head">
+    <button type="button" id="wsCancel" class="ws-btn" aria-label="취소">✕</button>
+    <b id="wsTitle"></b>
+    <button type="button" id="wsOk" class="ws-btn ws-ok" aria-label="확인">✓</button>
+  </div>
+  <div id="wsCols" class="wpick"></div>
 </dialog>
 
 <dialog id="settings">
