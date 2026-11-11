@@ -136,8 +136,8 @@ function renderHome() {
   const pct = (u, t) => t ? Math.min(100, u / t * 100).toFixed(1) : 0;
   const lvTxt = lv => ['', ' · ⚠️ 80% 넘음', ' · 🚨 초과'][lv];
   $('#budgets').innerHTML = rows.map(r => `<li>
-      <span class="em" aria-hidden="true">${em(r.k)}</span>
-      <span>${esc(r.k)}<small class="hint">${lvTxt(level(r.used, r.budget))}</small></span>
+      <button type="button" class="cat-open" data-cat="${esc(r.k)}" aria-label="${esc(r.k)} 내역 보기"><span class="em" aria-hidden="true">${em(r.k)}</span>
+      <span>${esc(r.k)}<small class="hint">${lvTxt(level(r.used, r.budget))}</small></span></button>
       <button class="budget-btn" data-major="${esc(r.k)}" aria-label="${esc(r.k)} 예산 수정">${won(r.used)} <small>/ ${r.budget ? compact(r.budget) : '예산 없음'}</small></button>
       <span class="bar ${cls(level(r.used, r.budget))}"><i style="--w:${pct(r.used, r.budget)}%"></i></span>
     </li>`).join('') + (total ? `<li class="total"><span class="em" aria-hidden="true">Σ</span><span>전체</span>
@@ -307,7 +307,21 @@ function moveMonth(k) {
   render();
 }
 
-function render() { renderFilters(); renderHome(); renderCal(); renderList(); renderRec(); }
+// ── 카테고리 내역 시트 (홈 「어디에 썼나」에서 열림) ──
+let catOpen = '';
+function renderCatSheet() {
+  if (!catOpen) return;
+  const m = $('#month').value, [, mo] = m.split('-').map(Number);
+  const list = inMonth(m).filter(i => i.major === catOpen && net(i)).sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
+  const used = list.reduce((s, i) => s + net(i), 0), budget = data.meta.budgets[catOpen];
+  $('#catTitle').textContent = `${em(catOpen)} ${catOpen} · ${mo}월`;
+  $('#catSum').textContent = `${list.length}건 · ${won(used)}${budget ? ` / 예산 ${won(budget)} (${Math.round(used / budget * 100)}%)` : ''} · 항목을 누르면 수정`;
+  $('#catList').innerHTML = list.map(txRow).join('') || '<li class="empty">이번 달 내역이 없어요</li>';
+}
+$('#catClose').addEventListener('click', () => $('#catSheet').close());
+$('#catSheet').addEventListener('close', () => { catOpen = ''; });
+
+function render() { renderFilters(); renderHome(); renderCal(); renderList(); renderRec(); renderCatSheet(); }
 
 // ── 거래 입력·수정 ──
 const F = $('#entryForm').elements;
@@ -386,7 +400,7 @@ $('#entryDelete').addEventListener('click', () => {
 });
 $('#entryCancel').addEventListener('click', () => $('#entry').close());
 $('#fab').addEventListener('click', () => openEntry(null, $('#v-cal').hidden ? '' : selDay));
-['#list', '#dayList'].forEach(s => $(s).addEventListener('click', e => {
+['#list', '#dayList', '#recent', '#catList'].forEach(s => $(s).addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
   if (it) openEntry(it);
@@ -417,6 +431,8 @@ $('#calGrid').addEventListener('touchend', e => {
 
 // ── 예산 ──
 $('#budgets').addEventListener('click', e => {
+  const cat = e.target.closest('[data-cat]')?.dataset.cat;
+  if (cat) { catOpen = cat; renderCatSheet(); return $('#catSheet').showModal(); }
   const mj = e.target.closest('[data-major]')?.dataset.major;
   if (!mj) return;
   if (!majorsAll().includes(mj)) return toast('「카테고리」 탭에 없는 대분류예요');
@@ -512,6 +528,25 @@ $('#settings').addEventListener('close', () => {
   refresh();
 });
 window.addEventListener('online', refresh);
+
+// ── 홈 화면 편집: 카드 순서를 ▲▼로 바꾸고 이 기기에 저장 ──
+const home = $('#v-home'), cards = () => [...home.querySelectorAll(':scope > [data-card]')];
+cards().forEach(c => c.insertAdjacentHTML('afterbegin',
+  `<div class="mover"><span>${c.dataset.label}</span><button type="button" data-mv="-1" aria-label="${c.dataset.label} 위로">▲</button><button type="button" data-mv="1" aria-label="${c.dataset.label} 아래로">▼</button></div>`));
+store.get('homeOrder', []).forEach(id => { const c = home.querySelector(`:scope > [data-card="${id}"]`); if (c) home.insertBefore(c, $('#homeEdit')); });
+home.addEventListener('click', e => {
+  const mv = +e.target.dataset.mv;
+  if (!mv) return;
+  const c = e.target.closest('[data-card]'), list = cards(), k = list.indexOf(c), to = list[k + mv];
+  if (!to) return;
+  mv < 0 ? home.insertBefore(c, to) : home.insertBefore(to, c);
+  store.set('homeOrder', cards().map(x => x.dataset.card));
+  e.target.focus();
+});
+$('#homeEdit').addEventListener('click', () => {
+  const on = home.classList.toggle('editing');
+  $('#homeEdit').textContent = on ? '✓ 편집 완료' : '✎ 홈 화면 편집';
+});
 
 const now = localISO();
 $('#month').value = now.slice(0, 7);

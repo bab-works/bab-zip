@@ -93,11 +93,21 @@
   .daily button[aria-pressed="true"] i { opacity:1; }
   .daily-x { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
   #budgets li { display:grid; grid-template-columns:28px 1fr auto; gap:4px 10px; align-items:center; padding:8px 0; font-size:14px; }
-  #budgets li .em { grid-row:span 2; font-size:20px; text-align:center; }
+  #budgets li .em { font-size:20px; text-align:center; }
   #budgets li.total { border-top:1px solid var(--line); margin-top:4px; padding-top:12px; font-weight:600; }
   .bar { grid-column:2 / -1; height:8px; border-radius:4px; background:var(--fill); overflow:hidden; }
   .bar i { display:block; height:100%; background:var(--accent); width:var(--w); border-radius:4px; }
   .bar.warn i { background:var(--warn); } .bar.over i { background:var(--out); }
+  .cat-open { grid-column:1 / 3; display:flex; align-items:center; gap:10px; background:none; padding:2px 0; border-radius:8px; text-align:left; min-width:0; }
+  .cat-open .em { width:28px; flex:none; }
+  .cat-open > span:last-child { text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
+  /* 홈 편집: 카드마다 ▲▼ 막대 */
+  .mover { display:none; align-items:center; gap:6px; margin:-4px 0 10px; padding:6px 6px 6px 12px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:13px; font-weight:700; }
+  .mover span { flex:1; }
+  .mover button { padding:6px 12px; background:var(--glass); }
+  #v-home.editing .mover { display:flex; }
+  #v-home.editing [data-card] { outline:2px dashed var(--accent); outline-offset:3px; }
+  #v-home.editing [data-card="alerts"] { min-height:40px; border-radius:16px; }
   .budget-btn { background:none; padding:0; font-size:14px; font-weight:600; text-align:right; border-radius:8px; }
   .budget-btn small { color:var(--muted); font-weight:400; }
 
@@ -222,28 +232,29 @@
 
 <main>
   <section id="v-home">
-    <div class="card hero">
+    <div class="card hero" data-card="hero" data-label="이번 달 요약">
       <small>이번 달 지출 · 환불 차감, 이체 제외</small>
       <div id="exp" class="big">0원</div>
       <div class="sub"><span>수입 <b id="inc">0원</b></span><span>남은 돈 <b id="bal">0원</b></span></div>
       <div id="cmp"></div>
     </div>
-    <div id="alerts"></div>
-    <div class="card">
+    <div data-card="alerts" data-label="예산 경고"><div id="alerts"></div></div>
+    <div class="card" data-card="daily" data-label="일별 지출">
       <h2>일별 지출</h2>
       <div id="dailyInfo" aria-live="polite"></div>
       <div id="daily" class="daily" role="group" aria-label="일별 지출 막대"></div>
       <div id="dailyX" class="daily-x" aria-hidden="true"></div>
     </div>
-    <div class="card">
+    <div class="card" data-card="budget" data-label="어디에 썼나 · 예산">
       <div class="row"><h2>어디에 썼나 · 예산</h2><button id="notifyBtn" class="small" hidden>🔔 알림 켜기</button></div>
-      <p class="hint">금액을 누르면 월 예산을 바꿔요 · 80% 주황, 100% 빨강</p>
+      <p class="hint">이름을 누르면 그 카테고리 내역 · 금액을 누르면 예산 수정</p>
       <ul id="budgets"></ul>
     </div>
-    <div class="card">
+    <div class="card" data-card="recent" data-label="최근 거래">
       <div class="row"><h2>최근 거래</h2><button id="toList" class="small">전체 보기</button></div>
       <ul id="recent" class="tx"></ul>
     </div>
+    <button id="homeEdit" class="small" style="display:block;margin:4px auto 0">✎ 홈 화면 편집</button>
   </section>
 
   <div id="filters" class="card" hidden>
@@ -356,6 +367,12 @@
       <button class="primary" style="padding:12px 28px">저장</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="catSheet">
+  <div class="row"><h2 id="catTitle" style="margin:0"></h2><button id="catClose" class="small">닫기</button></div>
+  <p id="catSum" class="hint"></p>
+  <ul id="catList" class="tx"></ul>
 </dialog>
 
 <dialog id="settings">
