@@ -259,6 +259,16 @@
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:17px; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
   .menu-list .em { font-size:22px; }
+  .menu-head { display:flex; align-items:center; justify-content:space-between; margin:8px 4px 14px; }
+  .menu-head h2 { font-size:22px; margin:0; }
+  /* 꾹 눌러 편집: 롱프레스 메뉴·글자 선택을 막고, 편집 중엔 끌기만 (스크롤 안 함) */
+  .menu-list button { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+  .menu-list.editing button { touch-action:none; cursor:grab; background:var(--fill); animation:wiggle .3s ease-in-out infinite alternate; }
+  .menu-list.editing button::after { content:'≡'; margin-left:auto; font-size:20px; color:var(--muted); }
+  .menu-list.editing button:nth-child(even) { animation-delay:-.15s; }
+  .menu-list button.lift { animation:none; transition:none; z-index:1; position:relative; box-shadow:0 8px 24px rgba(0,0,0,.18); background:var(--glass); }
+  @keyframes wiggle { from { rotate:-.6deg; } to { rotate:.6deg; } }
+  @media (prefers-reduced-motion: reduce) { .menu-list.editing button { animation:none; } }
   #lFields label.f.full, #lFields .chk { grid-column:1/-1; }
   #settings { border-radius:28px; margin:auto; width:min(94vw,440px); animation:popIn .3s var(--ease-out); }
   #settings.closing { animation:popOut .18s var(--ease-in) forwards; }
@@ -513,8 +523,9 @@
 </dialog>
 
 <dialog id="menu" aria-label="메뉴">
-  <h2 style="font-size:22px;margin:8px 4px 14px">BAB:ZIP</h2>
+  <div class="menu-head"><h2>BAB:ZIP</h2><button type="button" id="menuDone" class="small" hidden>완료</button></div>
   <div id="menuList" class="menu-list"></div>
+  <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요</p>
 </dialog>
 
 <dialog id="lItem" class="sheet">

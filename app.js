@@ -886,8 +886,10 @@ $('#hList').addEventListener('click', e => {
   renderHabits();
   queue({ action: 'habitCheck', habitId: h.id, stamp: st, done }).then(ok => ok && setStatus('틱틱에 반영됨'));
 });
+// 메뉴 순서: 저장된 순서 + 새로 생긴 섹션은 뒤에
+const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTIONS[k]); return [...o, ...Object.keys(SECTIONS).filter(k => !o.includes(k))]; };
 function openMenu() {
-  $('#menuList').innerHTML = Object.entries(SECTIONS).map(([k, v]) =>
+  $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><span class="em" aria-hidden="true">${v.icon}</span>${v.title}</button>`).join('');
   $('#menu').showModal();
 }
@@ -903,6 +905,7 @@ $('#menuBtn').addEventListener('click', openMenu);
     sw = null;
     if (e.touches.length !== 1) return;
     const t = e.target, open = menu.open;
+    if (t.closest('.menu-list.editing')) return; // 순서 바꾸는 중엔 밀어 닫기 안 함
     if (!open && (document.querySelector('dialog[open]') || t.closest('#calGrid, .wcol, input, textarea, select') || hScroll(t))) return;
     sw = { x: e.touches[0].clientX, y: e.touches[0].clientY, open, on: false, p: open ? 1 : 0, v: 0, lx: e.touches[0].clientX, lt: Date.now() };
   }, { passive: true });
@@ -937,7 +940,41 @@ $('#menuBtn').addEventListener('click', openMenu);
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
 }
+// 메뉴 항목을 꾹 누르면 편집 모드 → 끌어서 순서 변경, 「완료」나 메뉴를 닫으면 끝
+{
+  const list = $('#menuList'), editing = () => list.classList.contains('editing');
+  const setEdit = on => { list.classList.toggle('editing', on); $('#menuDone').hidden = $('#menuTip').hidden = !on; };
+  let timer = null, start = null, drag = null;
+  list.addEventListener('contextmenu', e => e.preventDefault());
+  list.addEventListener('pointerdown', e => {
+    const b = e.target.closest('[data-sec]');
+    if (!b) return;
+    if (editing()) { drag = { b, y: e.clientY }; b.setPointerCapture(e.pointerId); b.classList.add('lift'); return; }
+    start = { x: e.clientX, y: e.clientY };
+    timer = setTimeout(() => { timer = null; setEdit(true); navigator.vibrate?.(12); }, 450);
+  });
+  list.addEventListener('pointermove', e => {
+    if (timer && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) { clearTimeout(timer); timer = null; } // 움직이면 롱프레스 취소
+    if (!drag) return;
+    const b = drag.b, h = b.offsetHeight + 6; // 6 = 항목 간격
+    let dy = e.clientY - drag.y;
+    if (dy > h / 2 && b.nextElementSibling) { list.insertBefore(b.nextElementSibling, b); drag.y += h; dy -= h; }
+    else if (dy < -h / 2 && b.previousElementSibling) { list.insertBefore(b, b.previousElementSibling); drag.y -= h; dy += h; }
+    b.style.transform = `translateY(${dy}px)`;
+  });
+  const end = () => {
+    clearTimeout(timer); timer = null;
+    if (!drag) return;
+    drag.b.style.transform = ''; drag.b.classList.remove('lift'); drag = null;
+    store.set('menuOrder', [...list.querySelectorAll('[data-sec]')].map(b => b.dataset.sec));
+  };
+  list.addEventListener('pointerup', end);
+  list.addEventListener('pointercancel', end);
+  $('#menuDone').addEventListener('click', () => setEdit(false));
+  $('#menu').addEventListener('close', () => setEdit(false));
+}
 $('#menuList').addEventListener('click', e => {
+  if ($('#menuList').classList.contains('editing')) return; // 편집 중엔 이동 안 함
   const k = e.target.closest('[data-sec]')?.dataset.sec;
   if (k) { $('#menu').close(); setSection(k); }
 });
