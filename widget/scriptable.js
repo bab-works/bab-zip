@@ -4,6 +4,8 @@
 const TOKEN = '여기에-앱-비밀번호';
 const API = 'https://script.google.com/macros/s/AKfycbzZWDgLW1AFlZbCGTgzWH0uZAs660hNJOh4YHzyqXFu4kZtyzUP_VWOBzj0T5PDBtxM/exec';
 const APP = 'https://bab-works.github.io/bab-zip/?add=1';
+// 위젯을 누르면 홈 화면 앱(BAB:ZIP)으로 열기: 단축어 앱에 「앱 열기 → BAB:ZIP」 단축어를 만들고 그 이름을 적으세요. 비우면 사파리로 열려요
+const SHORTCUT = 'BAB:ZIP 열기';
 
 const won = n => Math.round(n).toLocaleString('ko-KR');
 const short = n => Math.abs(n) >= 1e4 ? `${Math.round(n / 1e3) / 10}만` : won(n); // 좁은 칸용: 52.4만
@@ -13,7 +15,7 @@ catch (e) { d = { ok: false, error: '연결 안 됨' }; }
 
 const fam = config.widgetFamily || 'accessoryRectangular';
 const w = new ListWidget();
-w.url = APP;
+w.url = SHORTCUT ? 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT) : APP;
 w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
 const line = (s, size, bold) => { const t = w.addText(s); t.font = bold ? Font.boldSystemFont(size) : Font.systemFont(size); t.lineLimit = 1; t.minimumScaleFactor = 0.7; return t; };
 
