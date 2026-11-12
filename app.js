@@ -5,11 +5,14 @@ const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+// 내 시트 웹 앱 주소 (주소만으로는 읽고 쓸 수 없고 비밀번호가 함께 있어야 함) → 링크엔 비밀번호만: …/#token=비밀번호
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzZWDgLW1AFlZbCGTgzWH0uZAs660hNJOh4YHzyqXFu4kZtyzUP_VWOBzj0T5PDBtxM/exec';
 let cfg = store.get('cfg', { url: '', token: '' });
+if (!cfg.url) cfg.url = SHEET_URL;
 // 설정 링크(…/#url=웹앱URL&token=비밀번호)로 열면 연결 정보를 저장. 폰이 저장소를 지워도 이 링크로 열면 다시 연결됨
 // (홈 화면 앱은 사파리와 저장소가 따로라서, 앱 안에서도 ⚙에 링크를 붙여넣을 수 있게 함)
 function cfgFrom(hash) {
-  const h = new URLSearchParams(hash), url = h.get('url') || '', token = h.get('token');
+  const h = new URLSearchParams(hash), url = h.get('url') || SHEET_URL, token = h.get('token');
   return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url) && token ? { url, token } : null;
 }
 const fromLink = cfgFrom(location.hash.slice(1));
@@ -1038,7 +1041,7 @@ const now = localISO();
 $('#month').value = now.slice(0, 7);
 render();
 refresh();
-if (!cfg.url) $('#settings').showModal(); // 연결 전이면 바로 설정 창
+if (!cfg.token) $('#settings').showModal(); // 비밀번호 전이면 바로 설정 창
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
 $('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // 앱 아이콘 길게 누르기 메뉴(안드로이드)가 여는 주소: ?add=1 · ?view=cal · ?sec=book&add=1
