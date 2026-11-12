@@ -277,6 +277,15 @@
   .amount span { font-size:22px; font-weight:700; }
   .quick { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; }
   .quick button { padding:9px 0; font-size:13px; white-space:nowrap; }
+  .rec-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 2px; }
+  .switch { display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer; }
+  .switch small { font-weight:400; margin-left:2px; }
+  .switch input { position:absolute; opacity:0; pointer-events:none; }
+  .switch i { width:44px; height:26px; border-radius:99px; background:var(--line); position:relative; flex:none; transition:background-color .2s var(--ease); }
+  .switch i::after { content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .25s var(--ease-out); }
+  .switch input:checked + i { background:var(--accent); }
+  .switch input:checked + i::after { transform:translateX(18px); }
+  .switch input:focus-visible + i { outline:2px solid var(--accent); outline-offset:2px; }
   .chips { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
   .chips button { border-radius:16px; padding:8px 2px; font-size:12px; display:flex; flex-direction:column; align-items:center; gap:2px; }
   .chips button .em { font-size:22px; }
@@ -412,23 +421,8 @@
   <section id="v-rec" hidden>
     <div class="card">
       <h2>반복 거래</h2>
-      <p class="hint">매월 정한 날이 지나면 「거래」 탭에 자동으로 기록돼요 (앱을 열 때 확인)</p>
+      <p class="hint">매월 정한 날이 지나면 「거래」 탭에 자동으로 기록돼요. 새 반복은 거래 입력에서 <b>🔁 매월 반복</b>을 켜세요.</p>
       <ul id="recList"></ul>
-    </div>
-    <div class="card">
-      <h2>반복 추가</h2>
-      <form id="recForm" class="grid2">
-        <input class="full" name="content" placeholder="내용 (예: 휴대폰 요금)" required maxlength="200" aria-label="내용">
-        <select name="type" aria-label="구분"><option>지출</option><option>수입</option><option>이체</option></select>
-        <input name="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="금액" required aria-label="금액">
-        <select name="major" aria-label="대분류"></select>
-        <select name="minor" aria-label="소분류"></select>
-        <select class="full" name="pay" aria-label="결제수단"></select>
-        <label class="f">매월 며칠<input name="day" type="number" min="1" max="31" value="1" required></label>
-        <label class="f">시작 월<input name="start" type="month" required></label>
-        <label class="f full">종료 월 (선택)<input name="end" type="month"></label>
-        <button class="primary full">반복 추가</button>
-      </form>
     </div>
   </section>
 </main>
@@ -438,7 +432,6 @@
   <button data-view="home" aria-current="page"><svg class="i"><use href="#i-home"/></svg>홈</button>
   <button data-view="cal"><svg class="i"><use href="#i-cal"/></svg>달력</button>
   <button data-view="list"><svg class="i"><use href="#i-list"/></svg>내역</button>
-  <button data-view="rec"><svg class="i"><use href="#i-rep"/></svg>반복</button>
 </nav>
 
 <dialog id="entry" class="sheet">
@@ -468,6 +461,10 @@
     <select name="pay" aria-label="결제수단"></select>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input class="full" name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
+    <div id="recRow" class="rec-row full">
+      <label class="switch"><input type="checkbox" name="rec"><i aria-hidden="true"></i>🔁 매월 반복<small class="hint" id="recHint"></small></label>
+      <button type="button" id="recManage" class="small">반복 관리</button>
+    </div>
     <div class="row full" style="margin-top:6px">
       <button type="button" id="entryDelete" class="danger">삭제</button>
       <span style="flex:1"></span>

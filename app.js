@@ -263,10 +263,6 @@ function renderRec() {
       <span>${esc(r.content)} <b class="${r.type === '수입' ? 'in' : r.type === '지출' ? 'out' : 'move'}">${won(r.amount)}</b></span></div>
       <button class="small danger" data-rid="${esc(r.id)}" aria-label="${esc(r.content)} 반복 삭제">삭제</button></li>`).join('')
     || '<li class="empty">등록된 반복 거래가 없어요</li>';
-  const f = $('#recForm').elements;
-  fillSelect(f.major, majorsFor(f.type.value));
-  fillSelect(f.minor, minorsFor(f.major.value), '소분류 없음');
-  fillSelect(f.pay, payments(), '결제수단 선택 안 함');
 }
 
 // ── 달력 ──
@@ -421,13 +417,18 @@ function openEntry(it, date) {
   F.content.value = it?.content || '';
   F.memo.value = it?.memo || '';
   F.inst.value = it?.inst || '';
+  $('#recRow').hidden = !!it; // 반복은 새 거래에서만 켬
+  recHint();
   $('#entryDelete').hidden = !it;
   $('#entryTitle').textContent = it ? '거래 수정' : '거래 추가';
   $('#entry').showModal();
 }
+const recHint = () => { $('#recHint').textContent = F.rec.checked && F.date.value ? `매월 ${+F.date.value.slice(8)}일` : ''; };
 $('#entryForm').addEventListener('change', e => {
   if (e.target.name === 'type') entryCats();
+  if (e.target.name === 'rec' || e.target.name === 'date') recHint();
 });
+$('#recManage').addEventListener('click', () => { $('#entry').close(); show('rec'); });
 // 내용을 치면 「분류규칙」 탭의 키워드로 구분·대분류·소분류 자동 선택 (새 거래만)
 F.content.addEventListener('input', () => {
   if (F.tid.value) return;
@@ -445,6 +446,15 @@ $('#entryForm').addEventListener('submit', e => {
     inst: +F.inst.value >= 2 ? Math.round(+F.inst.value) : '',
   };
   if (!(it.amount > 0) || !it.date || !it.major) return;
+  if (F.rec.checked && !F.tid.value) {
+    // 반복 규칙만 저장 → 서버가 이 날짜부터 매월 거래를 만들어 줌 (이번 달 분 포함)
+    const rule = { id: crypto.randomUUID(), content: it.content || it.minor || it.major, type: it.type, major: it.major, minor: it.minor,
+      pay: it.pay, amount: it.amount, day: +it.date.slice(8), start: it.date.slice(0, 7), end: '' };
+    data.meta.recurring.push(rule);
+    $('#entry').close();
+    toast(`🔁 매월 ${rule.day}일 반복으로 등록했어요`);
+    return queue({ action: 'recSave', rule }).then(ok => ok && refresh());
+  }
   const m = it.date.slice(0, 7), before = spent(m, it.major);
   const idx = data.items.findIndex(x => x.id === it.id);
   if (idx >= 0) data.items[idx] = { ...data.items[idx], ...it, instState: '' }; else data.items.push(it);
@@ -546,24 +556,6 @@ async function pushSubscribe() {
 }
 
 // ── 반복 ──
-const R = $('#recForm').elements;
-$('#recForm').addEventListener('change', e => {
-  if (e.target.name === 'type') fillSelect(R.major, majorsFor(R.type.value));
-  if (e.target.name === 'type' || e.target.name === 'major') fillSelect(R.minor, minorsFor(R.major.value), '소분류 없음');
-});
-$('#recForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const rule = {
-    id: crypto.randomUUID(), content: R.content.value.trim(), type: R.type.value, major: R.major.value, minor: R.minor.value,
-    pay: R.pay.value, amount: Math.round(+R.amount.value), day: Math.round(+R.day.value), start: R.start.value, end: R.end.value,
-  };
-  if (!rule.content || !(rule.amount > 0) || !(rule.day >= 1 && rule.day <= 31) || !rule.start) return;
-  if (rule.end && rule.end < rule.start) return toast('종료 월이 시작 월보다 빨라요');
-  data.meta.recurring.push(rule);
-  e.target.content.value = ''; e.target.amount.value = '';
-  // 서버가 이번 달 분까지 거래를 만들어 주므로 저장 후 다시 불러옴
-  queue({ action: 'recSave', rule }).then(ok => ok && refresh());
-});
 $('#recList').addEventListener('click', e => {
   const id = e.target.dataset.rid;
   if (!id || !confirm('반복을 삭제할까요? (이미 기록된 거래는 남아요)')) return;
@@ -579,7 +571,7 @@ function show(v) {
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
-  $('#fab').hidden = v === 'rec' || v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
+  $('#fab').hidden = v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
   if (v === 'cal') calFit();
   replay($('#v-' + v), 'enter');
   window.scrollTo(0, 0);
@@ -1041,12 +1033,9 @@ function pickerField(input, kind, title, opt = {}) {
   show(valDesc.get.call(input));
 }
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
-pickerField($('#recForm [name=start]'), 'month', '시작 월');
-pickerField($('#recForm [name=end]'), 'month', '종료 월', { blank: true, empty: '종료 없음' });
 
 const now = localISO();
 $('#month').value = now.slice(0, 7);
-R.start.value = now.slice(0, 7);
 render();
 refresh();
 if (!cfg.url) $('#settings').showModal(); // 연결 전이면 바로 설정 창
