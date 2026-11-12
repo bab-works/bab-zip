@@ -278,11 +278,19 @@
   .quick { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:4px; }
   .quick button { padding:9px 0; font-size:13px; white-space:nowrap; }
   /* 습관 (TickTick 풍: 위 주간 날짜 줄, 아래 동그란 체크 카드) */
-  .hweek { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding:10px 6px 14px; }
-  .hweek button { background:none; display:flex; flex-direction:column; align-items:center; gap:6px; padding:4px 0; color:var(--muted); font-size:12px; }
-  .hweek b { width:36px; height:36px; border-radius:50%; display:grid; place-items:center; font-size:15px; color:var(--fg); position:relative; transition:background-color .2s var(--ease); }
-  .hweek button[aria-pressed="true"] b { background:var(--accent); color:#fff; }
-  .hweek b.all::after { content:''; position:absolute; bottom:-7px; width:5px; height:5px; border-radius:50%; background:var(--accent); }
+  .hcal { padding:10px 10px 4px; }
+  .hmon { display:flex; align-items:center; justify-content:space-between; padding:0 4px 6px; }
+  .hmon b { font-size:17px; }
+  .hmon .icon-btn { font-size:22px; width:36px; height:36px; }
+  .hgrid button { min-height:54px; gap:4px; }
+  .hgrid button .d { font-size:16px; margin:0; }
+  .hgrid button[aria-pressed="true"] { background:var(--accent); }
+  .hgrid button[aria-pressed="true"] .d { color:#fff !important; }
+  /* 그날 완료 비율 고리 (다 하면 꽉 찬 원) */
+  .hgrid i { width:16px; height:16px; border-radius:50%; background:conic-gradient(var(--accent) var(--p), var(--line) 0);
+    -webkit-mask:radial-gradient(circle, transparent 4.5px, #000 5px); mask:radial-gradient(circle, transparent 4.5px, #000 5px); }
+  .hgrid i.all { -webkit-mask:none; mask:none; }
+  .hgrid button[aria-pressed="true"] i { background:conic-gradient(#fff var(--p), rgba(255,255,255,.35) 0); }
   .hlist { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; }
   .hlist li { display:flex; align-items:center; gap:14px; background:var(--glass); border-radius:20px; padding:14px 16px; }
   .hlist .hic { width:46px; height:46px; border-radius:50%; display:grid; place-items:center; font-size:23px; flex:none;
@@ -428,7 +436,12 @@
   </section>
 
   <section id="v-habit" hidden>
-    <div id="hWeek" class="hweek card" role="group" aria-label="날짜 선택"></div>
+    <div class="card hcal">
+      <div class="hmon"><button type="button" id="hPrev" class="icon-btn" aria-label="이전 달">‹</button><b id="hMonth"></b><button type="button" id="hNext" class="icon-btn" aria-label="다음 달">›</button></div>
+      <div class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div id="hClip" class="clip"><div id="hGrid" class="cal hgrid" role="grid" aria-label="습관 달력"></div></div>
+      <div id="hGrab" class="grab" role="button" tabindex="0" aria-label="습관 달력 주간·월간 전환 (끌거나 누르기)"><span></span></div>
+    </div>
     <p id="hInfo" class="hint" style="padding:0 6px"></p>
     <ul id="hList" class="hlist"></ul>
     <p id="hRest" class="hint" style="text-align:center"></p>

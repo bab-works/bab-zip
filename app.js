@@ -278,18 +278,38 @@ function daySums(list) {
   return { inc: list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0), exp: list.reduce((s, i) => s + net(i), 0) };
 }
 let calPay = ''; // 달력 결제유형 탭 ('' = 전체)
-// 달력 손잡이: 펼침(한 달) ↔ 접힘(선택한 주 한 줄). 끌면 그 사이 높이로 움직임
-let calOpen = true, calWeek = 0;
-const clip = $('#calClip'), calGrid = $('#calGrid');
-const calRow = () => (calGrid.querySelector('button, .other')?.offsetHeight || 60) + 2;
-const calFull = () => calGrid.scrollHeight;
-const calFit = () => { if (!clip.offsetParent) return; calPlace(calOpen ? calFull() : calRow(), false); }; // 숨긴 상태에선 높이를 못 재므로 보일 때 다시 맞춤
-function calPlace(h, animate) {
-  const rh = calRow(), full = calFull(), t = full > rh ? Math.min(1, Math.max(0, (h - rh) / (full - rh))) : 1;
-  clip.classList.toggle('anim', animate); calGrid.classList.toggle('anim', animate);
-  clip.style.height = h + 'px';
-  calGrid.style.transform = `translateY(${-(1 - t) * calWeek * rh}px)`;
+// 달력 손잡이: 펼침(한 달) ↔ 접힘(선택한 주 한 줄). 끌면 그 사이 높이로 움직임 (가계부 달력·습관 달력 공용)
+function foldCal(clip, grid, grab, open = true) {
+  const f = { open, week: 0 };
+  const row = () => (grid.querySelector('button, .other')?.offsetHeight || 60) + 2, full = () => grid.scrollHeight;
+  const place = (h, animate) => {
+    const rh = row(), fh = full(), t = fh > rh ? Math.min(1, Math.max(0, (h - rh) / (fh - rh))) : 1;
+    clip.classList.toggle('anim', animate); grid.classList.toggle('anim', animate);
+    clip.style.height = h + 'px';
+    grid.style.transform = `translateY(${-(1 - t) * f.week * rh}px)`;
+  };
+  f.fit = () => { if (clip.offsetParent) place(f.open ? full() : row(), false); }; // 숨긴 상태에선 높이를 못 재므로 보일 때 다시 맞춤
+  const toggle = () => { f.open = !f.open; place(f.open ? full() : row(), true); };
+  let drag = null;
+  grab.addEventListener('pointerdown', e => { drag = { y: e.clientY, h: clip.offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); });
+  grab.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y; if (Math.abs(dy) > 4) drag.moved = true;
+    place(Math.min(full(), Math.max(row(), drag.h + dy)), false);
+  });
+  const end = () => {
+    if (!drag) return;
+    const moved = drag.moved; drag = null;
+    if (!moved) return toggle(); // 눌렀으면 토글, 끌었으면 가까운 쪽으로
+    f.open = clip.offsetHeight > (row() + full()) / 2;
+    place(f.open ? full() : row(), true);
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+  grab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  return f;
 }
+const calGrid = $('#calGrid'), calF = foldCal($('#calClip'), calGrid, $('#calGrab'));
 function renderCal() {
   const m = $('#month').value;
   if (!m) return;
@@ -323,8 +343,8 @@ function renderCal() {
   const tail = (7 - (first + days) % 7) % 7;
   for (let d = 1; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
   calGrid.innerHTML = html;
-  calWeek = Math.floor((first + +selDay.slice(8) - 1) / 7);
-  calFit();
+  calF.week = Math.floor((first + +selDay.slice(8) - 1) / 7);
+  calF.fit();
   const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
   $('#calQuickSum').textContent = tdy.length ? `지출 ${won(tds.exp)} · ${tdy.length}건 · 눌러서 추가` : '아직 입력이 없어요 · 눌러서 추가';
   renderTrend(src, m, y, mo, days, today);
@@ -479,23 +499,6 @@ $('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#
   const it = id && data.items.find(i => i.id === id);
   if (it) openEntry(it);
 }));
-let grabDrag = null;
-const grab = $('#calGrab');
-grab.addEventListener('pointerdown', e => { grabDrag = { y: e.clientY, h: clip.offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); });
-grab.addEventListener('pointermove', e => {
-  if (!grabDrag) return;
-  const dy = e.clientY - grabDrag.y; if (Math.abs(dy) > 4) grabDrag.moved = true;
-  calPlace(Math.min(calFull(), Math.max(calRow(), grabDrag.h + dy)), false);
-});
-const grabEnd = () => {
-  if (!grabDrag) return;
-  const moved = grabDrag.moved; grabDrag = null;
-  calOpen = moved ? clip.offsetHeight > (calRow() + calFull()) / 2 : !calOpen; // 끌었으면 가까운 쪽으로, 눌렀으면 토글
-  calPlace(calOpen ? calFull() : calRow(), true);
-};
-grab.addEventListener('pointerup', grabEnd);
-grab.addEventListener('pointercancel', grabEnd);
-grab.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); calOpen = !calOpen; calPlace(calOpen ? calFull() : calRow(), true); } });
 $('#calGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-day]')?.dataset.day;
   if (d) {
@@ -575,7 +578,7 @@ function show(v) {
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
   $('#fab').hidden = v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
-  if (v === 'cal') calFit();
+  if (v === 'cal') calF.fit();
   replay($('#v-' + v), 'enter');
   window.scrollTo(0, 0);
 }
@@ -822,13 +825,26 @@ function streak(h) {
   }
   return n;
 }
+const hF = foldCal($('#hClip'), $('#hGrid'), $('#hGrab'), false); // 처음엔 이번 주만, 손잡이를 내리면 한 달
+let hMon = hDay.slice(0, 7);
 function renderHabits() {
-  const today = localISO().slice(0, 10);
-  $('#hWeek').innerHTML = [6, 5, 4, 3, 2, 1, 0].map(k => {
-    const d = isoAdd(today, -k), due = habits.filter(h => dueOn(h, d));
-    const all = due.length && due.every(h => h.done.includes(stampOf(d)));
-    return `<button type="button" data-d="${d}" aria-pressed="${d === hDay}" aria-label="${+d.slice(5, 7)}월 ${+d.slice(8)}일">${k ? WEEK[new Date(d + 'T12:00:00').getDay()] : '오늘'}<b class="${all ? 'all' : ''}">${+d.slice(8)}</b></button>`;
-  }).join('');
+  const today = localISO().slice(0, 10), [y, mo] = hMon.split('-').map(Number);
+  const first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate(), pd = new Date(y, mo - 1, 0).getDate();
+  $('#hMonth').textContent = `${y}년 ${mo}월`;
+  $('#hNext').disabled = hMon >= today.slice(0, 7);
+  let html = '';
+  for (let k = first - 1; k >= 0; k--) html += `<span class="other" aria-hidden="true">${pd - k}</span>`;
+  for (let d = 1; d <= days; d++) {
+    const ds = `${hMon}-${String(d).padStart(2, '0')}`, wd = (first + d - 1) % 7, due = habits.filter(h => dueOn(h, ds));
+    const n = due.filter(h => h.done.includes(stampOf(ds))).length, pct = due.length ? Math.round(n / due.length * 100) : 0;
+    const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
+    html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
+      <span class="d">${d}</span>${due.length && ds <= today ? `<i class="${pct === 100 ? 'all' : ''}" style="--p:${pct}%" aria-hidden="true"></i>` : ''}</button>`;
+  }
+  for (let d = 1, tail = (7 - (first + days) % 7) % 7; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
+  $('#hGrid').innerHTML = html;
+  hF.week = hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
+  hF.fit();
   const due = habits.filter(h => dueOn(h, hDay)), st = stampOf(hDay), n = due.filter(h => h.done.includes(st)).length;
   $('#hInfo').textContent = habits.length ? `${hDay === today ? '오늘' : `${+hDay.slice(5, 7)}월 ${+hDay.slice(8)}일`} ${n}/${due.length} 완료` : '';
   $('#hList').innerHTML = due.map(h => {
@@ -853,10 +869,13 @@ async function refreshHabits() {
     if (sec === 'habit') renderHabits();
   } finally { busy(false); }
 }
-$('#hWeek').addEventListener('click', e => {
+$('#hGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-d]')?.dataset.d;
   if (d) { hDay = d; renderHabits(); }
 });
+const hMove = n => { const [y, m] = hMon.split('-').map(Number), d = new Date(y, m - 1 + n, 1); hMon = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; renderHabits(); };
+$('#hPrev').addEventListener('click', () => hMove(-1));
+$('#hNext').addEventListener('click', () => hMove(1));
 $('#hList').addEventListener('click', e => {
   const id = e.target.closest('[data-h]')?.dataset.h, h = id && habits.find(x => x.id === id);
   if (!h) return;
@@ -865,7 +884,7 @@ $('#hList').addEventListener('click', e => {
   h.total = Math.max(0, h.total + (done ? 1 : -1));
   store.set('habits', habits);
   renderHabits();
-  queue({ action: 'habitCheck', habitId: h.id, stamp: st, done });
+  queue({ action: 'habitCheck', habitId: h.id, stamp: st, done }).then(ok => ok && setStatus('틱틱에 반영됨'));
 });
 function openMenu() {
   $('#menuList').innerHTML = Object.entries(SECTIONS).map(([k, v]) =>
