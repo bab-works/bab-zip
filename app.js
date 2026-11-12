@@ -606,7 +606,7 @@ $('#fReset').addEventListener('click', () => {
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
   render();
 });
-$('#reload').addEventListener('click', () => sec === 'money' ? refresh() : refreshLists());
+$('#reload').addEventListener('click', () => sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 $('#openSettings').addEventListener('click', () => {
   const f = $('#settingsForm');
   f.url.value = cfg.url; f.token.value = cfg.token;
@@ -699,6 +699,7 @@ const SECTIONS = {
   board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
   movie: { title: '영화', icon: '🎬', tabs: [['movie', '영화 기록']] },
   play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '연극·뮤지컬 기록']] },
+  habit: { title: '습관', icon: '🔥' },
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
 let sec = 'money', curList = 'book';
@@ -752,7 +753,7 @@ function listInfo(k, a) {
   return `${n}개 기록`;
 }
 function renderLists() {
-  if (sec === 'money') return;
+  if (!SECTIONS[sec].tabs) return;
   const tabs = SECTIONS[sec].tabs;
   $('#lTabs').hidden = tabs.length < 2;
   $('#lTabs').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" aria-pressed="${k === curList}">${label}</button>`).join('');
@@ -781,16 +782,18 @@ function setSection(k) {
   sec = k;
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
-  const money = k === 'money';
+  const money = k === 'money', habit = k === 'habit';
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
-  $('#v-lists').hidden = money;
-  if (!money) replay($('#v-lists'), 'enter');
+  $('#v-lists').hidden = money || habit;
+  $('#v-habit').hidden = !habit;
+  if (!money) replay($('#v-' + (habit ? 'habit' : 'lists')), 'enter');
   if (money) show(curView);
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
-    $('#fab').hidden = false;
+    $('#fab').hidden = habit;
+    if (habit) { renderHabits(); refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
     $('#lq').value = '';
     renderLists();
@@ -798,6 +801,72 @@ function setSection(k) {
     window.scrollTo(0, 0);
   }
 }
+// ── 습관: 틱틱과 실시간 연동 (시트의 Apps Script가 중계) ──
+let habits = store.get('habits', []), hDay = localISO().slice(0, 10);
+const HICON = { habit_daily_check_in: '✅', habit_reading: '📖', habit_skincare: '🧴', habit_learn_words: '🗣️', habit_take_medicine: '💊',
+  habit_exercising: '🏃', habit_eat_dinner: '🍚', habit_quit_drinking: '🍺', habit_drink_water: '💧', habit_sleep: '😴', habit_meditation: '🧘' };
+const stampOf = iso => +iso.replace(/-/g, '');
+const isoAdd = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// 반복 규칙: 요일 지정(BYDAY)만 따지고, 나머지(매일·주 n회 등)는 매일 보여 줌
+function dueOn(h, iso) {
+  const by = /BYDAY=([A-Z,]+)/.exec(h.rule);
+  return !by || by[1].split(',').includes(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(iso + 'T12:00:00').getDay()]);
+}
+function streak(h) {
+  const today = localISO().slice(0, 10);
+  let n = 0;
+  for (let d = today, i = 0; i < 120; i++, d = isoAdd(d, -1)) {
+    if (!dueOn(h, d)) continue;
+    if (h.done.includes(stampOf(d))) n++;
+    else if (d !== today) break; // 오늘은 아직 안 했어도 연속은 유지
+  }
+  return n;
+}
+function renderHabits() {
+  const today = localISO().slice(0, 10);
+  $('#hWeek').innerHTML = [6, 5, 4, 3, 2, 1, 0].map(k => {
+    const d = isoAdd(today, -k), due = habits.filter(h => dueOn(h, d));
+    const all = due.length && due.every(h => h.done.includes(stampOf(d)));
+    return `<button type="button" data-d="${d}" aria-pressed="${d === hDay}" aria-label="${+d.slice(5, 7)}월 ${+d.slice(8)}일">${k ? WEEK[new Date(d + 'T12:00:00').getDay()] : '오늘'}<b class="${all ? 'all' : ''}">${+d.slice(8)}</b></button>`;
+  }).join('');
+  const due = habits.filter(h => dueOn(h, hDay)), st = stampOf(hDay), n = due.filter(h => h.done.includes(st)).length;
+  $('#hInfo').textContent = habits.length ? `${hDay === today ? '오늘' : `${+hDay.slice(5, 7)}월 ${+hDay.slice(8)}일`} ${n}/${due.length} 완료` : '';
+  $('#hList').innerHTML = due.map(h => {
+    const on = h.done.includes(st), s = streak(h);
+    return `<li style="--c:${esc(h.color)}" class="${on ? 'done' : ''}"><span class="hic" aria-hidden="true">${HICON[h.icon] || '⭐'}</span>
+      <div><span>${esc(h.name)}</span><small>${s ? `🔥 ${s}일 연속 · ` : ''}총 ${h.total}일${h.enc ? ' · ' + esc(h.enc) : ''}</small></div>
+      <button type="button" class="hcheck" data-h="${esc(h.id)}" aria-pressed="${on}" aria-label="${esc(h.name)} ${on ? '체크 해제' : '체크'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></li>`;
+  }).join('') || `<li class="empty">${habits.length ? '이날은 할 습관이 없어요' : '틱틱 습관을 불러오는 중이거나, 아직 연결 전이에요'}</li>`;
+  const rest = habits.length - due.length;
+  $('#hRest').textContent = rest ? `이날 쉬는 습관 ${rest}개` : '';
+}
+async function refreshHabits() {
+  try {
+    busy(true);
+    if (await sync()) {
+      try {
+        const r = await api(null, '&what=habits');
+        if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
+        else { habits = r.habits; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
+      } catch (e) { setStatus('틱틱 연결 안 됨 · ' + e.message); }
+    }
+    if (sec === 'habit') renderHabits();
+  } finally { busy(false); }
+}
+$('#hWeek').addEventListener('click', e => {
+  const d = e.target.closest('[data-d]')?.dataset.d;
+  if (d) { hDay = d; renderHabits(); }
+});
+$('#hList').addEventListener('click', e => {
+  const id = e.target.closest('[data-h]')?.dataset.h, h = id && habits.find(x => x.id === id);
+  if (!h) return;
+  const st = stampOf(hDay), done = !h.done.includes(st);
+  h.done = done ? [...h.done, st] : h.done.filter(x => x !== st);
+  h.total = Math.max(0, h.total + (done ? 1 : -1));
+  store.set('habits', habits);
+  renderHabits();
+  queue({ action: 'habitCheck', habitId: h.id, stamp: st, done });
+});
 function openMenu() {
   $('#menuList').innerHTML = Object.entries(SECTIONS).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><span class="em" aria-hidden="true">${v.icon}</span>${v.title}</button>`).join('');
@@ -1048,7 +1117,7 @@ $('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(
 const qp = new URLSearchParams(location.search);
 if (qp.get('sec') && SECTIONS[qp.get('sec')]) setSection(qp.get('sec'));
 if (['home', 'cal', 'list', 'rec'].includes(qp.get('view'))) show(qp.get('view'));
-if (qp.has('add')) setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
+if (qp.has('add') && sec !== 'habit') setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 if ('serviceWorker' in navigator) {
   pushSubscribe();

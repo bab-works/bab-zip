@@ -277,9 +277,69 @@ function withLock_(fn) {
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
+// ── 틱틱 습관 (공식 API엔 습관이 없어 틱틱 웹이 쓰는 내부 API를 사용) ──
+// 편집기 왼쪽 ⚙ 프로젝트 설정 → 스크립트 속성에 TICKTICK_USER(이메일)·TICKTICK_PASS(비밀번호)를 넣으세요. 코드·깃허브엔 남지 않아요
+// shortcut: 내부 API라 틱틱이 바꾸면 끊길 수 있음, 공식 API에 습관이 생기면 그걸로 교체
+const TT = 'https://api.ticktick.com/api/v2';
+const props_ = () => PropertiesService.getScriptProperties();
+const oid_ = () => (Math.floor(Date.now() / 1000).toString(16) + Utilities.getUuid().replace(/-/g, '')).slice(0, 24);
+const stamp_ = d => Number(fmt_(d, 'yyyyMMdd'));
+function ttHead_() {
+  const p = props_();
+  let dev = p.getProperty('TT_DEVICE');
+  if (!dev) { dev = oid_(); p.setProperty('TT_DEVICE', dev); }
+  return { 'User-Agent': 'Mozilla/5.0 (rv:145.0) Firefox/145.0', 'X-Device': JSON.stringify({ platform: 'web', version: 6430, id: dev }) };
+}
+function ttLogin_() {
+  const p = props_(), u = p.getProperty('TICKTICK_USER'), pw = p.getProperty('TICKTICK_PASS');
+  if (!u || !pw) throw new Error('틱틱 계정이 없어요 · 스크립트 속성에 TICKTICK_USER·TICKTICK_PASS를 넣으세요');
+  const r = UrlFetchApp.fetch(TT + '/user/signon?wc=true&remember=true', {
+    method: 'post', contentType: 'application/json', headers: ttHead_(), payload: JSON.stringify({ username: u, password: pw }), muteHttpExceptions: true });
+  let d = {}; try { d = JSON.parse(r.getContentText()); } catch (e) {}
+  if (!d.token) throw new Error(d.authId ? '틱틱 2단계 인증이 켜져 있어 로그인할 수 없어요' : '틱틱 로그인 실패 · 이메일·비밀번호를 확인하세요');
+  p.setProperty('TT_TOKEN', d.token);
+  return d.token;
+}
+function tt_(path, body) {
+  for (let i = 0; i < 2; i++) {
+    const t = props_().getProperty('TT_TOKEN') || ttLogin_();
+    const o = { method: body ? 'post' : 'get', headers: Object.assign(ttHead_(), { Cookie: 't=' + t }), muteHttpExceptions: true };
+    if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
+    const r = UrlFetchApp.fetch(TT + path, o), c = r.getResponseCode();
+    if (c === 401 || c === 403) { props_().deleteProperty('TT_TOKEN'); continue; } // 세션 만료 → 다시 로그인
+    if (c >= 300) throw new Error('틱틱 응답 오류 ' + c);
+    const s = r.getContentText();
+    return s ? JSON.parse(s) : {};
+  }
+  throw new Error('틱틱 로그인 실패 · 이메일·비밀번호를 확인하세요');
+}
+// 편집기에서 이 함수를 한 번 실행: 외부 접속 권한 승인 + 틱틱 로그인 확인 (실행 로그에 습관 이름이 나오면 성공)
+function testTickTick() { const h = habits_(); Logger.log('틱틱 습관 %s개: %s', h.length, h.map(x => x.name).join(', ')); }
+const ckStamp_ = c => Number(c.checkinStamp || c.stamp);
+function habits_() {
+  const hs = tt_('/habits').filter(h => h.status === 0).sort((a, b) => a.sortOrder - b.sortOrder); // status 0 = 보관 안 한 습관
+  const q = hs.length ? tt_('/habitCheckins/query', { habitIds: hs.map(h => h.id), afterStamp: stamp_(new Date(Date.now() - 120 * 864e5)) }).checkins || {} : {};
+  return hs.map(h => ({
+    id: h.id, name: h.name, color: h.color || '#4772fa', icon: h.iconRes || '', rule: h.repeatRule || '', enc: h.encouragement || '',
+    total: h.totalCheckIns || 0, done: (q[h.id] || []).filter(c => c.status === 2).map(ckStamp_),
+  }));
+}
+function habitCheck_(habitId, stamp, done) {
+  if (!/^[0-9a-f]{24}$/.test(String(habitId)) || !/^\d{8}$/.test(String(stamp))) throw new Error('입력값 오류');
+  stamp = Number(stamp);
+  const list = (tt_('/habitCheckins/query', { habitIds: [habitId], afterStamp: stamp - 1 }).checkins || {})[habitId] || [];
+  const cur = list.find(c => ckStamp_(c) === stamp);
+  if (!done) { if (cur) tt_('/habitCheckins/batch', { add: [], update: [], delete: [cur.id] }); return; }
+  if (cur && cur.status === 2) return;
+  const now = Utilities.formatDate(new Date(), 'UTC', "yyyy-MM-dd'T'HH:mm:ss.000+0000");
+  const c = { id: cur ? cur.id : oid_(), habitId, checkinStamp: stamp, checkinTime: now, opTime: now, value: 1, goal: 1, status: 2 };
+  tt_('/habitCheckins/batch', cur ? { add: [], update: [c], delete: [] } : { add: [c], update: [], delete: [] });
+}
+
 function doGet(e) {
   if (e.parameter.token !== TOKEN) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
+    if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
     if (e.parameter.what === 'lists') {
       return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
     }
@@ -313,11 +373,12 @@ function doPost(e) {
       else if (b.action === 'budget') budget_(b.major, b.amount);
       else if (b.action === 'listSave') listSave_(b.list, b.item);
       else if (b.action === 'listDelete') listDelete_(b.list, b.id);
+      else if (b.action === 'habitCheck') habitCheck_(b.habitId, b.stamp, b.done);
       else throw new Error('알 수 없는 동작');
     });
     return out_({ ok: true });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
-    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음/.test(err.message) });
+    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱 계정|틱틱 로그인|2단계/.test(err.message) });
   }
 }
