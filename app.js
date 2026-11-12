@@ -803,11 +803,57 @@ function setSection(k) {
     window.scrollTo(0, 0);
   }
 }
-$('#menuBtn').addEventListener('click', () => {
+function openMenu() {
   $('#menuList').innerHTML = Object.entries(SECTIONS).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><span class="em" aria-hidden="true">${v.icon}</span>${v.title}</button>`).join('');
   $('#menu').showModal();
-});
+}
+$('#menuBtn').addEventListener('click', openMenu);
+// 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
+// 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
+{
+  const menu = $('#menu'), dim = p => `0 0 0 200vmax rgba(0,0,0,${(0.4 * p).toFixed(3)})`;
+  const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
+  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.boxShadow = dim(p); };
+  let sw = null;
+  document.addEventListener('touchstart', e => {
+    sw = null;
+    if (e.touches.length !== 1) return;
+    const t = e.target, open = menu.open;
+    if (!open && (document.querySelector('dialog[open]') || t.closest('#calGrid, .wcol, input, textarea, select') || hScroll(t))) return;
+    sw = { x: e.touches[0].clientX, y: e.touches[0].clientY, open, on: false, p: open ? 1 : 0, v: 0, lx: e.touches[0].clientX, lt: Date.now() };
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!sw) return;
+    const x = e.touches[0].clientX, dx = x - sw.x, dy = e.touches[0].clientY - sw.y;
+    if (!sw.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; } // 세로 스크롤이면 양보
+      if (sw.open ? dx > -10 : dx < 10) return;
+      sw.on = true; sw.x = x;
+      if (!sw.open) { openMenu(); document.activeElement?.blur(); } // 손가락으로 연 건 포커스 테두리 없이
+      menu.classList.add('dragging'); menu.style.transition = 'none';
+      sw.w = menu.getBoundingClientRect().width || 300;
+    }
+    e.preventDefault();
+    const now = Date.now();
+    sw.v = (x - sw.lx) / Math.max(1, now - sw.lt); sw.lx = x; sw.lt = now;
+    sw.p = Math.min(1, Math.max(0, (sw.open ? 1 : 0) + (x - sw.x) / sw.w));
+    paint(sw.p);
+  }, { passive: false });
+  const end = () => {
+    if (!sw?.on) { sw = null; return; }
+    const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
+    sw = null;
+    menu.style.transition = 'transform .3s var(--ease-out), box-shadow .3s var(--ease-out)';
+    paint(keep ? 1 : 0);
+    setTimeout(() => {
+      if (!keep) closeNow(menu);
+      menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = menu.style.boxShadow = '';
+    }, 300);
+  };
+  document.addEventListener('touchend', end);
+  document.addEventListener('touchcancel', end);
+}
 $('#menuList').addEventListener('click', e => {
   const k = e.target.closest('[data-sec]')?.dataset.sec;
   if (k) { $('#menu').close(); setSection(k); }
