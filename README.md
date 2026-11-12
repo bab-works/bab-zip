@@ -48,6 +48,7 @@
 틱틱 공식 API엔 습관이 없어서, 틱틱 웹이 쓰는 내부 API를 Apps Script가 대신 불러요. 틱틱이 내부 API를 바꾸면 끊길 수 있어요.
 
 1. Apps Script 편집기 왼쪽 **⚙ 프로젝트 설정 → 스크립트 속성**에 `TICKTICK_USER`(틱틱 이메일), `TICKTICK_PASS`(틱틱 비밀번호)를 추가해요. 코드나 깃허브에는 남지 않아요.
+   - 구글로 로그인하는 계정이면: 컴퓨터 크롬으로 ticktick.com에 로그인 → F12 → Application → Cookies → `https://ticktick.com` → 이름 `t`의 값을 복사해 `TICKTICK_TOKEN`으로 넣어요. 만료되면(보통 몇 달) 다시 복사해요.
 2. 편집기 위쪽 함수 목록에서 `testTickTick`을 고르고 **실행** → 권한 허용. 실행 로그에 습관 이름이 나오면 성공이에요.
 3. 배포 관리에서 새 버전으로 배포해요.
 

@@ -292,7 +292,7 @@ function ttHead_() {
 }
 function ttLogin_() {
   const p = props_(), u = p.getProperty('TICKTICK_USER'), pw = p.getProperty('TICKTICK_PASS');
-  if (!u || !pw) throw new Error('틱틱 계정이 없어요 · 스크립트 속성에 TICKTICK_USER·TICKTICK_PASS를 넣으세요');
+  if (!u || !pw) throw new Error('틱틱 계정이 없어요 · 스크립트 속성에 TICKTICK_TOKEN 또는 TICKTICK_USER·TICKTICK_PASS를 넣으세요');
   const r = UrlFetchApp.fetch(TT + '/user/signon?wc=true&remember=true', {
     method: 'post', contentType: 'application/json', headers: ttHead_(), payload: JSON.stringify({ username: u, password: pw }), muteHttpExceptions: true });
   let d = {}; try { d = JSON.parse(r.getContentText()); } catch (e) {}
@@ -300,13 +300,18 @@ function ttLogin_() {
   p.setProperty('TT_TOKEN', d.token);
   return d.token;
 }
+// 구글 로그인 계정은 비밀번호가 없어서, 브라우저 쿠키 t 값을 스크립트 속성 TICKTICK_TOKEN에 넣어도 됨
 function tt_(path, body) {
+  const p = props_(), own = p.getProperty('TICKTICK_TOKEN');
   for (let i = 0; i < 2; i++) {
-    const t = props_().getProperty('TT_TOKEN') || ttLogin_();
+    const t = p.getProperty('TT_TOKEN') || own || ttLogin_();
     const o = { method: body ? 'post' : 'get', headers: Object.assign(ttHead_(), { Cookie: 't=' + t }), muteHttpExceptions: true };
     if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
     const r = UrlFetchApp.fetch(TT + path, o), c = r.getResponseCode();
-    if (c === 401 || c === 403) { props_().deleteProperty('TT_TOKEN'); continue; } // 세션 만료 → 다시 로그인
+    if (c === 401 || c === 403) { // 세션 만료 → 다시 로그인
+      if (t === own && !p.getProperty('TICKTICK_PASS')) throw new Error('틱틱 로그인 실패 · TICKTICK_TOKEN이 만료됐어요, 쿠키 t를 다시 복사해 넣으세요');
+      p.deleteProperty('TT_TOKEN'); if (t === own) p.deleteProperty('TICKTICK_TOKEN'); continue;
+    }
     if (c >= 300) throw new Error('틱틱 응답 오류 ' + c);
     const s = r.getContentText();
     return s ? JSON.parse(s) : {};
