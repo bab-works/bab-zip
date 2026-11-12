@@ -341,9 +341,25 @@ function habitCheck_(habitId, stamp, done) {
   tt_('/habitCheckins/batch', cur ? { add: [], update: [c], delete: [] } : { add: [c], update: [], delete: [] });
 }
 
+// 잠금화면 위젯용 요약 (전체 거래를 보내지 않아 빠름): 오늘·이번 달 지출(환불 차감, 이체 제외)과 남은 예산
+function summary_() {
+  const sh = tx_(), last = last_(sh), today = fmt_(new Date(), 'yyyy-MM-dd'), m = today.slice(0, 7);
+  const v = last < 2 ? [] : sh.getRange(2, 1, last - 1, 9).getValues();
+  let day = 0, month = 0;
+  v.forEach(r => {
+    const d = fmt_(r[0], 'yyyy-MM-dd');
+    if (!d.startsWith(m)) return;
+    const n = r[2] === '지출' ? num_(r[8]) : r[2] === '환불' ? -num_(r[8]) : 0;
+    month += n; if (d === today) day += n;
+  });
+  const budget = rows_('카테고리', 5).reduce((s, r) => s + (r[3] ? num_(r[4]) : 0), 0);
+  return { ok: true, date: today, today: day, month, budget, left: budget - month };
+}
+
 function doGet(e) {
   if (e.parameter.token !== TOKEN) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
+    if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
     if (e.parameter.what === 'lists') {
       return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
