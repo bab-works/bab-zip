@@ -782,6 +782,7 @@ function renderLists() {
   $('#lFlowCard').hidden = view !== 'flow' || !a.length;
   $('#lListCard').hidden = !$('#lFlowCard').hidden;
   $('#lList').classList.toggle('grid', view === 'grid');
+  document.body.classList.toggle('white', view === 'flow' && a.length > 0);
   $('#fab').hidden = view === 'flow' && a.length > 0; // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
   if (view === 'flow' && a.length) return renderFlow(a);
   if (view === 'grid') {
@@ -861,6 +862,7 @@ async function refreshLists() {
 }
 function setSection(k) {
   sec = k;
+  document.body.classList.remove('white'); // 독서 커버플로우에서만 흰 바탕 (renderLists가 다시 켬)
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
   const money = k === 'money', habit = k === 'habit';
