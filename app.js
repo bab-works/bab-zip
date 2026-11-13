@@ -23,6 +23,15 @@ let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, paymen
 let pending = store.get('pending', []); // 아직 시트에 못 보낸 작업 (오프라인 대비, 순서대로 전송)
 
 const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+const pad2 = n => String(n).padStart(2, '0');
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
+const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; };
+// 달력 한 달: 요일 시작 위치·날 수와, 앞뒤 달의 흐린 날짜 칸
+function monthGrid(ym) {
+  const [y, mo] = ym.split('-').map(Number), first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate(), pd = new Date(y, mo - 1, 0).getDate();
+  const other = d => `<span class="other" aria-hidden="true">${d}</span>`;
+  return { y, mo, first, days, lead: range(pd - first + 1, pd).map(other).join(''), tail: range(1, (7 - (first + days) % 7) % 7).map(other).join('') };
+}
 // ── 움직임 도우미 ──
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 // 같은 애니메이션을 다시 재생 (클래스를 뗐다 붙임)
@@ -84,7 +93,10 @@ async function api(body, qs = '') {
   if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호/.test(r.error) });
   return r;
 }
-async function sync() {
+// 보내기는 한 번에 하나만: 동시에 두 번 돌면 아직 안 보낸 작업이 목록에서 지워질 수 있음
+let syncing = null;
+const sync = () => syncing || (syncing = sendPending().finally(() => { syncing = null; }));
+async function sendPending() {
   while (pending.length) {
     try { await api(pending[0]); }
     catch (e) {
@@ -103,8 +115,12 @@ async function refresh() {
     document.body.classList.toggle('loading', !data.items.length);
     if (await sync()) {
       try {
-        const r = await api();
-        data = { items: r.items, meta: r.meta };
+        // 최근 두 달만 받고, 그 이전은 지문이 같으면 폰에 있는 것을 그대로 씀 (예전 줄이 바뀌었으면 전체를 다시 받음)
+        const since = ymAdd(localISO().slice(0, 7), -2) + '-01';
+        let r = await api(null, `&since=${since}${data.old?.since === since ? '' : '&full=1'}`);
+        if (r.old && !r.full && r.old.h !== data.old.h) r = await api(null, `&since=${since}&full=1`);
+        const items = r.old && !r.full ? [...data.items.filter(i => i.date < since), ...r.items] : r.items;
+        data = { items, meta: r.meta, old: r.old };
         persist();
         setStatus(`시트와 동기화됨 · ${data.items.length.toLocaleString()}건`);
       } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
@@ -199,8 +215,7 @@ function renderHome() {
 
   // 지난달 같은 기간(이번 달이면 오늘 날짜까지)과 비교
   const [y, mo] = m.split('-').map(Number), today = localISO().slice(0, 10);
-  const cut = today.startsWith(m) ? +today.slice(8) : 31, pd = new Date(y, mo - 2, 1);
-  const pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const cut = today.startsWith(m) ? +today.slice(8) : 31, pm = ymAdd(m, -1);
   const prev = inMonth(pm).filter(i => +i.date.slice(8) <= cut).reduce((s, i) => s + net(i), 0);
   $('#cmp').textContent = prev > 0 ? `지난달 ${cut < 31 ? cut + '일까지' : '전체'} ${won(prev)} 대비 ${exp >= prev ? '▲' : '▼'} ${Math.abs(Math.round((exp - prev) / prev * 100))}%` : '';
 
@@ -251,10 +266,12 @@ function renderList() {
   $('#listInfo').textContent = `${list.length.toLocaleString()}건 · 지출 ${won(exp)} · 수입 ${won(inc)}` +
     (list.length > SHOW_MAX ? ` · 앞의 ${SHOW_MAX}건만 표시 (검색·필터로 좁혀 보세요)` : '');
   let last = '';
+  const byDate = {};
+  list.forEach(i => (byDate[i.date] = byDate[i.date] || []).push(i));
   $('#list').innerHTML = list.slice(0, SHOW_MAX).map(i => {
     if (key !== 'date' || i.date === last) return txRow(i);
     last = i.date;
-    const ds = daySums(list.filter(x => x.date === i.date)), [yy, mm, dd] = i.date.split('-').map(Number);
+    const ds = daySums(byDate[i.date]), [yy, mm, dd] = i.date.split('-').map(Number);
     return `<li class="day-h"><span>${mm}월 ${dd}일 ${WEEK[new Date(yy, mm - 1, dd).getDay()]}요일</span>
       <span>${ds.inc ? `<span class="in" style="display:inline">+${won(ds.inc)}</span> ` : ''}${ds.exp ? `-${won(ds.exp)}` : ''}</span></li>` + txRow(i);
   }).join('') || '<li class="empty">조건에 맞는 내역이 없어요</li>';
@@ -313,7 +330,7 @@ const calGrid = $('#calGrid'), calF = foldCal($('#calClip'), calGrid, $('#calGra
 function renderCal() {
   const m = $('#month').value;
   if (!m) return;
-  const [y, mo] = m.split('-').map(Number), first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate();
+  const { y, mo, first, days, lead, tail } = monthGrid(m);
   if (!selDay.startsWith(m)) selDay = m + '-01';
   const types = [...new Set(data.meta.payments.map(p => p[1]).filter(Boolean))];
   $('#calTabs').innerHTML = ['', ...types].map(t => `<button type="button" data-pt="${esc(t)}" aria-pressed="${t === calPay}">${t ? esc(t) : '전체'}</button>`).join('');
@@ -330,19 +347,15 @@ function renderCal() {
   const today = localISO().slice(0, 10);
   // 칸이 좁아서 100만 이상만 줄여 쓰고, 그 아래는 전부 표시
   const amt = n => Math.abs(n) >= 1e6 ? compact(n) : Math.abs(Math.round(n)).toLocaleString('ko-KR');
-  const pd = new Date(y, mo - 1, 0).getDate();
-  let html = '';
-  for (let k = first - 1; k >= 0; k--) html += `<span class="other" aria-hidden="true">${pd - k}</span>`;
+  let html = lead;
   for (let d = 1; d <= days; d++) {
-    const ds = `${m}-${String(d).padStart(2, '0')}`, s = sums[ds], wd = (first + d - 1) % 7;
+    const ds = `${m}-${pad2(d)}`, s = sums[ds], wd = (first + d - 1) % 7;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-day="${ds}" class="${cls}" aria-pressed="${ds === selDay}" aria-label="${mo}월 ${d}일${s ? ` 수입 ${won(s.inc)} 지출 ${won(s.exp)}` : ''}">
       <span class="d">${d}</span>${s && s.inc ? `<small class="in">+${amt(s.inc)}</small>` : ''}${s && s.exp ? (s.exp > 0
         ? `<small class="${s.exp >= bigCut ? 'big' : 'spend'}">-${amt(s.exp)}</small>` : `<small class="refund">+${amt(s.exp)}</small>`) : ''}</button>`;
   }
-  const tail = (7 - (first + days) % 7) % 7;
-  for (let d = 1; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
-  calGrid.innerHTML = html;
+  calGrid.innerHTML = html + tail;
   calF.week = Math.floor((first + +selDay.slice(8) - 1) / 7);
   calF.fit();
   const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
@@ -357,7 +370,7 @@ function renderCal() {
 }
 // 이번 달 누적 지출(선) vs 지난달 누적(회색 면): 같은 날짜 기준으로 비교
 function renderTrend(src, m, y, mo, days, today) {
-  const pd = new Date(y, mo - 2, 1), pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const pm = ymAdd(m, -1);
   const cum = (mm, n) => { const a = Array(n).fill(0); src.filter(i => i.date.startsWith(mm)).forEach(i => { a[+i.date.slice(8) - 1] += net(i); });
     for (let k = 1; k < n; k++) a[k] += a[k - 1]; return a; };
   const pdays = new Date(y, mo - 1, 0).getDate(), cur = cum(m, days), prev = cum(pm, pdays);
@@ -378,8 +391,7 @@ function renderTrend(src, m, y, mo, days, today) {
     </svg>`;
 }
 function moveMonth(k) {
-  const [y, mo] = $('#month').value.split('-').map(Number), d = new Date(y, mo - 1 + k, 1);
-  $('#month').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  $('#month').value = ymAdd($('#month').value, k);
   dailySel = 0;
   render();
   if (k) replay(document.querySelector('main'), 'slide', k > 0 ? '24px' : '-24px');
@@ -543,7 +555,7 @@ $('#budgets').addEventListener('click', e => {
 });
 $('#notifyBtn').addEventListener('click', async () => {
   const p = await Notification.requestPermission();
-  toast(p === 'granted' ? '알림을 켰어요 · 아침 9시·10시 반, 평일 6시 50분' : '알림이 허용되지 않았어요');
+  toast(p !== 'granted' ? '알림이 허용되지 않았어요' : PUSH_URL ? '알림을 켰어요 · 아침 9시·10시 반, 평일 6시 50분' : '예산 알림을 켰어요');
   if (p === 'granted') pushSubscribe();
   renderHome();
 });
@@ -599,7 +611,7 @@ $('#daily').addEventListener('click', e => {
 $('#dailyInfo').addEventListener('click', e => {
   if (e.target.id !== 'dailyGo') return;
   e.preventDefault();
-  selDay = `${$('#month').value}-${String(dailySel).padStart(2, '0')}`;
+  selDay = `${$('#month').value}-${pad2(dailySel)}`;
   show('cal'); renderCal();
 });
 ['#month', '#fType', '#fMajor', '#fPay', '#fSort', '#fAll'].forEach(s => $(s).addEventListener('change', render));
@@ -714,8 +726,8 @@ const RATE_OPTS = [['', '선택 안 함'], ...RATE];
 // 필드: [이름, 라벨, 종류, 선택지]
 const LIST_FIELDS = {
   book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
-    ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => String(k + 1).padStart(2, '0') + '월')]],
-    ['status', '독서 상태', 'select', ['완독', '읽는 중', '보류', '중도포기']], ['stars', '별점', 'select', RATE_OPTS], ['memo', '메모', 'text']],
+    ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => pad2(k + 1) + '월')]],
+    ['status', '독서 상태', 'select', ['완독', '읽는중', '보류', '중도포기']], ['stars', '별점', 'select', RATE_OPTS], ['memo', '메모', 'text']],
   buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text']],
   wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text']],
   escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
@@ -809,7 +821,7 @@ let habits = store.get('habits', []), hDay = localISO().slice(0, 10);
 const HICON = { habit_daily_check_in: '✅', habit_reading: '📖', habit_skincare: '🧴', habit_learn_words: '🗣️', habit_take_medicine: '💊',
   habit_exercising: '🏃', habit_eat_dinner: '🍚', habit_quit_drinking: '🍺', habit_drink_water: '💧', habit_sleep: '😴', habit_meditation: '🧘' };
 const stampOf = iso => +iso.replace(/-/g, '');
-const isoAdd = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const isoAdd = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 // 반복 규칙: 요일 지정(BYDAY)만 따지고, 나머지(매일·주 n회 등)는 매일 보여 줌
 function dueOn(h, iso) {
   const by = /BYDAY=([A-Z,]+)/.exec(h.rule);
@@ -828,21 +840,18 @@ function streak(h) {
 const hF = foldCal($('#hClip'), $('#hGrid'), $('#hGrab'), false); // 처음엔 이번 주만, 손잡이를 내리면 한 달
 let hMon = hDay.slice(0, 7);
 function renderHabits() {
-  const today = localISO().slice(0, 10), [y, mo] = hMon.split('-').map(Number);
-  const first = new Date(y, mo - 1, 1).getDay(), days = new Date(y, mo, 0).getDate(), pd = new Date(y, mo - 1, 0).getDate();
+  const today = localISO().slice(0, 10), { y, mo, first, days, lead, tail } = monthGrid(hMon);
   $('#hMonth').textContent = `${y}년 ${mo}월`;
   $('#hNext').disabled = hMon >= today.slice(0, 7);
-  let html = '';
-  for (let k = first - 1; k >= 0; k--) html += `<span class="other" aria-hidden="true">${pd - k}</span>`;
+  let html = lead;
   for (let d = 1; d <= days; d++) {
-    const ds = `${hMon}-${String(d).padStart(2, '0')}`, wd = (first + d - 1) % 7, due = habits.filter(h => dueOn(h, ds));
+    const ds = `${hMon}-${pad2(d)}`, wd = (first + d - 1) % 7, due = habits.filter(h => dueOn(h, ds));
     const n = due.filter(h => h.done.includes(stampOf(ds))).length, pct = due.length ? Math.round(n / due.length * 100) : 0;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
       <span class="d">${d}</span>${due.length && ds <= today ? `<i class="${pct === 100 ? 'all' : ''}" style="--p:${pct}%" aria-hidden="true"></i>` : ''}</button>`;
   }
-  for (let d = 1, tail = (7 - (first + days) % 7) % 7; d <= tail; d++) html += `<span class="other" aria-hidden="true">${d}</span>`;
-  $('#hGrid').innerHTML = html;
+  $('#hGrid').innerHTML = html + tail;
   hF.week = hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
   hF.fit();
   const due = habits.filter(h => dueOn(h, hDay)), st = stampOf(hDay), n = due.filter(h => h.done.includes(st)).length;
@@ -873,7 +882,7 @@ $('#hGrid').addEventListener('click', e => {
   const d = e.target.closest('[data-d]')?.dataset.d;
   if (d) { hDay = d; renderHabits(); }
 });
-const hMove = n => { const [y, m] = hMon.split('-').map(Number), d = new Date(y, m - 1 + n, 1); hMon = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; renderHabits(); };
+const hMove = n => { hMon = ymAdd(hMon, n); renderHabits(); };
 $('#hPrev').addEventListener('click', () => hMove(-1));
 $('#hNext').addEventListener('click', () => hMove(1));
 $('#hList').addEventListener('click', e => {
@@ -1048,24 +1057,27 @@ $('#lCancel').addEventListener('click', () => $('#lItem').close());
 // ── 날짜·시간·월 입력 ──
 // 숨긴 원래 input이 값의 원천이라 기존 코드(.value 읽기·쓰기, change 이벤트)는 그대로 동작
 const valDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
 dateField($('#entryForm [name=date]'), { short: true });
 // 날짜 칸: 한 줄 버튼(예: 2026년 11월 11일 (화))을 누르면 캘린더 창
 const DOW = '일월화수목금토';
 const fmtDate_ = v => { const [y, m, d] = v.split('-').map(Number); return `${y}년 ${m}월 ${d}일 (${DOW[new Date(y, m - 1, d).getDay()]})`; };
-function dateField(input, opt = {}) {
+// 숨긴 input 옆에 한 줄 버튼을 달고, 코드에서 .value를 바꾸면 버튼 글자도 같이 바뀌게 (input이 값의 원천)
+function fieldButton(input, label, fmt, empty, open) {
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'dbtn';
-  btn.setAttribute('aria-label', (input.getAttribute('aria-label') || '날짜') + ' 선택');
-  // short: 올해 날짜는 연도 빼고 짧게 (좌우로 좁은 칸용)
-  const fmt = v => opt.short && v.slice(0, 4) === localISO().slice(0, 4) ? fmtDate_(v).replace(/^\d+년 /, '') : fmtDate_(v);
-  const show = v => { btn.textContent = v ? fmt(v) : '날짜를 선택하세요'; btn.classList.toggle('empty', !v); };
+  btn.setAttribute('aria-label', label + ' 선택');
+  const show = v => { btn.textContent = v ? fmt(v) : empty; btn.classList.toggle('empty', !v); };
   Object.defineProperty(input, 'value', { configurable: true,
     get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
   input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
   input.after(btn);
-  btn.addEventListener('click', () => openCal(input));
+  btn.addEventListener('click', open);
   show(valDesc.get.call(input));
+}
+function dateField(input, opt = {}) {
+  // short: 올해 날짜는 연도 빼고 짧게 (좌우로 좁은 칸용)
+  const fmt = v => opt.short && v.slice(0, 4) === localISO().slice(0, 4) ? fmtDate_(v).replace(/^\d+년 /, '') : fmtDate_(v);
+  fieldButton(input, input.getAttribute('aria-label') || '날짜', fmt, '날짜를 선택하세요', () => openCal(input));
 }
 let cpInput = null, cpY = 0, cpM = 0;
 function cpRender() {
@@ -1074,7 +1086,7 @@ function cpRender() {
   const today = localISO().slice(0, 10);
   let html = '<span class="blank"></span>'.repeat(first);
   for (let d = 1; d <= days; d++) {
-    const ds = `${cpY}-${String(cpM).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const ds = `${cpY}-${pad2(cpM)}-${pad2(d)}`;
     html += `<button type="button" data-d="${ds}" class="${ds === today ? 'today' : ''}" aria-pressed="${ds === sel}"><span class="d">${d}</span></button>`;
   }
   $('#cpGrid').innerHTML = html;
@@ -1096,7 +1108,6 @@ $('#cpGrid').addEventListener('click', e => {
 });
 
 // 시간·월: 한 줄 버튼을 누르면 휠 시트(✕ · 제목 · ✓)가 올라옴. 가운데 띠에 온 값이 선택값
-const pad2 = n => String(n).padStart(2, '0');
 const W_ITEM = 44; // 휠 한 칸 높이(px)
 const ws = { input: null, kind: '', cols: [] };
 function wheelCols(kind, v, blank) {
@@ -1145,20 +1156,10 @@ $('#wsOk').addEventListener('click', () => {
   ws.input.value = v; ws.input.dispatchEvent(new Event('change', { bubbles: true }));
   $('#wheelSheet').close();
 });
-// 숨긴 input 옆에 버튼을 달고, 코드에서 .value를 바꾸면 버튼 글자도 같이 바뀌게
 function pickerField(input, kind, title, opt = {}) {
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'dbtn';
-  btn.setAttribute('aria-label', title + ' 선택');
   if (opt.blank) input.dataset.blank = '1';
   const fmt = v => kind === 'time' ? v : `${+v.slice(0, 4)}년 ${+v.slice(5, 7)}월`;
-  const show = v => { btn.textContent = v ? fmt(v) : (opt.empty || '선택 안 함'); btn.classList.toggle('empty', !v); };
-  Object.defineProperty(input, 'value', { configurable: true,
-    get() { return valDesc.get.call(this); }, set(v) { valDesc.set.call(this, v); show(valDesc.get.call(this)); } });
-  input.classList.add('sr-only'); input.tabIndex = -1; input.setAttribute('aria-hidden', 'true');
-  input.after(btn);
-  btn.addEventListener('click', () => openWheel(input, kind, title));
-  show(valDesc.get.call(input));
+  fieldButton(input, title, fmt, opt.empty || '선택 안 함', () => openWheel(input, kind, title));
 }
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
 

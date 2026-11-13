@@ -364,17 +364,23 @@ function doGet(e) {
     if (e.parameter.what === 'lists') {
       return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
     }
+    // since=날짜: 그날 이후 거래만 보내고, 그 이전 줄은 지문(old.h)만 보냄 → 앱은 지문이 같으면 가진 것을 그대로 씀
+    // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
+    const since = /^\d{4}-\d{2}-\d{2}$/.test(e.parameter.since || '') ? e.parameter.since : '';
     return out_(withLock_(() => {
       runRecurring_();
       const sh = tx_(), last = last_(sh);
       ids_(sh, last);
-      const v = last < 2 ? [] : sh.getRange(2, 1, last - 1, ID_COL).getValues();
-      const items = v.filter(r => r[0] !== '').map(r => ({
+      const v = (last < 2 ? [] : sh.getRange(2, 1, last - 1, ID_COL).getValues()).filter(r => r[0] !== '');
+      const recent = r => fmt_(r[0], 'yyyy-MM-dd') >= since;
+      const full = !since || e.parameter.full === '1';
+      const old = since ? { since, h: Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(v.filter(r => !recent(r))))) } : null;
+      const items = (full ? v : v.filter(recent)).map(r => ({
         id: String(r[15]), date: fmt_(r[0], 'yyyy-MM-dd'), time: tm_(r[1]), type: String(r[2]), major: String(r[3]), minor: String(r[4]),
         content: String(r[5]), payType: String(r[6]), pay: String(r[7]), amount: num_(r[8]), memo: String(r[9]),
         inst: num_(r[11]) || '', instState: String(r[12]),
       }));
-      return { ok: true, items, meta: meta_() };
+      return { ok: true, items, full, old, meta: meta_() };
     }));
   } catch (err) {
     return out_({ ok: false, error: err.message, retry: true });
