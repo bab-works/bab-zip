@@ -133,9 +133,13 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
 
   // 3) 내역: 검색·필터·정렬·수정
   await p.click('nav button[data-view=list]');
+  assert.equal(await p.isVisible('#q'), false, 'search field hidden until the search button');
+  await p.click('#searchBtn'); assert.equal(await p.isVisible('nav'), false, 'tab bar turns into the search field');
   await p.click('#fToggle');
   await p.fill('#q', '치킨');
+  assert.match(await p.textContent('#fActive'), /치킨/);
   assert.equal(await p.locator('#list li[data-id]').count(), 1);
+  await p.click('#sClose'); assert.equal(await p.inputValue('#q'), ''); assert.equal(await p.isVisible('nav'), true, 'close returns the tab bar');
   await p.click('#fReset');
   await p.selectOption('#fType', '이체');
   assert.equal(await p.locator('#list li[data-id]').count(), 1);

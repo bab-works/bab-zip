@@ -616,6 +616,21 @@ $('#dailyInfo').addEventListener('click', e => {
 });
 ['#month', '#fType', '#fMajor', '#fPay', '#fSort', '#fAll'].forEach(s => $(s).addEventListener('change', render));
 $('#q').addEventListener('input', () => { renderFilters(); renderCal(); renderList(); });
+// 하단 검색: 동그란 단추를 누르면 탭 바 자리가 검색창이 됨 (홈에서 누르면 내역으로). ✕는 검색어를 지우고 탭 바로
+$('#searchBtn').addEventListener('click', () => {
+  document.body.classList.add('searching');
+  if (curView === 'home') show('list');
+  $('#q').focus();
+});
+const endSearch = () => { document.body.classList.remove('searching'); if ($('#q').value) { $('#q').value = ''; $('#q').dispatchEvent(new Event('input')); } };
+$('#sClose').addEventListener('click', endSearch);
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('#lq').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+// 아이폰 키보드가 올라오면 아래 고정 바도 키보드 위로
+if (window.visualViewport) {
+  const kb = () => document.documentElement.style.setProperty('--kb', Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop) + 'px');
+  visualViewport.addEventListener('resize', kb); visualViewport.addEventListener('scroll', kb);
+}
 $('#fReset').addEventListener('click', () => {
   ['#q', '#fType', '#fMajor', '#fPay'].forEach(s => { $(s).value = ''; });
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
@@ -784,6 +799,7 @@ function renderLists() {
   $('#lList').classList.toggle('grid', view === 'grid');
   document.body.classList.toggle('white', view === 'flow' && a.length > 0);
   $('#fab').hidden = view === 'flow' && a.length > 0; // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
+  $('#lSbar').classList.toggle('wide', $('#fab').hidden);
   if (view === 'flow' && a.length) return renderFlow(a);
   if (view === 'grid') {
     $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
@@ -863,6 +879,9 @@ async function refreshLists() {
 function setSection(k) {
   sec = k;
   document.body.classList.remove('white'); // 독서 커버플로우에서만 흰 바탕 (renderLists가 다시 켬)
+  document.body.classList.remove('searching');
+  $('#searchBtn').hidden = k !== 'money';
+  $('#lSbar').hidden = k === 'money' || k === 'habit';
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
   const money = k === 'money', habit = k === 'habit';
