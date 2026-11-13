@@ -259,6 +259,35 @@
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:17px; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
   .menu-list .em { font-size:22px; }
+
+  /* 독서 보기 3가지: 커버플로우 · 카드(3열) · 목록 */
+  .lviews { display:flex; gap:4px; margin-top:10px; background:var(--fill); border-radius:12px; padding:3px; }
+  .lviews button { flex:1; background:none; border-radius:9px; padding:7px 0; font-size:13px; font-weight:600; color:var(--muted); }
+  .lviews button[aria-pressed="true"] { background:var(--glass); color:var(--fg); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .cover { display:block; width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:8px; background:var(--fill); }
+  .cover.ph { display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; font-size:12px; font-weight:700; line-height:1.3;
+    color:#fff; background:linear-gradient(160deg, #5b6b8c, #2c3446); overflow:hidden; word-break:keep-all; }
+  #lList.grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px 10px; }
+  #lList.grid li { display:block; padding:0; border:0; cursor:pointer; }
+  #lList.grid li.empty { grid-column:1 / -1; }
+  #lList.grid .cover { box-shadow:0 4px 12px rgba(0,0,0,.14); }
+  #lList.grid span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; white-space:normal; font-size:13px; font-weight:600; margin-top:7px; line-height:1.3; }
+  #lList.grid small { font-size:11px; }
+  /* 커버플로우: 가운데는 정면, 양옆은 비스듬히 겹쳐 쌓임 (손가락으로 밀면 스냅) */
+  .flow-card { background:linear-gradient(#0b0b0d, #1d1d22); color:#fff; padding:10px 0 16px; overflow:hidden; position:relative; }
+  .fadd { position:absolute; top:10px; right:12px; z-index:200; width:36px; height:36px; border-radius:50%; padding:0; font-size:20px; color:#fff; background:rgba(255,255,255,.14); }
+  .flow { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; perspective:700px;
+    padding:8px calc(50% - 40px) 0; height:228px; -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); align-items:flex-start; overscroll-behavior-x:contain; }
+  .flow::-webkit-scrollbar { display:none; }
+  .fc { flex:0 0 80px; height:186px; scroll-snap-align:center; background:none; padding:0; position:relative; transform-style:preserve-3d; }
+  .fc > * { position:absolute; left:50%; top:0; width:124px; margin-left:-62px; border-radius:4px; will-change:transform;
+    -webkit-box-reflect:below 4px linear-gradient(transparent 62%, rgba(255,255,255,.22)); box-shadow:0 8px 24px rgba(0,0,0,.5); }
+  .flow-info { text-align:center; padding:0 20px; min-height:92px; position:relative; }
+  .flow-info b { display:block; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .flow-info small { display:block; color:rgba(255,255,255,.6); font-size:13px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rate { display:flex; justify-content:center; gap:8px; margin-top:12px; }
+  .rate button { width:46px; height:46px; border-radius:50%; font-size:24px; background:rgba(255,255,255,.08); padding:0; opacity:.55; transition:transform .2s var(--ease), opacity .2s, background-color .2s; }
+  .rate button[aria-pressed="true"] { opacity:1; background:rgba(255,255,255,.22); transform:scale(1.12); }
   .menu-head { display:flex; align-items:center; justify-content:space-between; margin:8px 4px 14px; }
   .menu-head h2 { font-size:22px; margin:0; }
   /* 꾹 눌러 편집: 롱프레스 메뉴·글자 선택을 막고, 편집 중엔 끌기만 (스크롤 안 함) */
@@ -461,9 +490,19 @@
     <div class="card">
       <div class="search"><input id="lq" type="search" placeholder="검색" aria-label="목록 검색"></div>
       <div id="lTabs" class="tabs" role="group" aria-label="목록 종류" style="margin-top:8px"></div>
+      <div id="lViews" class="seg lviews" role="group" aria-label="보기 방식" hidden>
+        <button type="button" data-v="flow">커버플로우</button><button type="button" data-v="grid">카드</button><button type="button" data-v="list">목록</button>
+      </div>
     </div>
     <p id="lInfo" class="hint" style="padding:0 4px"></p>
-    <div class="card"><ul id="lList" class="tx"></ul></div>
+    <!-- 아이팟 클래식 커버플로우: 좌우로 밀어 넘기고, 가운데 책 아래에서 바로 평가 -->
+    <div id="lFlowCard" class="card flow-card" hidden>
+      <button type="button" id="fAdd" class="fadd" aria-label="책 추가">＋</button>
+      <div id="lFlow" class="flow" role="listbox" aria-label="책 표지 넘겨보기"></div>
+      <div class="flow-info"><b id="fTitle"></b><small id="fSub"></small>
+        <div id="fRate" class="rate" role="group" aria-label="평가"></div></div>
+    </div>
+    <div id="lListCard" class="card"><ul id="lList" class="tx"></ul></div>
   </section>
 
   <section id="v-rec" hidden>

@@ -775,10 +775,76 @@ function renderLists() {
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
+  // 독서는 보기 3가지 (나머지 목록은 늘 목록 보기)
+  const view = sec === 'book' ? lView : 'list';
+  $('#lViews').hidden = sec !== 'book';
+  $('#lViews').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === view));
+  $('#lFlowCard').hidden = view !== 'flow' || !a.length;
+  $('#lListCard').hidden = !$('#lFlowCard').hidden;
+  $('#lList').classList.toggle('grid', view === 'grid');
+  $('#fab').hidden = view === 'flow' && a.length > 0; // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
+  if (view === 'flow' && a.length) return renderFlow(a);
+  if (view === 'grid') {
+    $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
+      || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
+    return;
+  }
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
     return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
+// ── 독서 보기: flow(아이팟 커버플로우, 기본) · grid(표지 카드 3열) · list(목록) ──
+let lView = store.get('bookView', 'flow'), flowItems = [], flowId = '', flowShown = '';
+const FC = 80; // 커버플로우에서 책 사이 간격(px) = 한 칸 넘길 때 움직이는 거리
+const coverHTML = i => { const t = esc(LIST_ROW[curList](i)[0]);
+  return i.image ? `<img class="cover" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-t="${t}">` : `<span class="cover ph">${t}</span>`; };
+function renderFlow(a) {
+  const el = $('#lFlow');
+  flowItems = a; flowShown = '';
+  el.innerHTML = a.map(i => `<button type="button" class="fc" data-id="${esc(i.id)}" role="option" aria-label="${esc(LIST_ROW[curList](i)[0])}">${coverHTML(i)}</button>`).join('');
+  el.scrollLeft = Math.max(0, a.findIndex(i => i.id === flowId)) * FC; // 다시 그려도 보던 책에서 시작
+  flowPaint();
+}
+// 가운데에서 떨어진 정도(d)만큼 비스듬히 돌리고 뒤로 보냄. 가운데 책 정보는 아래에 표시
+function flowPaint() {
+  const el = $('#lFlow'), c = el.scrollLeft / FC;
+  [...el.children].forEach((b, k) => {
+    const d = k - c, t = Math.max(-1, Math.min(1, d));
+    b.style.visibility = Math.abs(d) > 7 ? 'hidden' : '';
+    b.style.zIndex = 100 - Math.round(Math.abs(d) * 10);
+    b.firstElementChild.style.transform = `translateX(${t * 34}px) translateZ(${-Math.abs(t) * 160}px) rotateY(${-t * 68}deg)`;
+  });
+  const i = flowItems[Math.min(flowItems.length - 1, Math.max(0, Math.round(c)))];
+  if (!i || i.id === flowShown) return;
+  flowShown = flowId = i.id;
+  $('#fTitle').textContent = LIST_ROW[curList](i)[0];
+  $('#fSub').textContent = joinDot([i.author, curList === 'book' ? i.status : i.memo]);
+  $('#fRate').hidden = curList !== 'book';
+  $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i.stars === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
+}
+let flowRaf = 0;
+$('#lFlow').addEventListener('scroll', () => { if (!flowRaf) flowRaf = requestAnimationFrame(() => { flowRaf = 0; flowPaint(); }); }, { passive: true });
+$('#lFlow').addEventListener('click', e => {
+  const b = e.target.closest('.fc');
+  if (!b) return;
+  const k = [...$('#lFlow').children].indexOf(b);
+  if (k === Math.round($('#lFlow').scrollLeft / FC)) openItem(flowItems[k]); // 가운데 책을 누르면 편집
+  else $('#lFlow').scrollTo({ left: k * FC, behavior: calm() ? 'auto' : 'smooth' });
+});
+// 가운데 책 아래 이모지를 누르면 바로 평가 저장 (같은 걸 다시 누르면 지움)
+$('#fRate').addEventListener('click', e => {
+  const r = e.target.closest('[data-r]')?.dataset.r, it = r && (lists.book || []).find(i => i.id === flowShown);
+  if (!it) return;
+  it.stars = it.stars === r ? '' : r;
+  store.set('lists', lists);
+  flowShown = ''; flowPaint();
+  queue({ action: 'listSave', list: 'book', item: { id: it.id, title: it.title, stars: it.stars } });
+});
+$('#fAdd').addEventListener('click', () => openItem());
+$('#lViews').addEventListener('click', e => {
+  const v = e.target.closest('[data-v]')?.dataset.v;
+  if (v) { lView = v; store.set('bookView', v); renderLists(); }
+});
 async function refreshLists() {
   try {
     busy(true);
@@ -995,8 +1061,12 @@ $('#lq').addEventListener('input', renderLists);
 // 사진 서버가 막거나 주소가 틀려 못 불러오면 깨진 아이콘 대신 목록 이모지(편집 창에선 숨김)
 document.addEventListener('error', e => {
   const img = e.target;
-  if (!(img instanceof HTMLImageElement) || !img.classList.contains('thumb')) return;
+  if (!(img instanceof HTMLImageElement) || !img.matches('.thumb, .cover')) return;
   if (img.classList.contains('big')) { img.remove(); return; }
+  if (img.classList.contains('cover')) { // 표지를 못 불러오면 제목 카드로
+    const ph = document.createElement('span'); ph.className = 'cover ph'; ph.textContent = img.dataset.t || '';
+    ph.style.transform = img.style.transform; img.replaceWith(ph); return;
+  }
   const em = document.createElement('span');
   em.className = 'em'; em.setAttribute('aria-hidden', 'true'); em.textContent = LIST_ICON[curList] || '🖼️';
   img.replaceWith(em);

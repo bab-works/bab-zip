@@ -320,6 +320,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const go = async name => { await p.click('#menuBtn'); await p.click(`#menuList button:has-text("${name}")`); await status(/동기화됨/); };
   await go('독서');
   assert.equal(await p.textContent('#appTitle'), '독서');
+  assert.equal(await p.getAttribute('#lViews [data-v=flow]', 'aria-pressed'), 'true', 'cover flow is the default');
+  await p.click('#lViews [data-v=list]'); // 아래 목록 테스트는 목록 보기에서
   assert.ok(!(await p.isVisible('nav')) && !(await p.isVisible('#monthRow')));
   const B = bookSS['독서 기록'];
   // 표지 칸에 =IMAGE("주소")를 넣으면 목록에 사진이 뜸
