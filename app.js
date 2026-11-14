@@ -80,14 +80,17 @@ const setStatus = t => {
 let statusAct = '';
 function explain(e) {
   const m = String(e?.message || e || '');
-  if (!navigator.onLine || /Failed to fetch|NetworkError|Load failed|network/i.test(m)) return ['인터넷 연결을 확인해 주세요 · 입력은 폰에 저장돼요 · 눌러서 다시 시도', 'retry'];
+  if (!navigator.onLine) return ['인터넷이 끊겼어요 · 입력은 폰에 저장되고 연결되면 보내져요', pending.length ? 'pending' : 'retry'];
+  if (/닿지 못했어요|45초|알 수 없는 응답/.test(m)) return [m + ' · 눌러서 자세히', pending.length ? 'pending' : 'retry'];
   if (/비밀번호/.test(m)) return ['비밀번호가 맞지 않아요 · 눌러서 다시 입력', 'settings'];
   if (/틱틱/.test(m)) return [m + ' · 눌러서 해결 방법 보기', 'help-ticktick'];
   if (/배포|Code\.gs/.test(m)) return ['시트 쪽 코드가 예전 버전이에요 · 눌러서 해결 방법 보기', 'help-deploy'];
   if (/열 구성|P열|열 이름|열이 없어요|탭 없음|목록 탭/.test(m)) return ['시트 모양이 달라요: ' + m + ' · 눌러서 해결 방법 보기', 'help-sheet'];
-  return [m + ' · 눌러서 다시 시도', 'retry'];
+  return [m + ' · 눌러서 자세히', pending.length ? 'pending' : 'retry'];
 }
+let lastErr = '';
 function showError(e, where) {
+  lastErr = String(e?.message || e || '');
   const [text, act] = explain(e);
   $('#status').textContent = (where ? where + ' · ' : '') + text;
   $('#status').classList.add('err'); statusAct = act;
@@ -110,7 +113,40 @@ function openHelp(k) {
   $('#help').showModal();
 }
 const retry = () => (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
+// 저장 대기 목록: 무엇이 막혔는지 보고, 다시 보내거나 하나씩 버림
+const LIST_NAME = { book: '독서', buy: '구매 목록', wish: '추천·관심', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬' };
+function opText(o) {
+  const i = o.item || {};
+  if (o.action === 'save') return `거래 저장 · ${i.date || ''} ${i.content || i.minor || i.major || ''} ${won(i.amount || 0)}`;
+  if (o.action === 'delete') return '거래 삭제';
+  if (o.action === 'recSave') return `반복 등록 · ${o.rule?.content || ''}`;
+  if (o.action === 'recDelete') return '반복 삭제';
+  if (o.action === 'budget') return `${o.major} 예산 ${won(o.amount)}`;
+  if (o.action === 'listSave') return `${LIST_NAME[o.list] || o.list} 저장 · ${i.title || i.theme || i.name || ''}`;
+  if (o.action === 'listDelete') return `${LIST_NAME[o.list] || o.list} 삭제`;
+  if (o.action === 'habitCheck') return `습관 ${o.done ? '체크' : '해제'} · ${(habits.find(h => h.id === o.habitId) || {}).name || ''} ${String(o.stamp).slice(4, 6)}/${String(o.stamp).slice(6)}`;
+  return o.action;
+}
+function renderPending() {
+  $('#pendErr').textContent = pending.length ? `맨 위 항목에서 멈췄어요 · 오류: ${lastErr || '없음'}` : '보낼 것이 없어요 · 모두 시트에 저장됐어요';
+  $('#pendList').innerHTML = pending.map((o, k) => `<li><span>${esc(opText(o))}</span><button type="button" class="small danger" data-k="${k}">버리기</button></li>`).join('');
+  $('#pendRetry').disabled = !pending.length;
+}
+$('#pendList').addEventListener('click', e => {
+  const k = e.target.closest('[data-k]')?.dataset.k;
+  if (k == null || !confirm('이 항목을 시트에 보내지 않고 버릴까요?')) return;
+  pending.splice(+k, 1); persist(); renderPending();
+  if (!pending.length) setStatus('');
+});
+$('#pendRetry').addEventListener('click', async () => {
+  $('#pendErr').textContent = '보내는 중…';
+  const ok = await sync();
+  if (ok) { setStatus('시트에 저장됨'); retry(); }
+  renderPending();
+});
+$('#pendClose').addEventListener('click', () => $('#pend').close());
 $('#status').addEventListener('click', () => {
+  if (statusAct === 'pending') { renderPending(); $('#pend').showModal(); return; }
   if (statusAct === 'retry') retry();
   else if (statusAct === 'settings') $('#openSettings').click();
   else if (HELP[statusAct]) openHelp(statusAct);
@@ -127,11 +163,20 @@ function toast(t, ms = 3500) {
 // ── 시트 통신 ──
 async function api(body, qs = '') {
   if (!cfg.url) throw new Error('⚙ 설정에서 시트를 연결하세요');
-  const res = body
-    // text/plain 이어야 Apps Script가 CORS 사전요청 없이 받음
-    ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: cfg.token }) })
-    : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token) + qs);
-  const r = await res.json();
+  // 45초 넘게 답이 없으면 끊고 알려 줌 (안 그러면 아이폰이 「Load failed」만 남김)
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
+  let res, text;
+  try {
+    res = body
+      // text/plain 이어야 Apps Script가 CORS 사전요청 없이 받음
+      ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: cfg.token }), signal: ctl.signal })
+      : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token) + qs, { signal: ctl.signal });
+    text = await res.text();
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? '시트가 45초 넘게 답이 없어요' : `시트에 닿지 못했어요 (${e.message})`);
+  } finally { clearTimeout(timer); }
+  let r;
+  try { r = JSON.parse(text); } catch { throw new Error(`시트가 알 수 없는 응답을 보냈어요 (HTTP ${res.status}) ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}`); }
   if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호/.test(r.error) });
   return r;
 }

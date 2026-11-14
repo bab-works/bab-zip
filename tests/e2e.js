@@ -198,8 +198,17 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#fab'); await p.fill('#entryForm [name=amount]', '4500'); await p.fill('#entryForm [name=content]', '스타벅스');
   assert.equal(await p.inputValue('#entryForm [name=major]'), '카페·간식');
   await p.click('#entryForm button.primary'); await status(/대기 1건/);
+  // 빨간 줄을 누르면 못 보낸 목록: 진짜 오류와 항목이 보임 → 하나 더 쌓고 버리기 → 다시 보내기
+  assert.match(await p.textContent('#status'), /닿지 못했어요/);
+  await p.click('#fab'); await p.fill('#entryForm [name=amount]', '999'); await p.fill('#entryForm [name=content]', '버릴 거래'); await p.click('#entryForm button.primary'); await status(/대기 2건/);
+  await p.click('#status'); await p.waitForSelector('#pend[open]');
+  assert.match(await p.textContent('#pendErr'), /오류: 시트에 닿지 못했어요/);
+  assert.equal(await p.locator('#pendList li').count(), 2); assert.match(await p.textContent('#pendList li >> nth=1'), /버릴 거래 999원/);
+  await p.click('#pendList li >> nth=1 >> button');
+  assert.equal(await p.locator('#pendList li').count(), 1);
   const before = T.d.length;
-  offline = false; await p.click('#reload'); await status(/동기화됨/);
+  offline = false; await p.click('#pendRetry'); await p.waitForFunction(() => /모두 시트에 저장됐어요/.test(document.querySelector('#pendErr').textContent));
+  await p.click('#pendClose'); await status(/동기화됨/);
   assert.equal(T.d.length, before + 1);
   await p.screenshot({ path: SHOTS + '/home.png' });
   await p.click('nav button[data-view=list]');

@@ -89,6 +89,8 @@
   h2 { font-size:1rem; margin:0 0 10px; letter-spacing:-.01em; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
   #status.err { color:var(--out); text-decoration:underline; text-underline-offset:3px; padding:6px 4px; cursor:pointer; }
+  .pend-list { list-style:none; padding:0; margin:0; } .pend-list li { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .pend-list span { flex:1; min-width:0; font-size:0.882rem; }
   .help ol { padding-left:20px; line-height:1.55; } .help li { margin:8px 0; }
   .hint { color:var(--muted); font-size:0.706rem; margin:4px 0 8px; }
   .in { color:var(--in); } .out { color:var(--out); } .refund { color:var(--refund); } .move { color:var(--muted); }
@@ -678,6 +680,15 @@
   <div class="row" style="justify-content:flex-end; margin-top:14px">
     <button type="button" id="helpClose">닫기</button>
     <button type="button" id="helpRetry" class="primary">다시 시도</button>
+  </div>
+</dialog>
+<dialog id="pend" class="help" aria-labelledby="pendTitle">
+  <h2 id="pendTitle">시트에 아직 못 보낸 것</h2>
+  <p id="pendErr" class="hint"></p>
+  <ul id="pendList" class="pend-list"></ul>
+  <div class="row" style="justify-content:flex-end; margin-top:14px">
+    <button type="button" id="pendClose">닫기</button>
+    <button type="button" id="pendRetry" class="primary">다시 보내기</button>
   </div>
 </dialog>
 <div id="toast" role="alert"></div>
