@@ -1,5 +1,5 @@
 // 앱 화면 파일만 캐시 (시트 API 요청은 건드리지 않음). 파일 수정 후엔 버전을 올리세요.
-const CACHE = 'gagyebu-v48';
+const CACHE = 'gagyebu-v50';
 const FILES = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'PretendardVariable.woff2'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

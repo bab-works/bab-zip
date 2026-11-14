@@ -66,7 +66,8 @@ const persist = () => { store.set('data2', data); store.set('pending', pending);
 // 동기화·저장·삭제 완료는 잠깐 뜨는 팝업으로만, 연결 문제 같은 건 상단에 남김
 let syncTimer;
 const setStatus = t => {
-  if (/동기화됨|저장됨|삭제됨/.test(t)) {
+  statusAct = ''; $('#status').classList.remove('err');
+  if (/동기화됨|저장됨|삭제됨|반영됨/.test(t)) {
     const el = $('#syncPop');
     el.textContent = t; el.classList.add('show');
     clearTimeout(syncTimer); syncTimer = setTimeout(() => el.classList.remove('show'), 1500);
@@ -75,6 +76,47 @@ const setStatus = t => {
   }
   $('#status').textContent = t;
 };
+// 오류를 쉬운 말로 바꾸고, 상태 줄을 누르면 고칠 수 있는 곳(설정·해결 방법·다시 시도)으로 연결
+let statusAct = '';
+function explain(e) {
+  const m = String(e?.message || e || '');
+  if (!navigator.onLine || /Failed to fetch|NetworkError|Load failed|network/i.test(m)) return ['인터넷 연결을 확인해 주세요 · 입력은 폰에 저장돼요 · 눌러서 다시 시도', 'retry'];
+  if (/비밀번호/.test(m)) return ['비밀번호가 맞지 않아요 · 눌러서 다시 입력', 'settings'];
+  if (/틱틱/.test(m)) return [m + ' · 눌러서 해결 방법 보기', 'help-ticktick'];
+  if (/배포|Code\.gs/.test(m)) return ['시트 쪽 코드가 예전 버전이에요 · 눌러서 해결 방법 보기', 'help-deploy'];
+  if (/열 구성|P열|열 이름|열이 없어요|탭 없음|목록 탭/.test(m)) return ['시트 모양이 달라요: ' + m + ' · 눌러서 해결 방법 보기', 'help-sheet'];
+  return [m + ' · 눌러서 다시 시도', 'retry'];
+}
+function showError(e, where) {
+  const [text, act] = explain(e);
+  $('#status').textContent = (where ? where + ' · ' : '') + text;
+  $('#status').classList.add('err'); statusAct = act;
+}
+const HELP = {
+  'help-ticktick': ['틱틱 연결 고치기', ['컴퓨터에서 가계부 구글 시트 → 확장 프로그램 → Apps Script를 열어요.',
+    '왼쪽 ⚙ 프로젝트 설정 → 스크립트 속성에서 TICKTICK_TOKEN(구글 로그인) 또는 TICKTICK_USER·TICKTICK_PASS를 확인해요.',
+    '구글 로그인이면 크롬에서 ticktick.com에 로그인 → F12 → Application → Cookies → t 값을 다시 복사해 TICKTICK_TOKEN에 넣어요.',
+    '함수 목록에서 testTickTick을 골라 ▶ 실행해서 습관 이름이 나오면 성공이에요.']],
+  'help-deploy': ['시트 코드를 새 버전으로', ['컴퓨터에서 가계부 구글 시트 → 확장 프로그램 → Apps Script를 열어요.',
+    '최신 Code.gs 내용을 통째로 붙여넣고 저장해요.', '배포 → 배포 관리 → 연필 → 버전: 새 버전 → 배포를 눌러요. 주소는 그대로예요.']],
+  'help-sheet': ['시트 제목 줄 확인', ['구글 시트에서 문제가 난 탭의 첫 줄(제목 줄)을 봐요.',
+    '거래 탭은 날짜·시간·구분·대분류·소분류·내용·결제유형·결제수단·금액 … 순서이고 P열은 id예요.', '열을 옮기거나 이름을 바꿨다면 원래대로 되돌린 뒤 다시 시도해요.']],
+};
+function openHelp(k) {
+  const [title, steps] = HELP[k];
+  $('#helpTitle').textContent = title;
+  $('#helpMsg').textContent = $('#status').textContent.replace(/ · 눌러서.*$/, '');
+  $('#helpSteps').innerHTML = steps.map(t => `<li>${esc(t)}</li>`).join('');
+  $('#help').showModal();
+}
+const retry = () => (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
+$('#status').addEventListener('click', () => {
+  if (statusAct === 'retry') retry();
+  else if (statusAct === 'settings') $('#openSettings').click();
+  else if (HELP[statusAct]) openHelp(statusAct);
+});
+$('#helpRetry').addEventListener('click', () => { $('#help').close(); retry(); });
+$('#helpClose').addEventListener('click', () => $('#help').close());
 let toastTimer;
 function toast(t, ms = 3500) {
   const el = $('#toast');
@@ -101,7 +143,7 @@ async function sendPending() {
     try { await api(pending[0]); }
     catch (e) {
       // 시트가 내용 자체를 거부한 작업은 버림 (계속 막히지 않게). 네트워크·비밀번호 문제는 대기
-      if (!e.rejected) { setStatus(`시트 저장 대기 ${pending.length}건 · ${e.message}`); return false; }
+      if (!e.rejected) { showError(e, `저장 대기 ${pending.length}건`); return false; }
       toast('시트가 거부해서 취소됨: ' + e.message);
     }
     pending.shift();
@@ -123,12 +165,13 @@ async function refresh() {
         data = { items, meta: r.meta, old: r.old };
         persist();
         setStatus(`시트와 동기화됨 · ${data.items.length.toLocaleString()}건`);
-      } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
+      } catch (e) { showError(e); }
     }
     render();
   } finally { busy(false); document.body.classList.remove('loading'); }
 }
 // 불러오는 동안은 문구 대신 새로고침 버튼이 회전
+const setFab = hide => { $('#fab').hidden = hide; document.body.classList.toggle('nofab', hide); };
 const busy = on => $('#reload').classList.toggle('spin', on);
 function queue(op) {
   pending.push(op);
@@ -184,7 +227,7 @@ function renderHome() {
   const m = $('#month').value, list = inMonth(m);
   const inc = list.filter(i => i.type === '수입').reduce((s, i) => s + i.amount, 0);
   const exp = list.reduce((s, i) => s + net(i), 0);
-  countTo($('#inc'), inc); countTo($('#exp'), exp); countTo($('#bal'), inc - exp);
+  countTo($('#inc'), inc); countTo($('#exp'), exp); countTo($('#bal'), inc - exp); $('#bal').classList.toggle('out', inc - exp < 0);
 
   const byMajor = {};
   list.forEach(i => { if (net(i)) byMajor[i.major] = (byMajor[i.major] || 0) + net(i); });
@@ -235,11 +278,11 @@ function renderHome() {
 }
 let dailySel = 0;
 
-function txRow(i) {
+function txRow(i, timeOnly) {
   const [cls, sign] = { 수입: ['in', '+'], 지출: ['out', '-'], 환불: ['refund', '+'], 이체: ['move', ''] }[i.type] || ['move', ''];
   const inst = i.instState ? `<span class="badge">${esc(i.instState)}</span>` : i.inst ? `<span class="badge">${esc(i.inst)}개월</span>` : '';
   return `<li data-id="${esc(i.id)}"><span class="em" aria-hidden="true">${em(i.major)}</span>
-    <div><small>${esc(i.date.slice(2).replace(/-/g, '.'))}${i.time ? ' ' + esc(i.time) : ''} · ${esc(i.major)}${i.minor ? '·' + esc(i.minor) : ''}${i.pay ? ' · ' + esc(i.pay) : ''}</small>
+    <div><small>${timeOnly ? (i.time ? esc(i.time) + ' · ' : '') : esc(i.date.slice(2).replace(/-/g, '.')) + (i.time ? ' ' + esc(i.time) : '') + ' · '}${esc(i.major)}${i.minor ? '·' + esc(i.minor) : ''}${i.pay ? ' · ' + esc(i.pay) : ''}</small>
     <span>${esc(i.content || i.minor || i.major)}${inst}</span></div>
     <b class="${cls}">${sign}${won(i.amount)}</b></li>`;
 }
@@ -269,11 +312,12 @@ function renderList() {
   const byDate = {};
   list.forEach(i => (byDate[i.date] = byDate[i.date] || []).push(i));
   $('#list').innerHTML = list.slice(0, SHOW_MAX).map(i => {
-    if (key !== 'date' || i.date === last) return txRow(i);
+    if (key !== 'date') return txRow(i);
+    if (i.date === last) return txRow(i, true);
     last = i.date;
     const ds = daySums(byDate[i.date]), [yy, mm, dd] = i.date.split('-').map(Number);
     return `<li class="day-h"><span>${mm}월 ${dd}일 ${WEEK[new Date(yy, mm - 1, dd).getDay()]}요일</span>
-      <span>${ds.inc ? `<span class="in" style="display:inline">+${won(ds.inc)}</span> ` : ''}${ds.exp ? `-${won(ds.exp)}` : ''}</span></li>` + txRow(i);
+      <span>${ds.inc ? `<span class="in" style="display:inline">+${won(ds.inc)}</span> ` : ''}${ds.exp ? `-${won(ds.exp)}` : ''}</span></li>` + txRow(i, true);
   }).join('') || '<li class="empty">조건에 맞는 내역이 없어요</li>';
 }
 
@@ -337,6 +381,7 @@ function renderCal() {
   // 결제유형은 「카테고리」 탭의 결제수단→유형 표로 판단 (방금 입력해 시트 수식이 아직 안 돈 거래도 포함되게)
   const ptOf = Object.fromEntries(data.meta.payments);
   const src = filtered().filter(i => !calPay || (ptOf[i.pay] || i.payType) === calPay);
+  $('#calMonthTitle').textContent = `${mo}월 지출 ${won(src.filter(i => i.date.startsWith(m)).reduce((t, i) => t + net(i), 0))}`;
   const byDay = {};
   src.filter(i => i.date.startsWith(m)).forEach(i => (byDay[i.date] = byDay[i.date] || []).push(i));
   const sums = {};
@@ -366,7 +411,7 @@ function renderCal() {
   const [, sm, sd] = selDay.split('-').map(Number), ds = daySums(list);
   $('#dayTitle').textContent = `${sm}월 ${sd}일 ${WEEK[new Date(y, sm - 1, sd).getDay()]}요일`;
   $('#daySum').innerHTML = list.length ? `${list.length}건 · 수입 <b class="in">${won(ds.inc)}</b> · 지출 <b class="out">${won(ds.exp)}</b>` : '';
-  $('#dayList').innerHTML = list.map(txRow).join('') || '<li class="empty">이날 기록이 없어요</li>';
+  $('#dayList').innerHTML = list.map(i => txRow(i, true)).join('') || '<li class="empty">이날 기록이 없어요</li>';
 }
 // 이번 달 누적 지출(선) vs 지난달 누적(회색 면): 같은 날짜 기준으로 비교
 function renderTrend(src, m, y, mo, days, today) {
@@ -447,7 +492,7 @@ function openEntry(it, date) {
   // 새 거래는 지금 시각을 기본으로 (다른 날짜를 골랐으면 비움)
   F.time.value = it ? (it.time || '') : (F.date.value === localISO().slice(0, 10) ? localISO().slice(11, 16) : '');
   entryCats(it?.major, it?.minor);
-  fillSelect(F.pay, payments(), '결제수단 선택 안 함'); F.pay.value = ''; setSel(F.pay, it?.pay);
+  fillSelect(F.pay, payments(), '결제수단 선택 안 함'); F.pay.value = ''; setSel(F.pay, it ? it.pay : payments().includes(store.get('lastPay')) ? store.get('lastPay') : ''); // 새 거래는 지난번 결제수단으로
   F.amount.value = it?.amount || '';
   F.content.value = it?.content || '';
   F.memo.value = it?.memo || '';
@@ -494,6 +539,7 @@ $('#entryForm').addEventListener('submit', e => {
   const idx = data.items.findIndex(x => x.id === it.id);
   if (idx >= 0) data.items[idx] = { ...data.items[idx], ...it, instState: '' }; else data.items.push(it);
   $('#entry').close();
+  if (it.pay) store.set('lastPay', it.pay);
   queue({ action: 'save', item: it });
   checkBudget(m, it.major, before);
 });
@@ -589,7 +635,7 @@ function show(v) {
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
-  $('#fab').hidden = v === 'cal'; // 달력은 「이날 추가」 버튼을 씀
+  setFab(v === 'cal'); // 달력은 「이날 추가」 버튼을 씀
   if (v === 'cal') calF.fit();
   replay($('#v-' + v), 'enter');
   window.scrollTo(0, 0);
@@ -619,9 +665,11 @@ $('#q').addEventListener('input', () => { renderFilters(); renderCal(); renderLi
 // 하단 검색: 동그란 단추를 누르면 탭 바 자리가 검색창이 됨 (홈에서 누르면 내역으로). ✕는 검색어를 지우고 탭 바로
 $('#searchBtn').addEventListener('click', () => {
   document.body.classList.add('searching');
+  if (sec !== 'money') return $('#lq').focus();
   if (curView === 'home') show('list');
   $('#q').focus();
 });
+$('#lClose').addEventListener('click', () => { document.body.classList.remove('searching'); $('#lq').value = ''; renderLists(); });
 const endSearch = () => { document.body.classList.remove('searching'); if ($('#q').value) { $('#q').value = ''; $('#q').dispatchEvent(new Event('input')); } };
 $('#sClose').addEventListener('click', endSearch);
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
@@ -645,8 +693,8 @@ $('#openSettings').addEventListener('click', () => {
 $('#settings').addEventListener('close', () => {
   if ($('#settings').returnValue !== 'save') return;
   const f = $('#settingsForm'), link = f.link.value.trim();
-  const c = link ? cfgFrom(link.split('#')[1] || '') : { url: f.url.value.trim(), token: f.token.value };
-  if (!c || !c.url || !c.token) { toast(link ? '설정 링크가 올바르지 않아요' : 'URL과 비밀번호를 모두 넣어주세요'); return $('#settings').showModal(); }
+  const c = link ? cfgFrom(link.split('#')[1] || '') : { url: f.url.value.trim() || cfg.url || SHEET_URL, token: f.token.value };
+  if (!c || !c.url || !c.token) { toast(link ? '설정 링크가 올바르지 않아요' : '비밀번호를 넣어 주세요'); return $('#settings').showModal(); }
   cfg = c;
   f.link.value = '';
   store.set('cfg', cfg);
@@ -742,12 +790,12 @@ const RATE_OPTS = [['', '선택 안 함'], ...RATE];
 const LIST_FIELDS = {
   book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
     ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => pad2(k + 1) + '월')]],
-    ['status', '독서 상태', 'select', ['완독', '읽는중', '보류', '중도포기']], ['stars', '별점', 'select', RATE_OPTS], ['memo', '메모', 'text']],
-  buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text']],
-  wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text']],
+    ['status', '독서 상태', 'select', ['읽는중', '완독', '보류', '중도포기']], ['stars', '평가', 'select', RATE_OPTS], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
+  buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
+  wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
     ['rating', '평점', 'select', RATE_OPTS], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
-    ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+    ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text'], ['image', '포스터 이미지 주소', 'url']],
   board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
   movie: [['title', '영화 제목', 'text'], ['director', '감독', 'text'], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['rating', '평점', 'select', RATE_OPTS],
     ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
@@ -791,18 +839,18 @@ function renderLists() {
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
   // 독서는 보기 3가지 (나머지 목록은 늘 목록 보기)
-  const view = sec === 'book' ? lView : 'list';
-  $('#lViews').hidden = sec !== 'book';
+  const view = VIEWS[sec] ? lView() : 'list';
+  $('#lViews').hidden = !VIEWS[sec];
   $('#lViews').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === view));
   $('#lFlowCard').hidden = view !== 'flow' || !a.length;
   $('#lListCard').hidden = !$('#lFlowCard').hidden;
   $('#lList').classList.toggle('grid', view === 'grid');
+  $('#lHead').hidden = $('#lTabs').hidden && $('#lViews').hidden; // 탭도 보기 선택도 없으면 빈 상자를 숨김
   document.body.classList.toggle('white', view === 'flow' && a.length > 0);
-  $('#fab').hidden = view === 'flow' && a.length > 0; // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
-  $('#lSbar').classList.toggle('wide', $('#fab').hidden);
+  setFab(view === 'flow' && a.length > 0); // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
   if (view === 'flow' && a.length) return renderFlow(a);
   if (view === 'grid') {
-    $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
+    $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author || i.shop, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
       || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
     return;
   }
@@ -811,7 +859,10 @@ function renderLists() {
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 // ── 독서 보기: flow(아이팟 커버플로우, 기본) · grid(표지 카드 3열) · list(목록) ──
-let lView = store.get('bookView', 'flow'), flowItems = [], flowId = '', flowShown = '';
+// 보기 3가지는 표지·포스터가 있는 독서·방탈출. 평가 칸은 목록마다 이름이 달라요 (독서 별점 stars, 방탈출 평점 rating)
+const VIEWS = { book: 'bookView', escape: 'escapeView' }, RATE_KEY = { book: 'stars', escape: 'rating' };
+const lView = () => store.get(VIEWS[sec], 'flow');
+let flowItems = [], flowId = '', flowShown = '';
 const FC = 80; // 커버플로우에서 책 사이 간격(px) = 한 칸 넘길 때 움직이는 거리
 const coverHTML = i => { const t = esc(LIST_ROW[curList](i)[0]);
   return i.image ? `<img class="cover" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-t="${t}">` : `<span class="cover ph">${t}</span>`; };
@@ -835,9 +886,10 @@ function flowPaint() {
   if (!i || i.id === flowShown) return;
   flowShown = flowId = i.id;
   $('#fTitle').textContent = LIST_ROW[curList](i)[0];
-  $('#fSub').textContent = joinDot([i.author, curList === 'book' ? i.status : i.memo]);
-  $('#fRate').hidden = curList !== 'book';
-  $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i.stars === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
+  $('#fSub').textContent = curList === 'escape' ? joinDot([i.date, i.shop, i.result]) : joinDot([i.author, curList === 'book' ? i.status : i.memo]);
+  const rk = RATE_KEY[curList];
+  $('#fRate').hidden = !rk;
+  $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i[rk] === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
 }
 let flowRaf = 0;
 $('#lFlow').addEventListener('scroll', () => { if (!flowRaf) flowRaf = requestAnimationFrame(() => { flowRaf = 0; flowPaint(); }); }, { passive: true });
@@ -850,17 +902,18 @@ $('#lFlow').addEventListener('click', e => {
 });
 // 가운데 책 아래 이모지를 누르면 바로 평가 저장 (같은 걸 다시 누르면 지움)
 $('#fRate').addEventListener('click', e => {
-  const r = e.target.closest('[data-r]')?.dataset.r, it = r && (lists.book || []).find(i => i.id === flowShown);
+  const rk = RATE_KEY[curList], r = e.target.closest('[data-r]')?.dataset.r, it = r && rk && (lists[curList] || []).find(i => i.id === flowShown);
   if (!it) return;
-  it.stars = it.stars === r ? '' : r;
+  it[rk] = it[rk] === r ? '' : r;
   store.set('lists', lists);
   flowShown = ''; flowPaint();
-  queue({ action: 'listSave', list: 'book', item: { id: it.id, title: it.title, stars: it.stars } });
+  const key = LIST_FIELDS[curList][0][0]; // 시트가 줄을 찾는 제목 칸 (독서 title, 방탈출 theme)
+  queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], [rk]: it[rk] } });
 });
 $('#fAdd').addEventListener('click', () => openItem());
 $('#lViews').addEventListener('click', e => {
   const v = e.target.closest('[data-v]')?.dataset.v;
-  if (v) { lView = v; store.set('bookView', v); renderLists(); }
+  if (v) { store.set(VIEWS[sec], v); renderLists(); }
 });
 async function refreshLists() {
   try {
@@ -871,7 +924,7 @@ async function refreshLists() {
         const r = await api(null, '&what=lists');
         if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
         else { lists = r.lists; store.set('lists', lists); setStatus('시트와 동기화됨'); }
-      } catch (e) { setStatus('연결 안 됨 · ' + e.message); }
+      } catch (e) { showError(e); }
     }
     renderLists();
   } finally { busy(false); document.body.classList.remove('loading'); }
@@ -880,8 +933,9 @@ function setSection(k) {
   sec = k;
   document.body.classList.remove('white'); // 독서 커버플로우에서만 흰 바탕 (renderLists가 다시 켬)
   document.body.classList.remove('searching');
-  $('#searchBtn').hidden = k !== 'money';
-  $('#lSbar').hidden = k === 'money' || k === 'habit';
+  document.body.classList.toggle('money', k === 'money');
+  $('#searchBtn').hidden = k === 'habit';
+  if ($('#lq').value) $('#lq').value = '';
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
   const money = k === 'money', habit = k === 'habit';
@@ -894,7 +948,7 @@ function setSection(k) {
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
-    $('#fab').hidden = habit;
+    setFab(habit);
     if (habit) { renderHabits(); refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
     $('#lq').value = '';
@@ -960,7 +1014,7 @@ async function refreshHabits() {
         const r = await api(null, '&what=habits');
         if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
         else { habits = r.habits; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
-      } catch (e) { setStatus('틱틱 연결 안 됨 · ' + e.message); }
+      } catch (e) { showError(e); }
     }
     if (sec === 'habit') renderHabits();
   } finally { busy(false); }
@@ -986,7 +1040,7 @@ $('#hList').addEventListener('click', e => {
 const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTIONS[k]); return [...o, ...Object.keys(SECTIONS).filter(k => !o.includes(k))]; };
 function openMenu() {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
-    `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><span class="em" aria-hidden="true">${v.icon}</span>${v.title}</button>`).join('');
+    `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
   $('#menu').showModal();
 }
 $('#menuBtn').addEventListener('click', openMenu);
@@ -1094,29 +1148,42 @@ document.addEventListener('error', e => {
 }, true);
 
 // 목록 항목 추가·수정 창 (필드 표로 자동 생성)
+// 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
+let lEditing = null;
 function openItem(it) {
   const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
+  lEditing = it || null;
+  const opt = (n, base) => base.map(([v, l]) => `<label><input type="radio" name="${n}" value="${esc(v)}"><span>${esc(l)}</span></label>`).join('');
   $('#lFields').innerHTML = fs.map(([n, lab, type, opts], k) => {
-    if (type === 'bool') return `<label class="chk"><input type="checkbox" name="${n}"> ${lab}</label>`;
-    const full = k === 0 || n === 'memo' || n === 'review' ? ' full' : '';
+    if (k === 0) return `<input class="full ltitle" name="${n}" placeholder="${lab}" aria-label="${lab}" maxlength="1000" required>`;
+    if (type === 'bool') return `<label class="switch full"><input type="checkbox" name="${n}"><i aria-hidden="true"></i>${lab}</label>`;
     if (type === 'select') {
-      const base = (typeof opts === 'function' ? opts() : opts).map(o => Array.isArray(o) ? o : [o, o || '선택 안 함']);
-      // 옛 값(예: ★★★★)이 있으면 목록에 그대로 남겨서 안 지워지게
+      const base = (typeof opts === 'function' ? opts() : opts).map(o => Array.isArray(o) ? o : [o, o || '없음']);
+      // 옛 값(예: ★★★★)이 있으면 선택지에 그대로 남겨서 안 지워지게
       if (it && it[n] && !base.some(o => o[0] === String(it[n]))) base.push([String(it[n]), String(it[n])]);
-      return `<label class="f${full}">${lab}<select name="${n}">${base.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>`;
+      if (opts === RATE_OPTS) return `<div class="f full">${lab}<div class="rate rate-pick" role="radiogroup" aria-label="${lab}">${opt(n, base.filter(o => o[0]).map(([v]) => [v, v]))}</div></div>`;
+      if (typeof opts !== 'function' && base.length <= 5) return `<div class="f full">${lab}<div class="seg" role="radiogroup" aria-label="${lab}">${opt(n, base)}</div></div>`;
+      return `<label class="f">${lab}<select name="${n}">${base.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>`;
     }
-    return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${type === 'number' ? 'inputmode="numeric" min="0"' : 'maxlength="1000"'} ${k === 0 ? 'required' : ''}></label>`;
+    const full = ['author', 'shop', 'director', 'memo', 'review', 'image', 'date'].includes(n) ? ' full' : '';
+    const extra = type === 'number' ? 'inputmode="numeric" min="0"' : type === 'url' ? 'inputmode="url" placeholder="https://…"' : 'maxlength="1000"';
+    return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${extra}></label>`;
   }).join('');
   const f = $('#lForm').elements, today = localISO();
-  const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '완독', date: today.slice(0, 10), kind: '추천받은 책' };
+  const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책' };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
   $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
-  $('#lPreview').innerHTML = it?.image ? `<img class="thumb big" src="${esc(it.image)}" alt="" referrerpolicy="no-referrer">` : '';
+  lPreview(it?.image || '');
   $('#lItem').showModal();
 }
+const lPreview = src => { $('#lPreview').innerHTML = /^https?:\/\//.test(src) ? `<img class="thumb big" src="${esc(src)}" alt="" referrerpolicy="no-referrer">` : ''; };
+$('#lFields').addEventListener('input', e => { if (e.target.name === 'image') lPreview(e.target.value.trim()); });
+// 이미 고른 평가를 다시 누르면 지움
+$('#lFields').addEventListener('pointerdown', e => { const i = e.target.closest('.rate-pick label')?.querySelector('input'); if (i) i.dataset.was = i.checked ? '1' : ''; });
+$('#lFields').addEventListener('click', e => { const i = e.target.closest('.rate-pick input'); if (i && i.dataset.was === '1') { i.checked = false; i.dataset.was = ''; } });
 $('#lList').addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id, it = id && L(curList).find(i => i.id === id);
   if (it) openItem(it);
@@ -1126,6 +1193,8 @@ $('#lForm').addEventListener('submit', e => {
   const f = e.target.elements, id = e.target.dataset.id, item = { id: id || crypto.randomUUID() };
   LIST_FIELDS[curList].forEach(([n, , type]) => { item[n] = type === 'bool' ? f[n].checked : type === 'number' ? (f[n].value === '' ? '' : Math.round(+f[n].value)) : f[n].value.trim(); });
   if (!item[LIST_FIELDS[curList][0][0]]) return;
+  // 표지 주소는 바꿨을 때만, https 주소만 보냄 (시트의 =IMAGE 수식을 괜히 덮지 않게)
+  if ('image' in item && (item.image === (lEditing?.image || '') || !/^https:\/\//.test(item.image))) delete item.image;
   if (curList === 'board') item.kind = '보드게임';
   const arr = lists[curList] = lists[curList] || [], idx = arr.findIndex(i => i.id === item.id);
   // 독서 기록의 순번 = 같은 연·월 안에서 몇 번째 책인지 (새로 추가할 때만 매김)
@@ -1254,6 +1323,7 @@ function pickerField(input, kind, title, opt = {}) {
 }
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
 
+document.body.classList.add('money');
 const now = localISO();
 $('#month').value = now.slice(0, 7);
 render();

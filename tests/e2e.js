@@ -71,9 +71,10 @@ const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS:
   ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
   Utilities: { formatDate: (d, tz, p) => p === 'yyyy-MM' ? ymd(d).slice(0, 7) : ymd(d), getUuid: () => 'u' + (++uid),
     DigestAlgorithm: { MD5: 'MD5' }, computeDigest: (a, t) => [...crypto.createHash('md5').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
-  LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, ScriptApp: {} };
-const gs = new Function(...Object.keys(g), fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8') + ';return {doGet, doPost}')(...Object.values(g));
-const TOKEN = '여기에-나만-아는-비밀번호를-적으세요';
+  LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, ScriptApp: {},
+  PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {} }) } };
+const gs = new Function(...Object.keys(g), fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'test-token';") + ';return {doGet, doPost}')(...Object.values(g));
+const TOKEN = 'test-token';
 const T = sheets.거래, col = c => T.d.slice(1).map(r => r[c - 1]);
 let offline = false;
 http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]));
@@ -94,6 +95,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.goto('http://localhost:8766/');
   assert.ok(await p.isVisible('#settings'), 'settings auto-open when not connected');
   // 잘못된 링크 → 거부, 창 유지
+  // 틀린 비밀번호 → 상태 줄이 쉬운 말로, 누르면 설정 창
+  await p.fill('[name=token]', 'wrong'); await p.click('button[value=save]');
+  await p.waitForFunction(() => /비밀번호가 맞지 않아요/.test(document.querySelector('#status').textContent));
+  await p.click('#status'); await p.waitForSelector('#settings', { state: 'visible' });
+  await p.click('.adv summary');
   await p.fill('[name=link]', 'https://x/#url=https%3A%2F%2Fevil.example%2Fx&token=t');
   await p.click('button[value=save]');
   await p.waitForSelector('#settings', { state: 'visible' });
@@ -167,6 +173,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#fab'); await p.waitForSelector('#entry', { state: 'visible' });
   await p.evaluate(d => { const f = document.querySelector('#entryForm'); f.date.value = d; f.date.dispatchEvent(new Event('change', { bubbles: true })); }, ago(2) + '-01');
   await p.fill('#entryForm [name=content]', '휴대폰 요금');
+  assert.equal(await p.inputValue('#entryForm [name=pay]'), 'C체크카드', 'new entry starts with the last payment method');
+  await p.selectOption('#entryForm [name=pay]', '');
   await p.fill('#entryForm [name=amount]', '55000');
   await p.click('#majorChips [data-v="주거·통신"]');
   await p.click('#recRow .switch');
@@ -271,6 +279,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const p4 = await (await b.newContext()).newPage();
   await p4.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: gs.doGet({ parameter: Object.fromEntries(new URL(rt.request().url()).searchParams) }) }));
   await p4.goto('http://localhost:8766/');
+  await p4.click('.adv summary');
   await p4.fill('[name=link]', 'https://babjange1.github.io/Budget-book/#url=' + encodeURIComponent('https://script.google.com/macros/s/AKfy_-z9/exec') + '&token=' + encodeURIComponent(TOKEN));
   await p4.click('button[value=save]');
   await p4.waitForFunction(() => /동기화됨/.test(document.querySelector('#syncPop').textContent + document.querySelector('#status').textContent));
@@ -339,31 +348,33 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(await p.locator('#lList li[data-id]').count(), 3);
   assert.match(await p.textContent('#lInfo'), /3권 · 완독 2권 · 올해 완독 1권/);
   await p.click('#fab'); await p.waitForSelector('#lItem', { state: 'visible' });
-  await p.fill('#lForm [name=title]', '=새 책'); await p.fill('#lForm [name=author]', '작가'); await p.selectOption('#lForm [name=stars]', '🙂');
+  await p.fill('#lForm [name=title]', '=새 책'); await p.fill('#lForm [name=author]', '작가'); await p.click(`#lForm label:has(input[name=stars][value="🙂"])`);
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
-  assert.deepEqual([B.d[4][0], B.d[4][1], B.d[4][2], B.d[4][3], B.d[4][5], B.d[4][6], B.d[4][7], B.d[4][8]], [4, CUR.slice(0, 4) + '년', CUR.slice(5) + '월', 3, '=새 책', '작가', '완독', '🙂']);
+  assert.deepEqual([B.d[4][0], B.d[4][1], B.d[4][2], B.d[4][3], B.d[4][5], B.d[4][6], B.d[4][7], B.d[4][8]], [4, CUR.slice(0, 4) + '년', CUR.slice(5) + '월', 3, '=새 책', '작가', '읽는중', '🙂']);
   assert.match(await p.textContent('#lList li >> nth=0'), /새 책/);
   // 수정
-  await p.click('#lList li[data-id] >> nth=0'); await p.selectOption('#lForm [name=status]', '보류');
+  await p.click('#lList li[data-id] >> nth=0'); await p.click(`#lForm label:has(input[name=status][value="보류"])`);
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(B.d[4][7], '보류'); assert.equal(B.d[4][0], 4, '번호 유지'); assert.equal(B.d.filter(r => r && r[5]).length, 5);
   // 삭제: 2번째 줄(채식주의자)을 지워도 같은 줄 요약 표(K열)는 그대로
+  await p.click('#searchBtn'); assert.ok(await p.isVisible('#lSbar'), 'bottom search opens');
   await p.fill('#lq', '채식'); assert.equal(await p.locator('#lList li[data-id]').count(), 1);
   await p.click('#lList li[data-id] >> nth=0'); await p.click('#lDelete'); await status(/삭제됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(B.d[1][5], '급류'); assert.equal(B.d[1][11], '요약1'); assert.equal(B.d[2][11], '요약2'); assert.equal(B.d[3][5], '=새 책');
   assert.ok(!B.d[4] || !B.d[4][5], 'row removed');
-  await p.fill('#lq', '');
+  await p.click('#lClose'); assert.equal(await p.inputValue('#lq'), ''); assert.ok(!(await p.isVisible('#lSbar')));
   // 구매 목록 체크
   await p.click('#lTabs [data-list=buy]'); await p.click('#lList li[data-id] >> nth=0');
-  await p.check('#lForm [name=done]'); await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
+  await p.click('#lForm label.switch'); await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.strictEqual(bookSS['구매 목록'].d[1][3], true);
   assert.match(await p.textContent('#lList'), /구매함/);
   // 방탈출
   await go('방탈출');
+  await p.click('#lViews [data-v=list]'); // 아래 테스트는 목록 보기에서
   const E = hobbySS['방탈출 기록'];
   assert.equal(E.d[2][14], 'id'); assert.equal(await p.locator('#lList li[data-id]').count(), 2);
   await p.click('#fab'); await p.fill('#lForm [name=theme]', '새 테마'); await p.fill('#lForm [name=shop]', '키이스케이프');
-  await p.selectOption('#lForm [name=result]', '성공'); await p.selectOption('#lForm [name=rating]', '😍'); await p.fill('#lForm [name=cost]', '28000');
+  await p.click(`#lForm label:has(input[name=result][value="성공"])`); await p.click(`#lForm label:has(input[name=rating][value="😍"])`); await p.fill('#lForm [name=cost]', '28000');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(E.d[5][1], '새 테마'); assert.equal(ymd(E.d[5][0]), TODAY); assert.equal(E.d[5][5], '성공'); assert.equal(E.d[5][9], 28000); assert.equal(E.d[5][10], '😍');
   assert.equal(E.d[1][1], '2 개', '요약 줄 보존');
@@ -385,7 +396,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(extraTabs['영화 기록'].d[1][1], '파묘'); assert.ok(extraTabs['영화 기록'].d[1][8], 'movie id');
   await go('연극·뮤지컬');
-  await p.click('#fab'); await p.fill('#lForm [name=title]', '킹키부츠'); await p.selectOption('#lForm [name=kind]', '뮤지컬');
+  await p.click('#fab'); await p.fill('#lForm [name=title]', '킹키부츠'); await p.click(`#lForm label:has(input[name=kind][value="뮤지컬"])`);
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(extraTabs['연극·뮤지컬 기록'].d[1][2], '뮤지컬'); assert.ok(extraTabs['연극·뮤지컬 기록'].d[1][9], 'play id');
 

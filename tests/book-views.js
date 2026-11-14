@@ -57,5 +57,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.reload(); await p.waitForSelector('#lList li[data-id]'); assert.equal(await p.getAttribute('#lViews [data-v=list]', 'aria-pressed'), 'true');
   await p.click('#lViews [data-v=flow]');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(300);
-  assert.equal(await p.isVisible('#lViews'), false); assert.equal(await p.isVisible('#lListCard'), true);
+  assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
+  await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
+  assert.equal(await p.isVisible('#lViews'), false); assert.equal(await p.isVisible('#lHead'), false, 'no empty top box'); assert.equal(await p.isVisible('#lListCard'), true);
   console.log('BOOK VIEWS OK'); await b.close(); process.exit(0); });

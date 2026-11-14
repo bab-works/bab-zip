@@ -1,6 +1,9 @@
 // 나의 가계부 API — 「나의 가계부」 시트의 [확장 프로그램 > Apps Script]에 붙여넣고 웹 앱으로 배포하세요.
 const TOKEN = '여기에-나만-아는-비밀번호를-적으세요'; // 앱 ⚙ 설정의 "비밀번호"와 같아야 합니다
 const TYPES = ['지출', '수입', '환불', '이체'];
+// 비밀번호: setupSheet()가 만든 스크립트 속성 APP_TOKEN이 있으면 그걸, 없으면 위 TOKEN. 처음 문구 그대로면 아무도 못 들어옴
+const PLACEHOLDER = '여기에-나만-아는-비밀번호를-적으세요';
+const authOk_ = t => { const k = PropertiesService.getScriptProperties().getProperty('APP_TOKEN') || TOKEN; return !!t && k !== PLACEHOLDER && String(t) === k; };
 // 거래 탭 열 위치 (A 날짜 · B 시간 · C 구분 · D 대분류 · E 소분류 · F 내용 · G 결제유형(수식) · H 결제수단 · I 금액 · J 메모 · K 원본분류 · L 할부 · M~O 수식 · P id)
 // G·M·N·O 열은 시트 수식이 채우므로 절대 쓰지 않음. 열 구성이 다르면 아무것도 쓰지 않고 멈춤
 const ID_COL = 16;
@@ -252,7 +255,8 @@ function listSave_(k, item) {
   const row = idx >= 0 ? c.head + 1 + idx : last + 1;
   if (row > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 100);
   for (const f in c.f) {
-    if (f === 'image' || !(f in item) || !m[f].col) continue; // 사진은 시트에서 직접 넣음
+    if (!(f in item) || !m[f].col) continue;
+    if (f === 'image') { if (/^https:\/\//.test(String(item.image))) sh.getRange(row, m.image.col).setValue(String(item.image).slice(0, 500)); continue; } // 앱은 바꾼 https 주소만 보냄
     const t = m[f].type, x = item[f];
     sh.getRange(row, m[f].col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
       : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, 1000));
@@ -357,7 +361,7 @@ function summary_() {
 }
 
 function doGet(e) {
-  if (e.parameter.token !== TOKEN) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+  if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
@@ -390,7 +394,7 @@ function doGet(e) {
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
-  if (b.token !== TOKEN) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+  if (!authOk_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     withLock_(() => {
       if (b.action === 'save') saveTx_(b.item);
@@ -408,4 +412,60 @@ function doPost(e) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
     return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱 계정|틱틱 로그인|2단계/.test(err.message) });
   }
+}
+
+// ── 새로 쓰는 사람(친구)용 ──
+// 1) 빈 구글 시트의 Apps Script에 이 파일을 붙여넣고 setupSheet 실행 → 필요한 탭과 비밀번호를 만들어 줌 (이미 있는 탭은 건드리지 않음)
+// 2) 웹 앱으로 배포한 뒤 appLink 실행 → 실행 로그에 나온 링크를 아이폰 사파리로 열면 연결 끝
+const PAY_F = `={"결제유형";ARRAYFORMULA(IF(H2:H="","",IFERROR(VLOOKUP(H2:H,'카테고리'!$H$2:$I,2,0),"미지정")))}`;
+const INST_R = `LET(r,(YEAR(TODAY())*12+MONTH(TODAY()))-(YEAR(A2:A)*12+MONTH(A2:A))+1,`;
+const TABS_ = {
+  '거래': [['날짜', '시간', '구분', '대분류', '소분류', '내용', PAY_F, '결제수단', '금액', '메모', '원본분류', '할부(개월)',
+    `={"할부 진행";ARRAYFORMULA(IF(IFERROR(L2:L*1,0)<2,"",${INST_R}IF(r>L2:L,"완료",r&"/"&L2:L&"회차"))))}`,
+    `={"남은 개월";ARRAYFORMULA(IF(IFERROR(L2:L*1,0)<2,"",${INST_R}IF(r>L2:L,0,L2:L-r))))}`,
+    `={"할부 총액";ARRAYFORMULA(IF(IFERROR(L2:L*1,0)<2,"",I2:I*L2:L))}`, 'id']],
+  '카테고리': [['대분류', '소분류', '', '대분류', '월 예산', '메모', '', '결제수단', '결제유형']],
+  '분류규칙': [['키워드', '적용구분', '대분류', '소분류'], ['쿠팡이츠', '지출', '식비', '배달'], ['배달의민족', '지출', '식비', '배달'],
+    ['스타벅스', '지출', '카페·간식', '카페'], ['택시', '지출', '교통', '택시'], ['GS25', '지출', '생활', '편의점'], ['CU', '지출', '생활', '편의점']],
+  '독서 기록': [['번호', '기록 시기', '', '순번', '표지', '책 제목', '저자', '독서 상태', '별점', '메모', 'id']],
+  '구매 목록': [['번호', '책 제목', '저자', '구매 완료', '메모', '표지', 'id']],
+  '추천·관심 도서': [['번호', '책 제목', '저자', '구분', '메모', '표지', 'id']],
+  '방탈출 기록': [[''], ['총 진행 테마 수', '=COUNTA(B4:B)&" 개"'],
+    ['방문일', '테마', '포스터', '매장', '지역', '결과', '인원', '힌트 수', '남은 시간(분)', '비용(원)', '평점(1~5)', '함께한 사람', '후기', '', 'id']],
+  '보드게임 기록': [['기록 ID', '날짜', '종류', '테마·보드게임', '장소', '함께한 사람', '후기']],
+  '영화 기록': [['번호', '영화 제목', '감독', '관람일', '극장', '평점', '함께한 사람', '후기', 'id']],
+  '연극·뮤지컬 기록': [['번호', '작품명', '종류', '관람일', '극장', '출연', '평점', '함께한 사람', '후기', 'id']],
+};
+const CATS_ = { 식비: ['외식', '배달', '장보기'], '카페·간식': ['카페', '베이커리·디저트'], '술·유흥': ['술집'], 생활: ['편의점', '생활용품', '온라인쇼핑'],
+  교통: ['대중교통', '택시'], 자동차: ['주유', '주차·통행료'], '주거·통신': ['주거비', '공과금', '통신비'], '의료·건강': ['병원', '약국'],
+  '의복·미용': ['의류·잡화', '미용'], '문화·여가': ['취미·놀이', '공연·전시', '여행·숙박'], 구독: ['앱·멤버십'], '선물·경조사': ['선물', '경조사비'],
+  교육: ['교육'], 기타: ['미분류'], 수입: ['급여', '부수입', '기타수입'], 이체: ['내 계좌 이동', '송금'] };
+const PAYS_ = [['현금', '현금·계좌'], ['계좌이체', '현금·계좌'], ['체크카드', '카드'], ['신용카드', '카드'], ['간편결제', '간편결제']];
+function setupSheet() {
+  const ss = ss_(), made = [];
+  Object.keys(TABS_).forEach(name => {
+    if (ss.getSheetByName(name)) return;
+    const sh = ss.insertSheet(name), rows = TABS_[name], w = Math.max(...rows.map(r => r.length));
+    rows.forEach((r, i) => r.forEach((v, j) => { if (v === '') return; const c = sh.getRange(i + 1, j + 1); String(v).startsWith('=') ? c.setFormula(v) : c.setValue(v); }));
+    sh.setFrozenRows(rows.length); sh.getRange(rows.length, 1, 1, w).setFontWeight('bold');
+    if (name === '카테고리') {
+      const cats = []; Object.keys(CATS_).forEach(k => CATS_[k].forEach(m => cats.push([k, m])));
+      sh.getRange(2, 1, cats.length, 2).setValues(cats);
+      const majors = Object.keys(CATS_); sh.getRange(2, 4, majors.length, 1).setValues(majors.map(k => [k]));
+      sh.getRange(2, 8, PAYS_.length, 2).setValues(PAYS_);
+    }
+    if (name === '거래') sh.getRange('A:A').setNumberFormat('yyyy-mm-dd');
+    made.push(name);
+  });
+  const p = props_();
+  if (!p.getProperty('APP_TOKEN') && TOKEN === PLACEHOLDER) p.setProperty('APP_TOKEN', Utilities.getUuid().replace(/-/g, '').slice(0, 12));
+  const first = ss.getSheets()[0]; if (first.getName() !== '거래' && first.getLastRow() === 0 && ss.getSheets().length > 1 && /^(시트|Sheet)\d+$/.test(first.getName())) ss.deleteSheet(first);
+  Logger.log('만든 탭: %s', made.join(', ') || '없음 (이미 다 있음)');
+  Logger.log('이제 배포 → 새 배포 → 웹 앱(실행: 나, 액세스: 모든 사용자)으로 배포한 뒤 appLink를 실행하세요.');
+}
+// 배포한 뒤 실행: 아이폰에서 열 연결 링크를 실행 로그에 보여 줌 (이 링크 = 내 가계부 열쇠이니 남에게 보내지 마세요)
+function appLink() {
+  const url = ScriptApp.getService().getUrl(), token = props_().getProperty('APP_TOKEN') || TOKEN;
+  if (!url) return Logger.log('아직 웹 앱으로 배포하지 않았어요. 배포 → 새 배포 → 웹 앱으로 먼저 배포하세요.');
+  Logger.log('아이폰 사파리에서 이 링크를 열고 공유 → 홈 화면에 추가:\n%s', 'https://bab-works.github.io/bab-zip/#url=' + url + '&token=' + encodeURIComponent(token));
 }
