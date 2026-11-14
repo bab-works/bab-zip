@@ -189,7 +189,8 @@ async function sendPending() {
     catch (e) {
       // 시트가 내용 자체를 거부한 작업은 버림 (계속 막히지 않게). 네트워크·비밀번호 문제는 대기
       if (!e.rejected) { showError(e, `저장 대기 ${pending.length}건`); return false; }
-      toast('시트가 거부해서 취소됨: ' + e.message);
+      if (pending[0].action === 'habitCheck') { toast('틱틱에 반영하지 못했어요: ' + e.message, 6000); setTimeout(refreshHabits, 0); } // 화면을 틱틱의 실제 상태로 되돌림
+      else toast('시트가 거부해서 취소됨: ' + e.message);
     }
     pending.shift();
     persist();

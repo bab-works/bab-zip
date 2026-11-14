@@ -316,7 +316,7 @@ function tt_(path, body) {
       if (t === own && !p.getProperty('TICKTICK_PASS')) throw new Error('틱틱 로그인 실패 · TICKTICK_TOKEN이 만료됐어요, 쿠키 t를 다시 복사해 넣으세요');
       p.deleteProperty('TT_TOKEN'); if (t === own) p.deleteProperty('TICKTICK_TOKEN'); continue;
     }
-    if (c >= 300) throw new Error('틱틱 응답 오류 ' + c);
+    if (c >= 300) throw new Error('틱틱 응답 오류 ' + c + ' ' + r.getContentText().replace(/\s+/g, ' ').slice(0, 120));
     const s = r.getContentText();
     return s ? JSON.parse(s) : {};
   }
@@ -340,9 +340,24 @@ function habitCheck_(habitId, stamp, done) {
   const cur = list.find(c => ckStamp_(c) === stamp);
   if (!done) { if (cur) tt_('/habitCheckins/batch', { add: [], update: [], delete: [cur.id] }); return; }
   if (cur && cur.status === 2) return;
-  const now = Utilities.formatDate(new Date(), 'UTC', "yyyy-MM-dd'T'HH:mm:ss.000+0000");
-  const c = { id: cur ? cur.id : oid_(), habitId, checkinStamp: stamp, checkinTime: now, opTime: now, value: 1, goal: 1, status: 2 };
-  tt_('/habitCheckins/batch', cur ? { add: [], update: [c], delete: [] } : { add: [c], update: [], delete: [] });
+  // 틱틱 내부 API가 받는 시간 형식이 바뀌어 500이 나는 경우가 있어, 형식을 바꿔 가며 한 번씩 시도 (성공한 형식은 기억)
+  const d = new Date(), id = cur ? cur.id : oid_();
+  const forms = [
+    () => { const t = Utilities.formatDate(d, 'UTC', "yyyy-MM-dd'T'HH:mm:ss.000+0000"); return { checkinTime: t, opTime: t }; },
+    () => { const t = Utilities.formatDate(d, 'UTC', "yyyy-MM-dd'T'HH:mm:ss+0000"); return { checkinTime: t, opTime: t }; },
+    () => ({}),
+  ];
+  const p = props_(), first = Number(p.getProperty('TT_FORM') || 0);
+  let err;
+  for (const k of [first, 0, 1, 2].filter((x, i, a) => a.indexOf(x) === i)) {
+    const c = Object.assign({ id, habitId, checkinStamp: stamp, value: 1, goal: 1, status: 2 }, forms[k]());
+    try {
+      tt_('/habitCheckins/batch', cur ? { add: [], update: [c], delete: [] } : { add: [c], update: [], delete: [] });
+      if (k !== first) p.setProperty('TT_FORM', String(k));
+      return;
+    } catch (e) { err = e; if (!/응답 오류 5/.test(e.message)) throw e; }
+  }
+  throw err;
 }
 
 // 잠금화면 위젯용 요약 (전체 거래를 보내지 않아 빠름): 오늘·이번 달 지출(환불 차감, 이체 제외)과 남은 예산
@@ -410,7 +425,7 @@ function doPost(e) {
     return out_({ ok: true });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
-    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱 계정|틱틱 로그인|2단계/.test(err.message) });
+    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱/.test(err.message) });
   }
 }
 
