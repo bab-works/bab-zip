@@ -272,20 +272,29 @@
   @keyframes fadeIn { from { opacity:0; } }
   @keyframes fadeOut { to { opacity:0; } }
   /* 왼쪽에서 나오는 메뉴 */
-  #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0 28px 28px 0; border-left:0;
-    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .34s var(--ease-out);
-    /* 클로드 앱처럼: 펼쳐지는 동안엔 그림자가 넓게 번지다가, 다 열리면 짧고 선명해짐 (--p = 열린 정도) */
-    box-shadow:0 0 calc(56px - 40px * var(--p, 1)) rgba(0,0,0, calc(.24 * min(1, var(--p, 1) * 2) - .1 * var(--p, 1))); }
-  /* 뒤 화면 어둡게: 미는 만큼(--p) 서서히 진해짐 (예전 거대한 그림자보다 아이폰에서 가벼움) */
-  /* 뒤 본문은 어둡게가 아니라 하얗게 흐려짐 (다크 모드는 어둡게 흐려짐) */
-  #menu::backdrop { background:color-mix(in srgb, var(--bg) 55%, transparent); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); opacity:var(--p, 1); animation:fadeIn .34s var(--ease-out); }
+  /* 사이드바 (클로드 앱 방식)
+     - 메뉴가 열리면 본문이 메뉴 폭만큼 함께 옆으로 밀리고(--push), 본문 왼쪽 모서리는 둥글게 (메뉴의 ::after가 모서리 바깥을 메뉴 색으로 채움)
+     - 메뉴는 흐릿·반투명했다가 펼쳐질수록 선명해짐 (--p = 열린 정도 0~1)
+     - 뒤 본문은 살짝만 하얗게 흐려짐 */
+  #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0; border:0; overflow:visible;
+    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .36s var(--ease-out);
+    opacity:calc(.3 + .7 * var(--p, 1)); filter:blur(calc(8px * (1 - var(--p, 1)))); }
+  #menu::after { content:''; position:absolute; top:0; bottom:0; left:100%; width:22px; pointer-events:none;
+    background:radial-gradient(circle at 100% 100%, transparent 21.5px, var(--glass) 22px) top left / 22px 22px no-repeat,
+               radial-gradient(circle at 100% 0, transparent 21.5px, var(--glass) 22px) bottom left / 22px 22px no-repeat; }
+  #menu::backdrop { background:color-mix(in srgb, var(--bg) 18%, transparent); -webkit-backdrop-filter:blur(1.5px); backdrop-filter:blur(1.5px); opacity:var(--p, 1); animation:fadeIn .36s var(--ease-out); }
   /* 밀어서 연 뒤엔 펼침 애니메이션이 다시 재생되지 않게 (settled). 닫힘(closing)은 항상 재생 */
   #menu.dragging, #menu.dragging::backdrop, #menu.settled, #menu.settled::backdrop { animation:none; }
-  #menu.closing { animation:sideOut .22s var(--ease-in) forwards; }
-  #menu.closing::backdrop { animation:fadeOut .22s var(--ease-in) forwards; }
-  @keyframes sideOut { to { transform:translateX(-100%); } }
+  #menu.closing { animation:sideOut .24s var(--ease-in) forwards; }
+  #menu.closing::backdrop { animation:fadeOut .24s var(--ease-in) forwards; }
+  @keyframes side { from { transform:translateX(-100%); opacity:.3; filter:blur(8px); } }
+  @keyframes sideOut { to { transform:translateX(-100%); opacity:.3; filter:blur(8px); } }
   #menu::before { display:none; }
-  @keyframes side { from { transform:translateX(-100%); box-shadow:0 0 56px rgba(0,0,0,0); } 55% { box-shadow:0 0 40px rgba(0,0,0,.2); } }
+  /* 본문 밀기: 메뉴와 같은 속도·곡선 (끄는 동안엔 손가락을 바로 따라감) */
+  body > :not(dialog):not(#toast):not(#syncPop) { translate:var(--push, 0px) 0; transition:translate .36s var(--ease-out); }
+  html.pushing body > :not(dialog) { transition:none; }
+  html.push-out body > :not(dialog) { transition-duration:.24s; transition-timing-function:var(--ease-in); }
+  @media (prefers-reduced-motion: reduce) { body > :not(dialog) { transition:none; } #menu { filter:none; } }
   .menu-list { display:flex; flex-direction:column; gap:6px; }
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }

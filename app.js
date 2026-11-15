@@ -1,4 +1,5 @@
 const $ = s => document.querySelector(s);
+const APP_VERSION = 'gagyebu-v58'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -54,6 +55,7 @@ function countTo(el, to) {
 const realClose = HTMLDialogElement.prototype.close;
 const closeNow = d => realClose.call(d);
 HTMLDialogElement.prototype.close = function (rv) {
+  if (this.open && !this.classList.contains('closing')) this.dispatchEvent(new Event('closing')); // 닫히기 시작 (메뉴는 이때 본문을 제자리로)
   if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
   this.classList.add('closing');
   setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, 220);
@@ -128,7 +130,7 @@ function opText(o) {
   return o.action;
 }
 function renderPending() {
-  caches?.keys().then(ks => { $('#pendVer').textContent = '앱 버전 ' + (ks.find(k => k.startsWith('gagyebu-')) || '?').replace('gagyebu-', ''); }).catch(() => {});
+  $('#pendVer').textContent = '앱 버전 ' + APP_VERSION.replace('gagyebu-', '');
   $('#pendErr').textContent = pending.length ? `맨 위 항목에서 멈췄어요 · 오류: ${lastErr || '없음'}` : '보낼 것이 없어요 · 모두 시트에 저장됐어요';
   $('#pendList').innerHTML = pending.map((o, k) => `<li><span>${esc(opText(o))}</span><button type="button" class="small danger" data-k="${k}">버리기</button></li>`).join('');
   $('#pendRetry').disabled = !pending.length;
@@ -1122,14 +1124,23 @@ function openMenu() {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
   $('#menu').showModal();
+  setPush(1);
 }
+// 본문 밀기: p = 0(닫힘)~1(열림), 메뉴 폭만큼. 끄는 중엔 transition 없이 손가락을 바로 따라감
+const root = document.documentElement;
+function setPush(p, dragging) {
+  root.classList.toggle('pushing', !!dragging);
+  root.classList.toggle('push-out', !dragging && p === 0);
+  root.style.setProperty('--push', Math.round(p * ($('#menu').offsetWidth || 300)) + 'px');
+}
+$('#menu').addEventListener('closing', () => setPush(0));
 $('#menuBtn').addEventListener('click', openMenu);
 // 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
 // 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
 {
   const menu = $('#menu');
   const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
-  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); };
+  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); setPush(p, true); };
   let sw = null;
   document.addEventListener('touchstart', e => {
     sw = null;
@@ -1160,9 +1171,9 @@ $('#menuBtn').addEventListener('click', openMenu);
     if (!sw?.on) { sw = null; return; }
     const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
     sw = null;
-    menu.style.transition = 'transform .3s var(--ease-out)';
-    menu.style.transition = 'transform .3s var(--ease-out), box-shadow .3s var(--ease-out)';
+    menu.style.transition = 'transform .3s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out)';
     menu.style.transform = `translateX(${keep ? 0 : -100}%)`; menu.style.setProperty('--p', keep ? 1 : 0);
+    setPush(keep ? 1 : 0); // 손을 떼면 본문도 같은 속도로
     setTimeout(() => {
       if (!keep) closeNow(menu); else menu.classList.add('settled'); // 열린 채로 두면 펼침 애니메이션을 다시 틀지 않음
       menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = ''; menu.style.removeProperty('--p');
@@ -1420,12 +1431,25 @@ if (qp.get('sec') && SECTIONS[qp.get('sec')]) setSection(qp.get('sec'));
 if (['home', 'cal', 'list', 'rec'].includes(qp.get('view'))) show(qp.get('view'));
 if (qp.has('add') && sec !== 'habit') setTimeout(() => (sec === 'money' ? openEntry(null, localISO().slice(0, 10)) : openItem()), 250);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+// 새 버전 확인: 화면에 돌아올 때마다 배포된 sw.js의 버전을 직접 받아 지금 화면의 버전과 비교
+// 다르면 입력 중이 아닐 땐 바로 새로고침, 입력 창이 열려 있으면 「새 버전이 있어요」 안내
+async function checkVersion() {
+  try {
+    const live = (await (await fetch('sw.js', { cache: 'no-store' })).text()).match(/gagyebu-v\d+/)?.[0];
+    if (!live || live === APP_VERSION) return;
+    if (!document.querySelector('dialog[open]')) return location.reload();
+    $('#status').textContent = '새 버전이 있어요 · 눌러서 업데이트'; $('#status').classList.add('err'); statusAct = 'update';
+  } catch {}
+}
+$('#status').addEventListener('click', () => { if (statusAct === 'update') location.reload(); });
 if ('serviceWorker' in navigator) {
   pushSubscribe();
+  checkVersion();
   const hadSW = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => {
     // 홈 화면 앱은 껐다 켜도 멈춘 화면을 다시 보여 주기만 해서, 돌아올 때마다 새 버전을 확인
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { reg.update(); checkVersion(); } });
+    addEventListener('pageshow', e => { if (e.persisted) { reg.update(); checkVersion(); } }); // 사파리 탭이 메모리에서 되살아날 때
   });
   // 새 버전으로 바뀌면 한 번 새로고침 (입력 창이 열려 있으면 닫힐 때까지 기다림)
   const reloadWhenIdle = () => (document.querySelector('dialog[open]') ? setTimeout(reloadWhenIdle, 1500) : location.reload());
