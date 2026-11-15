@@ -524,6 +524,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
     assert.deepEqual([sm.ok, sm.date, sm.month, sm.today, sm.budget, sm.left],
       [true, TODAY, rows.reduce((s, r) => s + net(r), 0), rows.filter(r => d0(r) === TODAY).reduce((s, r) => s + net(r), 0), bud, bud - rows.reduce((s, r) => s + net(r), 0)]);
     assert(sm.month > 0, 'summary has spending'); console.log('summary', JSON.stringify(sm)); }
+  { // 올해의 BAB:ZIP: 결산 화면과 공유용 이미지
+    await p.evaluate(() => openRecap()); await p.waitForSelector('#recap[open]');
+    assert.match(await p.textContent('#rcList'), /한 해 동안 쓴 돈/);
+    assert(await p.evaluate(async () => (await recapImage()).size) > 20000, 'recap png drawn');
+    await p.click('#rcClose'); console.log('RECAP OK'); }
   { // 애플페이 단축어 자동 기록: 분류규칙으로 분류, 같은 분 두 번 와도 한 줄
     const n0 = T.d.length, go = () => JSON.parse(gs.doGet({ parameter: { token: TOKEN, auto: '1', amount: '₩12,300', merchant: '스타벅스 강남점', card: 'C체크' } }));
     const r1 = go(); go();

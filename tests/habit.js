@@ -39,6 +39,12 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.click('#hList li:nth-child(2) .hcheck'); await p.waitForTimeout(300);
   assert.deepEqual(posts.at(-1).done, false); assert.equal(posts.at(-1).stamp, st(1));
   await p.click('#reload'); await p.waitForTimeout(500);
+  // 줄을 누르면 1년 잔디: 53주 전 일요일 ~ 오늘, 체크한 날은 진한 칸
+  const n0 = posts.length; await p.click('#hList li:nth-child(1) div'); await p.waitForSelector('#hDetail[open]');
+  assert.equal(posts.length, n0, 'opening detail does not check');
+  const cells = await p.locator('#hdGrid i').count(); assert(cells >= 365 && cells <= 371, String(cells));
+  assert(await p.locator('#hdGrid i.on').count() >= 1); assert.match(await p.textContent('#hdStats'), /최장 연속/);
+  await p.click('#hdClose'); await p.waitForTimeout(300);
   assert.equal(await p.locator('#fab').isHidden(), true); assert.equal(await p.locator('nav:not(#lNav)').isHidden(), true);
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=money]'); await p.waitForTimeout(300);
   assert.equal(await p.locator('#v-habit').isHidden(), true); assert.equal(await p.locator('#v-home').isVisible(), true);

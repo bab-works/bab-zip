@@ -382,7 +382,7 @@
   .book-hits button { display:flex; align-items:center; gap:10px; text-align:left; padding:8px 10px; background:var(--fill); border-radius:12px; }
   .book-hits img { width:34px; height:50px; object-fit:cover; border-radius:4px; flex:none; }
   .book-hits span { display:flex; flex-direction:column; min-width:0; } .book-hits small { color:var(--muted); font-size:0.765rem; }
-  .lstats { display:flex; align-items:center; gap:14px; padding:14px 16px; margin:6px 0; } .lstats > div { display:flex; flex-direction:column; gap:2px; font-size:0.882rem; }
+  .lstats { display:flex; align-items:center; gap:14px; padding:14px 16px; margin:6px 0; } .lstats > div:not(.stat3):not(.rdist) { display:flex; flex-direction:column; gap:2px; font-size:0.882rem; }
   .lstats small { color:var(--muted); font-size:0.765rem; }
   .goal { position:relative; width:64px; height:64px; padding:0; background:none; flex:none; display:grid; place-items:center; }
   .goal svg { position:absolute; inset:0; transform:rotate(-90deg); } .goal circle { fill:none; stroke-width:7; }
@@ -403,6 +403,24 @@
   .qcard figcaption { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:0.706rem; color:#8a7d63; }
   .qcard.empty blockquote { color:#8a7d63; }
   .quotes textarea { width:100%; }
+  .stat4 { grid-template-columns:repeat(4, minmax(0,1fr)); margin-top:8px; } .stat4 small { color:var(--muted); font-size:0.706rem; }
+  .heat-wrap { display:flex; gap:4px; overflow-x:auto; padding-bottom:6px; }
+  .heat-days { display:grid; grid-template-rows:repeat(7, 12px); gap:3px; font-size:0.588rem; color:var(--muted); position:sticky; left:0; background:var(--sheet-bg, var(--bg)); padding-right:2px; }
+  .heat { display:grid; grid-template-rows:repeat(7, 12px); grid-auto-flow:column; grid-auto-columns:12px; gap:3px; }
+  .heat i { border-radius:3px; background:var(--fill); } .heat i.on { background:var(--c); } .heat i.miss { background:color-mix(in srgb, var(--c) 18%, var(--fill)); }
+  .hlist li[data-hd] { cursor:pointer; }
+  .lock { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; border-radius:0; background:var(--bg); display:none; place-items:center; }
+  .lock[open] { display:grid; } .lock::backdrop { background:var(--bg); }
+  .lock-in { display:flex; flex-direction:column; align-items:center; gap:10px; } .lock-in > svg.i { width:44px; height:44px; color:var(--accent); }
+  .lock-in h2 { font-size:1.412rem; margin:0; } #lockPw { display:flex; gap:6px; margin-top:18px; } #lockPw input { width:170px; }
+  .recap-banner { display:flex; justify-content:space-between; align-items:center; width:100%; margin:8px 0; padding:14px 18px; border-radius:18px; color:#fff; font-weight:700; background:linear-gradient(120deg, #3182f6, #7b5cf5); }
+  .recap-banner[hidden] { display:none; }
+  .recap { width:min(92vw, 440px); background:linear-gradient(160deg, #3182f6, #7b5cf5); color:#fff; } .recap h2 { font-size:1.412rem; }
+  .rc-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; }
+  .rc-list li { display:flex; gap:12px; align-items:center; padding:10px 14px; border-radius:14px; background:rgba(255,255,255,.14); }
+  .rc-list .em { font-size:1.6rem; } .rc-list div { display:flex; flex-direction:column; min-width:0; } .rc-list b { font-size:1.176rem; }
+  .rc-list small { opacity:.8; font-size:0.765rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .recap button:not(.primary) { background:rgba(255,255,255,.18); color:#fff; } .recap .primary { background:#fff; color:#3182f6; }
   #payChips { display:flex; gap:6px; flex-wrap:wrap; } .pay-list button { display:block; width:100%; text-align:left; padding:12px 14px; margin:4px 0; background:var(--fill); }
   .pay-list button[aria-pressed="true"] { background:var(--accent); color:#fff; }
   .menu-list.editing button:nth-child(even) { animation-delay:-.15s; }
@@ -502,6 +520,7 @@
   <symbol id="i-l-playWant" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
   <symbol id="i-l-wish" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
   <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
 </svg>
@@ -524,6 +543,7 @@
 
 <main>
   <section id="v-home">
+    <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 BAB:ZIP 결산이 나왔어요<span>보기 ›</span></button>
     <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
       <div id="todayCan" class="today-can" hidden></div>
@@ -753,6 +773,24 @@
   <form id="qForm"><textarea id="qText" rows="3" maxlength="2000" placeholder="밑줄 그은 문장 (쪽수도 함께 적어도 돼요)" aria-label="새 밑줄 문장"></textarea>
     <div class="row" style="justify-content:flex-end;margin-top:8px"><button type="button" id="qClose">닫기</button><button class="primary">추가</button></div></form>
 </dialog>
+<dialog id="hDetail" class="sheet" aria-labelledby="hdTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="hdTitle" style="text-align:center"></h2>
+  <div id="hdStats" class="stat3 stat4"></div>
+  <p class="hint" style="margin-top:14px">최근 1년 · 진한 칸이 한 날, 흐린 칸이 빠진 날</p>
+  <div class="heat-wrap"><div class="heat-days" aria-hidden="true"><span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span></div><div id="hdGrid" class="heat" role="img" aria-label="최근 1년 체크 기록"></div></div>
+  <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="hdClose">닫기</button></div>
+</dialog>
+<dialog id="lock" class="lock" aria-label="잠김">
+  <div class="lock-in"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><h2>BAB:ZIP</h2><p class="hint">잠겨 있어요</p>
+    <button type="button" id="unlock" class="primary">Face ID로 열기</button>
+    <form id="lockPw"><input type="password" name="pw" placeholder="또는 앱 비밀번호" aria-label="앱 비밀번호" autocomplete="current-password"><button class="small">열기</button></form></div>
+</dialog>
+<dialog id="recap" class="recap" aria-labelledby="rcTitle">
+  <h2 id="rcTitle"></h2>
+  <ul id="rcList" class="rc-list"></ul>
+  <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" id="rcClose">닫기</button><button type="button" id="rcSave" class="primary">이미지로 저장</button></div>
+</dialog>
 <dialog id="paySheet" class="sheet">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <h2 style="text-align:center">결제수단</h2>
@@ -770,6 +808,7 @@
   <form method="dialog" id="settingsForm">
     <h2>내 시트 연결</h2>
     <label class="f">비밀번호<input name="token" type="password" autocomplete="current-password"></label>
+    <label class="switch" style="margin:10px 0"><input type="checkbox" id="lockOn"><i aria-hidden="true"></i>앱을 열 때 Face ID로 잠금</label>
     <details class="adv"><summary>고급 · 다른 시트에 연결</summary>
       <label class="f">설정 링크 붙여넣기<input name="link" type="url" placeholder="https://bab-works.github.io/bab-zip/#url=…&token=…"></label>
       <label class="f">시트 주소 (웹 앱 URL)<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>

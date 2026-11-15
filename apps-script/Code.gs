@@ -377,7 +377,7 @@ function testTickTick() { const h = habits_(); Logger.log('틱틱 습관 %s개: 
 const ckStamp_ = c => Number(c.checkinStamp || c.stamp);
 function habits_() {
   const hs = tt_('/habits').filter(h => h.status === 0).sort((a, b) => a.sortOrder - b.sortOrder); // status 0 = 보관 안 한 습관
-  const q = hs.length ? tt_('/habitCheckins/query', { habitIds: hs.map(h => h.id), afterStamp: stamp_(new Date(Date.now() - 120 * 864e5)) }).checkins || {} : {};
+  const q = hs.length ? tt_('/habitCheckins/query', { habitIds: hs.map(h => h.id), afterStamp: stamp_(new Date(Date.now() - 371 * 864e5)) }).checkins || {} : {};
   return hs.map(h => ({
     id: h.id, name: h.name, color: h.color || '#4772fa', icon: h.iconRes || '', rule: h.repeatRule || '', enc: h.encouragement || '',
     total: h.totalCheckIns || 0, done: (q[h.id] || []).filter(c => c.status === 2).map(ckStamp_),
