@@ -386,7 +386,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok(!B.d[4] || !B.d[4][5], 'row removed');
   await p.click('#lClose'); assert.equal(await p.inputValue('#lq'), ''); assert.ok(!(await p.isVisible('#lSbar')));
   // 구매 목록 체크
-  await p.click('#lTabs [data-list=buy]'); await p.click('#lList li[data-id] >> nth=0');
+  await p.click('#lNav [data-list=buy]'); await p.click('#lList li[data-id] >> nth=0');
   await p.click('#lForm label.switch'); await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.strictEqual(bookSS['구매 목록'].d[1][3], true);
   assert.match(await p.textContent('#lList'), /구매함/);
@@ -482,7 +482,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok((await clipH()) < openH / 3, 'snaps to week');
   await p.click('#calGrab'); await p.waitForTimeout(300);
   // 바뀐 것만 받기: 최근 두 달만 받고, 예전 줄이 바뀌면 전체를 다시 받음
-  { const since = ago(2) + '-01', reqs = [];
+  { const since = ago(1) + '-01', reqs = [];
     p.on('request', q => { if (q.url().startsWith('https://script.google.com') && q.method() === 'GET') reqs.push(q.url()); });
     const oldDay = new Date(now.getFullYear(), now.getMonth() - 5, 3);
     T.d.push([oldDay, '', '지출', '식비', '', '옛날 거래', '', '', 1234, '', '', '', '', '', '', 'old-1']);

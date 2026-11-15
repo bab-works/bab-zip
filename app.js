@@ -128,6 +128,7 @@ function opText(o) {
   return o.action;
 }
 function renderPending() {
+  caches?.keys().then(ks => { $('#pendVer').textContent = '앱 버전 ' + (ks.find(k => k.startsWith('gagyebu-')) || '?').replace('gagyebu-', ''); }).catch(() => {});
   $('#pendErr').textContent = pending.length ? `맨 위 항목에서 멈췄어요 · 오류: ${lastErr || '없음'}` : '보낼 것이 없어요 · 모두 시트에 저장됐어요';
   $('#pendList').innerHTML = pending.map((o, k) => `<li><span>${esc(opText(o))}</span><button type="button" class="small danger" data-k="${k}">버리기</button></li>`).join('');
   $('#pendRetry').disabled = !pending.length;
@@ -173,9 +174,8 @@ async function api(body, qs = '') {
   try { return await call(body); }
   catch (e) {
     if (!e.unreached) throw e;
-    const r = await viaGet();
-    store.set('writeViaGet', true);
-    return r;
+    try { const r = await viaGet(); store.set('writeViaGet', true); return r; }
+    catch (e2) { throw Object.assign(new Error(`${e.message} · GET으로도 실패: ${e2.message}`), { unreached: e2.unreached, rejected: e2.rejected }); }
   }
 }
 async function call(body, qs = '') {
@@ -220,8 +220,8 @@ async function refresh() {
     document.body.classList.toggle('loading', !data.items.length);
     if (await sync()) {
       try {
-        // 최근 두 달만 받고, 그 이전은 지문이 같으면 폰에 있는 것을 그대로 씀 (예전 줄이 바뀌었으면 전체를 다시 받음)
-        const since = ymAdd(localISO().slice(0, 7), -2) + '-01';
+        // 지난달 1일부터만 받고, 그 이전은 지문이 같으면 폰에 있는 것을 그대로 씀 (예전 줄이 바뀌었으면 전체를 다시 받음)
+        const since = ymAdd(localISO().slice(0, 7), -1) + '-01';
         let r = await api(null, `&since=${since}${data.old?.since === since ? '' : '&full=1'}`);
         if (r.old && !r.full && r.old.h !== data.old.h) r = await api(null, `&since=${since}&full=1`);
         const items = r.old && !r.full ? [...data.items.filter(i => i.date < since), ...r.items] : r.items;
@@ -896,8 +896,10 @@ function listInfo(k, a) {
 function renderLists() {
   if (!SECTIONS[sec].tabs) return;
   const tabs = SECTIONS[sec].tabs;
-  $('#lTabs').hidden = tabs.length < 2;
-  $('#lTabs').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" aria-pressed="${k === curList}">${label}</button>`).join('');
+  // 독서처럼 목록이 여러 개면 가계부처럼 아래 탭 바로 (위쪽 탭 줄은 쓰지 않음)
+  $('#lTabs').hidden = true;
+  $('#lNav').hidden = tabs.length < 2;
+  $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-l-${k}"/></svg>${label}</button>`).join('');
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
@@ -1004,6 +1006,7 @@ function setSection(k) {
   const money = k === 'money', habit = k === 'habit';
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
+  $('#lNav').hidden = true; // 목록 화면이면 renderLists가 다시 켬
   $('#v-lists').hidden = money || habit;
   $('#v-habit').hidden = !habit;
   if (!money) replay($('#v-' + (habit ? 'habit' : 'lists')), 'enter');
@@ -1110,9 +1113,9 @@ $('#menuBtn').addEventListener('click', openMenu);
 // 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
 // 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
 {
-  const menu = $('#menu'), dim = p => `0 0 0 200vmax rgba(0,0,0,${(0.4 * p).toFixed(3)})`;
+  const menu = $('#menu');
   const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
-  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.boxShadow = dim(p); };
+  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); };
   let sw = null;
   document.addEventListener('touchstart', e => {
     sw = null;
@@ -1143,15 +1146,16 @@ $('#menuBtn').addEventListener('click', openMenu);
     if (!sw?.on) { sw = null; return; }
     const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
     sw = null;
-    menu.style.transition = 'transform .3s var(--ease-out), box-shadow .3s var(--ease-out)';
+    menu.style.transition = 'transform .3s var(--ease-out)';
     paint(keep ? 1 : 0);
     setTimeout(() => {
-      if (!keep) closeNow(menu);
-      menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = menu.style.boxShadow = '';
+      if (!keep) closeNow(menu); else menu.classList.add('settled'); // 열린 채로 두면 펼침 애니메이션을 다시 틀지 않음
+      menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = ''; menu.style.removeProperty('--p');
     }, 300);
   };
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
+  menu.addEventListener('close', () => menu.classList.remove('settled'));
 }
 // 메뉴 항목을 꾹 누르면 편집 모드 → 끌어서 순서 변경, 「완료」나 메뉴를 닫으면 끝
 {
@@ -1191,7 +1195,7 @@ $('#menuList').addEventListener('click', e => {
   const k = e.target.closest('[data-sec]')?.dataset.sec;
   if (k) { $('#menu').close(); setSection(k); }
 });
-$('#lTabs').addEventListener('click', e => {
+$('#lNav').addEventListener('click', e => {
   const k = e.target.closest('[data-list]')?.dataset.list;
   if (k) { curList = k; renderLists(); }
 });

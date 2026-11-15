@@ -39,7 +39,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.click('#hList li:nth-child(2) .hcheck'); await p.waitForTimeout(300);
   assert.deepEqual(posts.at(-1).done, false); assert.equal(posts.at(-1).stamp, st(1));
   await p.click('#reload'); await p.waitForTimeout(500);
-  assert.equal(await p.locator('#fab').isHidden(), true); assert.equal(await p.locator('nav').isHidden(), true);
+  assert.equal(await p.locator('#fab').isHidden(), true); assert.equal(await p.locator('nav:not(#lNav)').isHidden(), true);
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=money]'); await p.waitForTimeout(300);
   assert.equal(await p.locator('#v-habit').isHidden(), true); assert.equal(await p.locator('#v-home').isVisible(), true);
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=book]'); await p.waitForTimeout(300);

@@ -13,13 +13,16 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
     r.dispatchEvent(new TouchEvent('touchstart', { touches: [t(x0)], bubbles: true, cancelable: true }));
     let mid = null;
     for (let i = 1; i <= steps; i++) { r.dispatchEvent(new TouchEvent('touchmove', { touches: [t(x0 + dx * i / steps)], bubbles: true, cancelable: true }));
-      if (i === steps / 2) { const m = document.querySelector('#menu'); mid = [m.style.transform, m.style.boxShadow]; } await new Promise(z => setTimeout(z, gap)); }
+      if (i === steps / 2) { const m = document.querySelector('#menu'); mid = [m.style.transform, m.style.getPropertyValue('--p')]; } await new Promise(z => setTimeout(z, gap)); }
     r.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [t(x0 + dx)], bubbles: true, cancelable: true }));
     await new Promise(z => setTimeout(z, 450));
     return { open: document.querySelector('#menu').open, mid };
   }, [sel, x0, dx, steps, gap]);
   const assert = require('assert');
-  let r = await swipe('#budgets', 60, 240); console.log('home drag right', r); assert(r.open && /translateX\(-/.test(r.mid[0]) && /0\.\d+\)/.test(r.mid[1]));
+  let r = await swipe('#budgets', 60, 240); console.log('home drag right', r); assert(r.open && /translateX\(-/.test(r.mid[0]) && +r.mid[1] > 0 && +r.mid[1] < 1, 'follows finger, dim grows');
+  // 손을 뗀 뒤 펼침 애니메이션이 다시 재생되지 않음 (두 번 펼쳐지던 문제)
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).animationName), 'none');
+  assert.equal(await p.evaluate(() => Math.round(document.querySelector('#menu').getBoundingClientRect().left)), 0);
   await p.screenshot({ path: S + '/menu-open.png' });
   r = await swipe('#menu', 250, -200); console.log('drag left on menu', r); assert(!r.open);
   r = await swipe('#budgets', 60, 60, 10, 80); console.log('short slow drag', r); assert(!r.open);

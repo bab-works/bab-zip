@@ -219,18 +219,19 @@
   .cal-head b { font-size:1rem; }
   .cal-plus { flex:none; width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.25); display:grid; place-items:center; font-size:1.412rem; line-height:1; }
   /* 탭 바 + 추가 버튼 (떠 있는 캡슐) */
-  nav { position:fixed; left:12px; right:84px; bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); display:flex; border-radius:999px; padding:5px; z-index:5; }
-  @media (min-width:592px) { nav { left:calc(50vw - 264px); right:calc(50vw - 192px); } }
+  /* 아래 바들은 가운데 앱 폭(560px) 안에만: --edge = 화면이 넓을 때 양옆 빈 공간 */
+  :root { --edge:max(0px, calc(50vw - 280px)); }
+  nav { position:fixed; left:calc(var(--edge) + 12px); right:calc(var(--edge) + 84px); bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); display:flex; border-radius:999px; padding:5px; z-index:5; }
   nav button { flex:1; background:none; color:var(--muted); font-size:0.706rem; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 0; }
-  nav { box-shadow:0 4px 20px rgba(0,0,0,.08); right:142px; }
+  nav { box-shadow:0 4px 20px rgba(0,0,0,.08); right:calc(var(--edge) + 142px); }
   /* 하단 검색 (키보드가 올라오면 --kb만큼 같이 올라감) */
   .sbtn, .sbar { position:fixed; bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + var(--kb, 0px)); z-index:5; background:var(--glass); box-shadow:0 4px 20px rgba(0,0,0,.08); }
   nav, #fab { bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + var(--kb, 0px)); }
-  .sbtn { right:84px; width:54px; height:54px; margin-bottom:4px; border-radius:50%; padding:0; display:grid; place-items:center; color:var(--fg); }
-  .sbar { left:12px; right:84px; height:54px; margin-bottom:4px; border-radius:999px; display:none; align-items:center; gap:8px; padding:0 8px 0 18px; color:var(--muted); }
+  .sbtn { right:calc(var(--edge) + 84px); width:54px; height:54px; margin-bottom:4px; border-radius:50%; padding:0; display:grid; place-items:center; color:var(--fg); }
+  .sbar { left:calc(var(--edge) + 12px); right:calc(var(--edge) + 84px); height:54px; margin-bottom:4px; border-radius:999px; display:none; align-items:center; gap:8px; padding:0 8px 0 18px; color:var(--muted); }
   .sbar input { flex:1; min-width:0; border:0; background:none; padding:10px 0; font-size:1rem; color:var(--fg); box-shadow:none; outline:none; }
   .sbar input::-webkit-search-cancel-button { -webkit-appearance:none; display:none; } /* ✕는 우리 단추 하나만 */
-  body.nofab nav { right:72px; } body.nofab .sbtn { right:12px; } body.nofab .sbar { right:12px; }
+  body.nofab nav { right:calc(var(--edge) + 72px); } body.nofab .sbtn, body.nofab .sbar { right:calc(var(--edge) + 12px); }
   .sbar .sclose, .sbar #sClose { width:36px; height:36px; border-radius:50%; padding:0; background:var(--fill); color:var(--muted); font-size:0.882rem; }
   body.searching.money #sbar, body.searching:not(.money) #lSbar { display:flex; animation:popIn .25s var(--ease-out); }
   body.searching nav, body.searching #searchBtn, .sbtn[hidden] { display:none; }
@@ -238,7 +239,7 @@
   .chip-btn { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:999px; background:var(--glass); font-size:0.824rem; font-weight:600; color:var(--fg); }
   .chip-btn svg.i { width:16px; height:16px; }
   nav button[aria-current="page"] { color:var(--accent); background:transparent; font-weight:700; }
-  #fab { position:fixed; right:max(12px, calc(50vw - 264px)); bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); width:62px; height:62px; padding:0;
+  #fab { position:fixed; right:calc(var(--edge) + 12px); bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); width:62px; height:62px; padding:0;
     display:grid; place-items:center; background:var(--accent); color:#fff; box-shadow:0 6px 16px rgba(49,130,246,.35); z-index:5; }
   #fab svg.i { width:28px; height:28px; stroke-width:2.5; }
 
@@ -272,14 +273,16 @@
   @keyframes fadeOut { to { opacity:0; } }
   /* 왼쪽에서 나오는 메뉴 */
   #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0 28px 28px 0; border-left:0;
-    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .34s var(--ease-out);
-    box-shadow:0 0 0 200vmax rgba(0,0,0,.4); } /* 어두운 그림자는 메뉴가 끌고 다님 → 미는 만큼 서서히 진해짐 */
-  #menu::backdrop { background:none; animation:none; }
+    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .34s var(--ease-out); box-shadow:8px 0 24px rgba(0,0,0,.12); }
+  /* 뒤 화면 어둡게: 미는 만큼(--p) 서서히 진해짐 (예전 거대한 그림자보다 아이폰에서 가벼움) */
+  #menu::backdrop { background:rgba(0,0,0,.4); opacity:var(--p, 1); animation:fadeIn .34s var(--ease-out); }
+  /* 밀어서 연 뒤엔 펼침 애니메이션이 다시 재생되지 않게 (settled). 닫힘(closing)은 항상 재생 */
+  #menu.dragging, #menu.dragging::backdrop, #menu.settled, #menu.settled::backdrop { animation:none; }
   #menu.closing { animation:sideOut .22s var(--ease-in) forwards; }
-  #menu.dragging { animation:none; }
-  @keyframes sideOut { to { transform:translateX(-100%); box-shadow:0 0 0 200vmax rgba(0,0,0,0); } }
+  #menu.closing::backdrop { animation:fadeOut .22s var(--ease-in) forwards; }
+  @keyframes sideOut { to { transform:translateX(-100%); } }
   #menu::before { display:none; }
-  @keyframes side { from { transform:translateX(-100%); box-shadow:0 0 0 200vmax rgba(0,0,0,0); } }
+  @keyframes side { from { transform:translateX(-100%); } }
   .menu-list { display:flex; flex-direction:column; gap:6px; }
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
@@ -426,6 +429,9 @@
   <symbol id="i-s-movie" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6l2 4M12 6l2 4M17 6l2 4"/></symbol>
   <symbol id="i-s-play" viewBox="0 0 24 24"><path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10"/></symbol>
   <symbol id="i-s-habit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+  <symbol id="i-l-book" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6v14"/></symbol>
+  <symbol id="i-l-buy" viewBox="0 0 24 24"><path d="M3 4h2l2.5 11h11L21 7H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
+  <symbol id="i-l-wish" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
   <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
 </svg>
@@ -565,6 +571,7 @@
   <button data-view="cal"><svg class="i"><use href="#i-cal"/></svg>달력</button>
   <button data-view="list"><svg class="i"><use href="#i-list"/></svg>내역</button>
 </nav>
+<nav id="lNav" aria-label="목록 종류" hidden></nav>
 <!-- iOS 26처럼 검색은 아래: 가계부는 탭 바 옆 동그란 검색 단추 → 누르면 탭 바 자리가 검색창으로, 취미 목록은 아래 검색창 -->
 <button id="searchBtn" class="sbtn" aria-label="검색"><svg class="i"><use href="#i-search"/></svg></button>
 <div id="sbar" class="sbar" role="search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
@@ -685,6 +692,7 @@
 <dialog id="pend" class="help" aria-labelledby="pendTitle">
   <h2 id="pendTitle">시트에 아직 못 보낸 것</h2>
   <p id="pendErr" class="hint"></p>
+  <p id="pendVer" class="hint" style="margin-top:-4px"></p>
   <ul id="pendList" class="pend-list"></ul>
   <div class="row" style="justify-content:flex-end; margin-top:14px">
     <button type="button" id="pendClose">닫기</button>

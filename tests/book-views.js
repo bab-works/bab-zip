@@ -23,6 +23,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.getAttribute('#lViews [data-v=flow]', 'aria-pressed'), 'true');
   assert.equal(await p.isVisible('#lListCard'), false);
   assert.equal(await p.textContent('#fTitle'), '페스트');
+  assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button').count(), 3); assert.equal(await p.isVisible('#lTabs'), false);
+  assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
   assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
   await p.click('#fAdd'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), ''); await p.click('#lCancel'); await p.waitForTimeout(300);
   await p.screenshot({ path: S + '/flow.png' });
@@ -58,6 +60,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.click('#lViews [data-v=flow]');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
+  assert.equal(await p.isVisible('#lNav'), false, 'single-list sections have no bottom tab bar');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), false); assert.equal(await p.isVisible('#lHead'), false, 'no empty top box'); assert.equal(await p.isVisible('#lListCard'), true);
   console.log('BOOK VIEWS OK'); await b.close(); process.exit(0); });
