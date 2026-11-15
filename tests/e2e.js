@@ -67,7 +67,8 @@ const hobbySS = { '방탈출 기록': new Sheet([[], ['총 진행 테마 수', '
     withId(['방문일', '테마', '포스터', '매장', '지역', '결과', '인원', '힌트 수', '남은 시간(분)', '비용(원)', '평점(1~5)', '함께한 사람', '후기', ''], 14),
     [D('2023-07-16'), '인투더와일드', '', '마스터키 프라임', '신촌'], ['', '에피소드 1', '', '포인트나인', '강남']], 1000, 26),
   '취미 기록': new Sheet([['기록 ID', '날짜', '종류', '테마·보드게임', '장소', '함께한 사람', '후기', '연결 일정', '일정 키']], 1000, 26) };
-const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS: 'ROWS' } },
+let flushError = null; // 시트 규칙 위반처럼 저장 마지막(flush)에 나는 오류 흉내
+const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS: 'ROWS' }, flush: () => { if (flushError) throw new Error(flushError); } },
   ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
   Utilities: { formatDate: (d, tz, p) => p === 'yyyy-MM' ? ymd(d).slice(0, 7) : ymd(d), getUuid: () => 'u' + (++uid),
     DigestAlgorithm: { MD5: 'MD5' }, computeDigest: (a, t) => [...crypto.createHash('md5').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
@@ -372,7 +373,16 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#fab'); await p.waitForSelector('#lItem', { state: 'visible' });
   await p.fill('#lForm [name=title]', '=새 책'); await p.fill('#lForm [name=author]', '작가'); await p.click(`#lForm label:has(input[name=stars][value="🙂"])`);
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
-  assert.deepEqual([B.d[4][0], B.d[4][1], B.d[4][2], B.d[4][3], B.d[4][5], B.d[4][6], B.d[4][7], B.d[4][8]], [4, CUR.slice(0, 4) + '년', CUR.slice(5) + '월', 3, '=새 책', '작가', '읽는중', '🙂']);
+  assert.deepEqual([B.d[4][0], B.d[4][1], B.d[4][2], B.d[4][3], B.d[4][5], B.d[4][6], B.d[4][7], B.d[4][8]], [4, CUR.slice(0, 4) + '년', CUR.slice(5) + '월', 3, '=새 책', '작가', '읽는중', '★★★★']);
+  // 시트에는 ★로(독서 별점 칸 규칙), 앱에는 다시 이모지로
+  await p.click('#reload'); await status(/동기화됨/);
+  assert.equal(await p.evaluate(() => lists.book.find(i => i.title === '=새 책').stars), '🙂');
+  // 시트가 저장을 거부하면(규칙 위반 등) 오류 페이지가 아니라 글로 돌아오고, 대기 줄을 막지 않음
+  flushError = 'I5 셀에 입력하신 데이터는 이 셀에 설정된 데이터 확인 규칙을 위반합니다';
+  await p.click('#lList li[data-id] >> nth=0'); await p.click(`#lForm label:has(input[name=stars][value="😍"])`); await p.click('#lForm button.primary');
+  await p.waitForFunction(() => /규칙을 위반/.test(document.querySelector('#toast').textContent));
+  assert.equal(await p.evaluate(() => pending.length), 0, 'rejected op is dropped, queue not blocked');
+  flushError = null;
   assert.match(await p.textContent('#lList li >> nth=0'), /새 책/);
   // 수정
   await p.click('#lList li[data-id] >> nth=0'); await p.click(`#lForm label:has(input[name=status][value="보류"])`);

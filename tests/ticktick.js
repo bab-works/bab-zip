@@ -18,7 +18,7 @@ const UrlFetchApp = { fetch(url, o) {
 const ctx = { UrlFetchApp, console,
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: k => { delete props[k]; } }) },
   Utilities: { getUuid: () => crypto.randomUUID(), formatDate: (d, tz, p) => p === 'yyyyMMdd' ? d.toISOString().slice(0, 10).replace(/-/g, '') : d.toISOString().replace(/\.\d+Z$/, p.includes('.000') ? '.000+0000' : '+0000') },
-  SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSpreadsheetTimeZone: () => 'Asia/Seoul' }) },
+  SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSpreadsheetTimeZone: () => 'Asia/Seoul' }), flush() {} },
   ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) } };
 vm.createContext(ctx); vm.runInContext(fs.readFileSync(require('path').join(__dirname, '../apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'T';"), ctx);

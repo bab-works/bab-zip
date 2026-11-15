@@ -228,6 +228,10 @@ function listIds_(sh, c, m, last) {
   if (changed) r.setValues(v);
   return v.map(x => String(x[0]));
 }
+// 독서 별점 칸은 시트 규칙상 ★~★★★★★만 받으므로, 앱의 이모지 5단계와 ★ 개수를 서로 바꿔 씀
+const STARS_ = ['😫', '😕', '😐', '🙂', '😍'];
+const toStars_ = v => { const k = STARS_.indexOf(String(v)); return k < 0 ? v : '★'.repeat(k + 1); };
+const fromStars_ = v => /^★{1,5}$/.test(String(v)) ? STARS_[String(v).length - 1] : v;
 // =IMAGE("주소") 수식에서 주소 꺼내기
 const imgOf_ = f => { const m = String(f || '').match(/IMAGE\(\s*"([^"]+)"/i); return m ? m[1] : ''; };
 function listRead_(k) {
@@ -242,6 +246,7 @@ function listRead_(k) {
       if (f === 'image' || !m[f].col) continue;
       const x = r[m[f].col - 1], t = m[f].type;
       o[f] = t === 'bool' ? x === true : t === 'num' ? (x === '' ? '' : num_(x)) : t === 'date' ? fmt_(x, 'yyyy-MM-dd') : String(x == null ? '' : x);
+      if (f === 'stars') o[f] = fromStars_(o[f]);
     }
     const raw = imgCol ? String(r[imgCol - 1]) : '';
     o.image = imgOf_(forms[i] && forms[i][0]) || (/^https?:\/\//.test(raw) ? raw : '');
@@ -257,7 +262,7 @@ function listSave_(k, item) {
   for (const f in c.f) {
     if (!(f in item) || !m[f].col) continue;
     if (f === 'image') { if (/^https:\/\//.test(String(item.image))) sh.getRange(row, m.image.col).setValue(String(item.image).slice(0, 500)); continue; } // 앱은 바꾼 https 주소만 보냄
-    const t = m[f].type, x = item[f];
+    const t = m[f].type, x = f === 'stars' ? toStars_(item[f]) : item[f];
     sh.getRange(row, m[f].col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
       : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, 1000));
   }
@@ -431,11 +436,12 @@ function writeOp_(b) {
       else if (b.action === 'listDelete') listDelete_(b.list, b.id);
       else if (b.action === 'habitCheck') habitCheck_(b.habitId, b.stamp, b.done);
       else throw new Error('알 수 없는 동작');
+      SpreadsheetApp.flush(); // 시트 규칙 위반 같은 오류를 여기서 잡아 글로 돌려줌 (안 그러면 오류 페이지가 가서 앱엔 Load failed로 보임)
     });
     return out_({ ok: true, wrote: true });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
-    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱/.test(err.message) });
+    return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱|규칙/.test(err.message) });
   }
 }
 
