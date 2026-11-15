@@ -16,7 +16,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request();
     if (q.method() === 'POST') { posts.push(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
-    rt.fulfill({ contentType: 'application/json', body: /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
+    rt.fulfill({ contentType: 'application/json', body: /what=book&/.test(q.url()) ? JSON.stringify({ ok: true, books: [{ title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/x/cover500/p.jpg' }] }) : /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
   });
   await p.goto('http://localhost:8791/'); await p.waitForSelector('#lFlow .fc'); await p.waitForTimeout(COVERS ? 2500 : 600);
   // 기본은 커버플로우, 가장 최근(시트 맨 아래) 책이 가운데
@@ -26,7 +26,10 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button[data-list]').count(), 3); assert.equal(await p.locator('#lNav [data-search]').count(), 1); assert.equal(await p.isVisible('#lTabs'), false);
   assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
   assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
-  await p.click('#fAdd'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), ''); await p.click('#lCancel'); await p.waitForTimeout(300);
+  await p.click('#fAdd'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), '');
+  await p.fill('#lForm [name=title]', '페스'); await p.click('#bookHits [data-hit="0"]');
+  assert.equal(await p.inputValue('#lForm [name=author]'), '알베르 카뮈'); assert.equal(await p.inputValue('#lForm [name=image]'), 'https://image.aladin.co.kr/x/cover500/p.jpg');
+  assert.equal(await p.inputValue('#lForm [name=title]'), '페스트'); assert.equal(await p.locator('#bookHits button').count(), 0); await p.click('#lCancel'); await p.waitForTimeout(300);
   await p.screenshot({ path: S + '/flow.png' });
   // 옆 책을 누르면 가운데로 넘어오고 정보가 바뀜
   await p.click('#lFlow .fc:nth-child(2)', { force: true }); await p.waitForTimeout(700);
@@ -67,4 +70,15 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.isVisible('#lNav'), false, 'single-list sections have no bottom tab bar');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'movies too');
+  assert.equal(await p.locator('#lNav [data-list=movieWant]').count(), 1, 'want-to-see tab');
+  await p.click('#menuBtn'); await p.click('#menuList [data-sec=book]'); await p.waitForTimeout(400);
+  // 독서 목표 고리: 눌러서 정하면 올해 완독 / 목표
+  p.once('dialog', d => d.accept('10')); await p.click('#goalSet');
+  assert.match(await p.textContent('#goalSet'), /\/10/);
+  // 밑줄 문장: 가운데 책에서 열어 추가
+  await p.click('#fQuotes'); await p.waitForSelector('#quotes[open]');
+  await p.fill('#qText', '가장 좋은 문장'); await p.click('#qForm button.primary');
+  assert.equal(await p.locator('#qCards .qcard:not(.empty)').count(), 1);
+  await p.click('#qClose'); await p.waitForTimeout(300);
+  assert.match(await p.textContent('#fQuotes'), /밑줄 1/);
   console.log('BOOK VIEWS OK'); await b.close(); process.exit(0); });

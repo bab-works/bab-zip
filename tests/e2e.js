@@ -533,5 +533,17 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
     JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ action: 'autoTx', token: TOKEN, amount: '5,000원', merchant: '스타벅스 역삼', card: '' }) } }));
     assert.deepEqual(T.d[T.d.length - 1].slice(2, 6), ['지출', '카페·간식', '카페', '스타벅스 역삼'], 'POST JSON from Shortcuts');
     console.log('AUTO TX OK'); }
+  { // 밑줄 문장: 제목 줄에 칸이 없으면 맨 끝에 만들어 저장 / 보고 싶어요 탭: 읽을 땐 없어도 빈 목록, 처음 저장할 때 만듦
+    const B = bookSS['독서 기록'], post = o => JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ token: TOKEN, ...o }) } }));
+    const ic = B.d[0].indexOf('id'), row = B.d.find((r, k) => k && r && r[ic] && r[5]), id = row[ic], title = row[5];
+    assert.equal(post({ action: 'listSave', list: 'book', item: { id, title, quotes: '첫 문장\n\n둘째 문장' } }).ok, true);
+    const qc = B.d[0].indexOf('밑줄 문장'); assert(qc > 0, 'quotes column created');
+    assert.equal(B.d.find(r => r && r[ic] === id)[qc], '첫 문장\n\n둘째 문장');
+    const L1 = JSON.parse(gs.doGet({ parameter: { token: TOKEN, what: 'lists' } }));
+    assert.deepEqual(L1.lists.movieWant, []); assert.equal(sheets['보고 싶은 영화'], undefined, 'no tab on read');
+    assert.equal(L1.lists.book.find(i => i.id === id).quotes, '첫 문장\n\n둘째 문장');
+    assert.equal(post({ action: 'listSave', list: 'movieWant', item: { id: 'w1', title: '듄 3', memo: '12월 개봉' } }).ok, true);
+    assert.deepEqual(sheets['보고 싶은 영화'].d.map(r => Array.from(r.slice(0, 4))), [['제목', '메모', '포스터', 'id'], ['듄 3', '12월 개봉', undefined, 'w1']]);
+    console.log('QUOTES/WANT OK'); }
   console.log('ALL PASS'); await b.close(); process.exit(0);
 });

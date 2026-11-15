@@ -378,6 +378,31 @@
   .welcome h2 { font-size:1.412rem; text-align:center; margin:6px 0 4px; } .welcome p.hint { text-align:center; margin-bottom:14px; }
   .welcome .wbtn { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:14px 16px; margin:8px 0; border-radius:16px; background:var(--fill); color:var(--fg); text-decoration:none; font-weight:700; }
   .welcome .wbtn small { color:var(--muted); font-weight:500; font-size:0.765rem; }
+  .book-hits { display:flex; flex-direction:column; gap:6px; } .book-hits:empty { display:none; }
+  .book-hits button { display:flex; align-items:center; gap:10px; text-align:left; padding:8px 10px; background:var(--fill); border-radius:12px; }
+  .book-hits img { width:34px; height:50px; object-fit:cover; border-radius:4px; flex:none; }
+  .book-hits span { display:flex; flex-direction:column; min-width:0; } .book-hits small { color:var(--muted); font-size:0.765rem; }
+  .lstats { display:flex; align-items:center; gap:14px; padding:14px 16px; margin:6px 0; } .lstats > div { display:flex; flex-direction:column; gap:2px; font-size:0.882rem; }
+  .lstats small { color:var(--muted); font-size:0.765rem; }
+  .goal { position:relative; width:64px; height:64px; padding:0; background:none; flex:none; display:grid; place-items:center; }
+  .goal svg { position:absolute; inset:0; transform:rotate(-90deg); } .goal circle { fill:none; stroke-width:7; }
+  .goal .tr { stroke:var(--fill); } .goal .pg { stroke:var(--accent); stroke-linecap:round; transition:stroke-dasharray .6s var(--ease-out); }
+  .goal b { font-size:1rem; font-weight:800; } .goal b small { font-size:0.647rem; font-weight:600; }
+  .stat3 { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); width:100%; text-align:center; }
+  .stat3 span { display:flex; flex-direction:column; gap:2px; min-width:0; } .stat3 b { font-size:1.176rem; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rdist { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; width:100%; height:96px; align-items:end; }
+  .rdist span { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:2px; height:100%; font-size:1.059rem; }
+  .rdist i { display:block; width:60%; height:var(--h); min-height:3px; border-radius:6px 6px 2px 2px; background:var(--accent); opacity:.75; }
+  .rdist b { font-size:0.706rem; color:var(--muted); }
+  .fquotes { margin:8px auto 0; display:block; }
+  .quotes { width:min(92vw, 440px); } .quotes[open] { animation:flipIn .45s var(--ease-out); }
+  @keyframes flipIn { from { transform:perspective(900px) rotateY(-80deg); opacity:0; } to { transform:none; opacity:1; } }
+  .qcards { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; padding:4px 2px 12px; }
+  .qcard { flex:0 0 100%; scroll-snap-align:center; margin:0; padding:22px 20px 14px; border-radius:16px; background:#fbf6ea; color:#3b3428; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+  .qcard blockquote { margin:0; font-size:1rem; line-height:1.7; white-space:pre-wrap; word-break:keep-all; } .qcard blockquote::before { content:'❝ '; color:#b9a77d; }
+  .qcard figcaption { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:0.706rem; color:#8a7d63; }
+  .qcard.empty blockquote { color:#8a7d63; }
+  .quotes textarea { width:100%; }
   #payChips { display:flex; gap:6px; flex-wrap:wrap; } .pay-list button { display:block; width:100%; text-align:left; padding:12px 14px; margin:4px 0; background:var(--fill); }
   .pay-list button[aria-pressed="true"] { background:var(--accent); color:#fff; }
   .menu-list.editing button:nth-child(even) { animation-delay:-.15s; }
@@ -471,6 +496,10 @@
   <symbol id="i-s-habit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
   <symbol id="i-l-book" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6v14"/></symbol>
   <symbol id="i-l-buy" viewBox="0 0 24 24"><path d="M3 4h2l2.5 11h11L21 7H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
+  <symbol id="i-l-movie" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6l2 4M12 6l2 4M17 6l2 4"/></symbol>
+  <symbol id="i-l-play" viewBox="0 0 24 24"><path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10"/></symbol>
+  <symbol id="i-l-movieWant" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-l-playWant" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
   <symbol id="i-l-wish" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
@@ -592,6 +621,7 @@
         <button type="button" data-v="flow">커버플로우</button><button type="button" data-v="grid">카드</button><button type="button" data-v="list">목록</button>
       </div>
     </div>
+    <div id="lStats" class="card lstats" hidden></div>
     <p id="lInfo" class="hint" style="padding:0 4px"></p>
     <!-- 아이팟 클래식 커버플로우: 좌우로 밀어 넘기고, 가운데 책 아래에서 바로 평가 -->
     <div id="lFlowCard" class="card flow-card" hidden>
@@ -600,7 +630,8 @@
       <div class="flow-info"><b id="fTitle"></b><small id="fSub"></small>
         <div id="fRate" class="rate" role="group" aria-label="평가"></div>
         <form id="fReview" class="freview" hidden><input id="fReviewText" maxlength="200" placeholder="한 줄 리뷰를 남겨 보세요" aria-label="한 줄 리뷰" enterkeyhint="done">
-          <button class="primary small">저장</button></form></div>
+          <button class="primary small">저장</button></form>
+        <button type="button" id="fQuotes" class="small fquotes" hidden>❝ 밑줄 문장</button></div>
     </div>
     <div id="lListCard" class="card"><ul id="lList" class="tx"></ul></div>
   </section>
@@ -716,6 +747,12 @@
   <div id="wsCols" class="wpick"></div>
 </dialog>
 
+<dialog id="quotes" class="quotes" aria-labelledby="qTitle">
+  <h2 id="qTitle"></h2>
+  <div id="qCards" class="qcards"></div>
+  <form id="qForm"><textarea id="qText" rows="3" maxlength="2000" placeholder="밑줄 그은 문장 (쪽수도 함께 적어도 돼요)" aria-label="새 밑줄 문장"></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:8px"><button type="button" id="qClose">닫기</button><button class="primary">추가</button></div></form>
+</dialog>
 <dialog id="paySheet" class="sheet">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <h2 style="text-align:center">결제수단</h2>

@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v61'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v62'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -117,7 +117,7 @@ function openHelp(k) {
 }
 const retry = () => (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 // 저장 대기 목록: 무엇이 막혔는지 보고, 다시 보내거나 하나씩 버림
-const LIST_NAME = { book: '독서', buy: '구매 목록', wish: '추천·관심', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬' };
+const LIST_NAME = { book: '독서', buy: '구매 목록', wish: '추천·관심', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬', movieWant: '보고 싶은 영화', playWant: '보고 싶은 공연' };
 function opText(o) {
   const i = o.item || {};
   if (o.action === 'save') return `거래 저장 · ${i.date || ''} ${i.content || i.minor || i.major || ''} ${won(i.amount || 0)}`;
@@ -916,8 +916,8 @@ const SECTIONS = {
   book: { title: '독서', icon: '📚', tabs: [['book', '독서 기록'], ['buy', '구매 목록'], ['wish', '추천·관심']] },
   escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록']] },
   board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
-  movie: { title: '영화', icon: '🎬', tabs: [['movie', '영화 기록']] },
-  play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '연극·뮤지컬 기록']] },
+  movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '보고 싶어요']] },
+  play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '본 공연'], ['playWant', '보고 싶어요']] },
   habit: { title: '습관', icon: '🔥' },
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
@@ -943,9 +943,11 @@ const LIST_FIELDS = {
     ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
   play: [['title', '작품명', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['cast', '출연', 'text'],
     ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
+  movieWant: [['title', '보고 싶은 영화', 'text'], ['memo', '메모 (개봉일, 추천한 사람 등)', 'text'], ['image', '포스터 이미지 주소', 'url']],
+  playWant: [['title', '보고 싶은 작품', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['memo', '메모', 'text'], ['image', '포스터 이미지 주소', 'url']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
-const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭' };
+const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭', movieWant: '🔖', playWant: '🔖' };
 // 목록 한 줄: [제목, 설명, 오른쪽 표시]
 const LIST_ROW = {
   book: i => [i.title, joinDot([i.author, [i.year, i.month].filter(Boolean).join(' '), i.memo]), i.stars || i.status],
@@ -955,6 +957,8 @@ const LIST_ROW = {
   board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), i.rating],
   movie: i => [i.title, joinDot([i.director, i.date, i.place, i.with, i.review]), i.rating],
   play: i => [i.title, joinDot([i.kind, i.date, i.place, i.cast, i.with, i.review]), i.rating || i.kind],
+  movieWant: i => [i.title, i.memo || '', ''],
+  playWant: i => [i.title, joinDot([i.kind, i.memo]), ''],
 };
 function listSorted(k) {
   const a = [...L(k)].reverse(); // 시트 아래쪽(최근 입력)이 위로
@@ -972,6 +976,37 @@ function listInfo(k, a) {
   if (k === 'play') return `${n}편 · 뮤지컬 ${a.filter(i => i.kind === '뮤지컬').length} · 연극 ${a.filter(i => i.kind === '연극').length}`;
   return `${n}개 기록`;
 }
+// 목록 위 요약: 독서 연간 목표 고리, 방탈출 성공률·힌트·함께한 사람, 영화·연극·보드게임 평가 분포
+function renderStats(k, a) {
+  const el = $('#lStats'), y = localISO().slice(0, 4);
+  let h = '';
+  if (k === 'book') {
+    const goal = +store.get('bookGoal', {})[y] || 0, done = a.filter(i => i.status === '완독' && i.year === y + '년').length;
+    const C = 2 * Math.PI * 26, pct = goal ? Math.min(1, done / goal) : 0;
+    h = `<button type="button" class="goal" id="goalSet" aria-label="올해 독서 목표 ${goal ? goal + '권 중 ' + done + '권' : '정하기'}">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="tr"/><circle cx="32" cy="32" r="26" class="pg" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/></svg>
+      <b>${done}${goal ? `<small>/${goal}</small>` : ''}</b></button>
+      <div><b>${y}년 독서 목표</b><small>${goal ? (done >= goal ? '목표 달성! 🎉' : `${goal - done}권 남았어요 · 고리를 눌러 바꾸기`) : '고리를 눌러 올해 몇 권 읽을지 정해요'}</small></div>`;
+  } else if (k === 'escape' && a.length) {
+    const tried = a.filter(i => i.result), ok = tried.filter(i => i.result === '성공').length, hs = a.filter(i => i.hints !== '' && i.hints != null);
+    const ppl = {}; a.forEach(i => String(i.with || '').split(/[,·、/]+|\s{2,}/).map(t => t.trim()).filter(Boolean).forEach(t => { ppl[t] = (ppl[t] || 0) + 1; }));
+    const top = Object.entries(ppl).sort((x, z) => z[1] - x[1]).slice(0, 3);
+    h = `<div class="stat3"><span><b>${tried.length ? Math.round(ok / tried.length * 100) + '%' : '-'}</b><small>성공률 ${ok}/${tried.length}</small></span>
+      <span><b>${hs.length ? (hs.reduce((t, i) => t + +i.hints, 0) / hs.length).toFixed(1) : '-'}</b><small>평균 힌트</small></span>
+      <span><b>${top.length ? esc(top[0][0]) : '-'}</b><small>${top.length ? top.map(([n, c]) => `${esc(n)} ${c}`).join(' · ') : '함께한 사람'}</small></span></div>`;
+  } else if (RATE_KEY[k] && k !== 'book' && a.some(i => i[RATE_KEY[k]])) {
+    const cnt = RATE.map(([e]) => a.filter(i => i[RATE_KEY[k]] === e).length), max = Math.max(...cnt);
+    h = `<div class="rdist" role="img" aria-label="내 평가 분포 ${RATE.map(([e, l], n) => l.slice(e.length + 1) + ' ' + cnt[n]).join(', ')}">${RATE.map(([e], n) =>
+      `<span><i style="--h:${max ? Math.round(cnt[n] / max * 100) : 0}%"></i><b>${cnt[n]}</b>${e}</span>`).join('')}</div>`;
+  }
+  el.hidden = !h; el.innerHTML = h;
+}
+$('#lStats').addEventListener('click', e => {
+  if (!e.target.closest('#goalSet')) return;
+  const y = localISO().slice(0, 4), g = store.get('bookGoal', {}), v = prompt(`${y}년에 몇 권 읽을까요?`, g[y] || 24);
+  if (v == null) return;
+  g[y] = Math.max(0, Math.round(+v) || 0); store.set('bookGoal', g); renderLists();
+});
 function renderLists() {
   if (!SECTIONS[sec].tabs) return;
   const tabs = SECTIONS[sec].tabs;
@@ -984,6 +1019,7 @@ function renderLists() {
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
+  renderStats(curList, all);
   // 독서는 보기 3가지 (나머지 목록은 늘 목록 보기)
   const view = VIEWS[sec] ? lView() : 'list';
   $('#lViews').hidden = !VIEWS[sec];
@@ -1038,6 +1074,9 @@ function flowPaint() {
     play: () => joinDot([i.kind, i.date, i.place]) }[curList]?.() ?? joinDot([i.author, curList === 'book' ? i.status : i.memo]);
   const rk = RATE_KEY[curList];
   $('#fRate').hidden = $('#fReview').hidden = !rk; // 평가와 한 줄 리뷰를 한 화면에 함께
+  const nq = quotesOf(i).length;
+  $('#fQuotes').hidden = curList !== 'book';
+  $('#fQuotes').textContent = nq ? `❝ 밑줄 ${nq}` : '❝ 밑줄 문장 남기기';
   if (document.activeElement !== $('#fReviewText')) $('#fReviewText').value = i.review || '';
   $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i[rk] === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
 }
@@ -1061,6 +1100,35 @@ $('#fRate').addEventListener('click', e => {
   queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], [rk]: it[rk] } });
 });
 $('#fAdd').addEventListener('click', () => openItem());
+// 밑줄 문장: 책마다 여러 개 (시트 「밑줄 문장」 칸에 빈 줄로 나눠 저장). 카드를 넘기듯 좌우로 넘겨봄
+const quotesOf = i => String(i.quotes || '').split(/\n\s*\n/).map(t => t.trim()).filter(Boolean);
+let qBook = null;
+function renderQuotes() {
+  const a = quotesOf(qBook);
+  $('#qTitle').textContent = qBook.title;
+  $('#qCards').innerHTML = a.map((t, k) => `<figure class="qcard"><blockquote>${esc(t)}</blockquote><figcaption>${k + 1} / ${a.length}<button type="button" class="small danger" data-qdel="${k}">지우기</button></figcaption></figure>`).join('')
+    || '<figure class="qcard empty"><blockquote>마음에 남은 문장을 아래에 적어 두세요</blockquote></figure>';
+}
+$('#fQuotes').addEventListener('click', () => {
+  qBook = (lists.book || []).find(i => i.id === flowShown); if (!qBook) return;
+  renderQuotes(); $('#qText').value = ''; $('#quotes').showModal();
+});
+const saveQuotes = a => {
+  qBook.quotes = a.join('\n\n'); store.set('lists', lists); renderQuotes(); flowShown = ''; flowPaint();
+  return queue({ action: 'listSave', list: 'book', item: { id: qBook.id, title: qBook.title, quotes: qBook.quotes } });
+};
+$('#qForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const t = $('#qText').value.trim(); if (!t) return;
+  $('#qText').value = '';
+  saveQuotes([...quotesOf(qBook), t]).then(ok => ok && toast('밑줄 문장을 저장했어요'));
+  requestAnimationFrame(() => $('#qCards').scrollTo({ left: 1e6, behavior: 'smooth' }));
+});
+$('#qCards').addEventListener('click', e => {
+  const k = e.target.closest('[data-qdel]')?.dataset.qdel;
+  if (k != null && confirm('이 문장을 지울까요?')) saveQuotes(quotesOf(qBook).filter((_, n) => n !== +k));
+});
+$('#qClose').addEventListener('click', () => $('#quotes').close());
 // 한 줄 리뷰: 가운데 항목의 리뷰를 바로 쓰고 저장 (독서 「한 줄 리뷰」, 나머지는 「후기」 칸)
 $('#fReview').addEventListener('submit', e => {
   e.preventDefault();
@@ -1341,7 +1409,7 @@ function openItem(it) {
   lEditing = it || null;
   const opt = (n, base) => base.map(([v, l]) => `<label><input type="radio" name="${n}" value="${esc(v)}"><span>${esc(l)}</span></label>`).join('');
   $('#lFields').innerHTML = fs.map(([n, lab, type, opts], k) => {
-    if (k === 0) return `<input class="full ltitle" name="${n}" placeholder="${lab}" aria-label="${lab}" maxlength="1000" required>`;
+    if (k === 0) return `<input class="full ltitle" name="${n}" placeholder="${lab}" aria-label="${lab}" maxlength="1000" required autocomplete="off">${BOOKISH[curList] ? '<div id="bookHits" class="book-hits full" role="listbox" aria-label="알라딘 검색 결과"></div>' : ''}`;
     if (type === 'bool') return `<label class="switch full"><input type="checkbox" name="${n}"><i aria-hidden="true"></i>${lab}</label>`;
     if (type === 'select') {
       const base = (typeof opts === 'function' ? opts() : opts).map(o => Array.isArray(o) ? o : [o, o || '없음']);
@@ -1375,6 +1443,31 @@ function openItem(it) {
   lPreview(it?.image || '');
   $('#lItem').showModal();
 }
+// 책 제목을 치면 알라딘 검색 3권 → 고르면 제목·저자·표지 채움 (새로 추가할 때만)
+const BOOKISH = { book: 1, buy: 1, wish: 1 };
+let bookT = 0, bookHits = [];
+$('#lFields').addEventListener('input', e => {
+  if (e.target.name !== 'title' || !BOOKISH[curList] || lEditing) return;
+  clearTimeout(bookT);
+  const q = e.target.value.trim();
+  if (q.length < 2) { $('#bookHits').innerHTML = ''; return; }
+  bookT = setTimeout(async () => {
+    try {
+      const r = await api(null, '&what=book&q=' + encodeURIComponent(q));
+      if (q !== $('#lForm').elements.title?.value.trim()) return; // 그새 더 쳤으면 버림
+      bookHits = r.books || [];
+      $('#bookHits').innerHTML = bookHits.map((b, k) => `<button type="button" data-hit="${k}" role="option">${b.image ? `<img src="${esc(b.image)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span></button>`).join('');
+    } catch (err) { /* 검색은 덤: 실패해도 직접 입력하면 됨 */ }
+  }, 450);
+});
+$('#lFields').addEventListener('click', e => {
+  const b = bookHits[e.target.closest('[data-hit]')?.dataset.hit];
+  if (!b) return;
+  const f = $('#lForm').elements;
+  f.title.value = b.title; if (f.author) f.author.value = b.author;
+  if (f.image && b.image) { f.image.value = b.image; lPreview(b.image); }
+  $('#bookHits').innerHTML = '';
+});
 const lPreview = src => { $('#lPreview').innerHTML = /^https?:\/\//.test(src) ? `<img class="thumb big" src="${esc(src)}" alt="" referrerpolicy="no-referrer">` : ''; };
 $('#lFields').addEventListener('input', e => { if (e.target.name === 'image') lPreview(e.target.value.trim()); });
 // 이미 고른 평가를 다시 누르면 지움

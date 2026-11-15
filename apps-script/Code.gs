@@ -95,6 +95,20 @@ function autoTx_(b) {
   return { date: i.date, major: i.major, amount };
 }
 
+// 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
+// shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
+function bookSearch_(q) {
+  q = String(q || '').trim().slice(0, 60);
+  if (q.length < 2) return [];
+  const html = UrlFetchApp.fetch('https://www.aladin.co.kr/search/wsearchresult.aspx?SearchTarget=Book&SearchWord=' + encodeURIComponent(q),
+    { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }).getContentText();
+  const un = t => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+  return html.split('class="ss_book_box"').slice(1).map(b => {
+    const t = b.match(/class="bo3"[^>]*>(?:<b>)?([^<]+)/), a = b.match(/AuthorSearch=[^>]*>([^<]+)<\/a>/), c = b.match(/<img src="(https:\/\/image\.aladin\.co\.kr\/product\/[^"]+)"/);
+    return t ? { title: un(t[1]), author: a ? un(a[1]) : '', image: c ? c[1].replace(/\/cover\d*\//, '/cover500/') : '' } : null;
+  }).filter(Boolean).slice(0, 3);
+}
+
 function rows_(name, cols) {
   const sh = ss_().getSheetByName(name);
   return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues();
@@ -196,7 +210,7 @@ function daily() { withLock_(runRecurring_); }
 const LISTS = {
   book: { tab: '독서 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
     year: ['기록 시기'], month: ['', '', 3], seq: ['순번', 'num'], title: ['책 제목'], author: ['저자'], status: ['독서 상태'],
-    stars: ['별점'], review: ['한 줄 리뷰'], memo: ['메모'], image: ['표지'] } },
+    stars: ['별점'], review: ['한 줄 리뷰'], memo: ['메모'], image: ['표지'], quotes: ['밑줄 문장'] }, auto: ['quotes'] },
   buy: { tab: '구매 목록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
     title: ['책 제목'], author: ['저자'], done: ['구매 완료', 'bool'], memo: ['메모'], image: ['표지'] } },
   wish: { tab: '추천·관심 도서', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
@@ -210,6 +224,9 @@ const LISTS = {
     title: ['영화 제목'], director: ['감독'], date: ['관람일', 'date'], place: ['극장'], rating: ['평점'], with: ['함께한 사람'], review: ['후기'], image: ['포스터'] } },
   play: { tab: '연극·뮤지컬 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
     title: ['작품명'], kind: ['종류'], date: ['관람일', 'date'], place: ['극장'], cast: ['출연'], rating: ['평점'], with: ['함께한 사람'], review: ['후기'], image: ['포스터'] } },
+  // 보고 싶어요: 탭이 없으면 처음 저장할 때 만듦
+  movieWant: { tab: '보고 싶은 영화', head: 1, key: 'title', idHead: 'id', create: ['제목', '메모', '포스터', 'id'], f: { title: ['제목'], memo: ['메모'], image: ['포스터'] } },
+  playWant: { tab: '보고 싶은 공연', head: 1, key: 'title', idHead: 'id', create: ['제목', '종류', '메모', '포스터', 'id'], f: { title: ['제목'], kind: ['종류'], memo: ['메모'], image: ['포스터'] } },
 };
 // 제목 줄에서 각 필드의 열 번호를 찾음 (없으면 0)
 function listMap_(sh, c) {
@@ -226,10 +243,12 @@ function listMap_(sh, c) {
   if (!m[c.key].col) throw new Error('목록 탭 "' + c.tab + '"의 열 이름을 확인해 주세요');
   return m;
 }
-function listSheet_(k) {
+function listSheet_(k, read) {
   const c = LISTS[k];
   if (!c) throw new Error('알 수 없는 목록');
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(c.tab);
+  let sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(c.tab);
+  if (!sh && c.create && read) return null; // 아직 안 만든 「보고 싶어요」 탭은 읽을 땐 빈 목록
+  if (!sh && c.create) { sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet(c.tab); sh.getRange(1, 1, 1, c.create.length).setValues([c.create]); }
   if (!sh) throw new Error('탭 없음: ' + c.tab);
   return { sh, c, m: listMap_(sh, c) };
 }
@@ -253,7 +272,9 @@ const fromStars_ = v => /^★{1,5}$/.test(String(v)) ? STARS_[String(v).length -
 // =IMAGE("주소") 수식에서 주소 꺼내기
 const imgOf_ = f => { const m = String(f || '').match(/IMAGE\(\s*"([^"]+)"/i); return m ? m[1] : ''; };
 function listRead_(k) {
-  const { sh, c, m } = listSheet_(k), last = listLast_(sh, c, m), ids = listIds_(sh, c, m, last);
+  const ls = listSheet_(k, true);
+  if (!ls) return [];
+  const { sh, c, m } = ls, last = listLast_(sh, c, m), ids = listIds_(sh, c, m, last);
   if (!ids.length) return [];
   const n = last - c.head, vals = sh.getRange(c.head + 1, 1, n, sh.getLastColumn()).getValues();
   const imgCol = m.image ? m.image.col : 0;
@@ -277,12 +298,18 @@ function listSave_(k, item) {
   const last = listLast_(sh, c, m), idx = listIds_(sh, c, m, last).indexOf(String(item.id));
   const row = idx >= 0 ? c.head + 1 + idx : last + 1;
   if (row > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 100);
+  (c.auto || []).forEach(f => { // 새로 생긴 칸(밑줄 문장 등)은 제목 줄 맨 끝에 열을 만들어 씀
+    if (!(f in item) || m[f].col) return;
+    const col = sh.getLastColumn() + 1;
+    if (col > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+    sh.getRange(c.head, col).setValue(c.f[f][0]); m[f].col = col;
+  });
   for (const f in c.f) {
     if (!(f in item) || !m[f].col) continue;
     if (f === 'image') { if (/^https:\/\//.test(String(item.image))) sh.getRange(row, m.image.col).setValue(String(item.image).slice(0, 500)); continue; } // 앱은 바꾼 https 주소만 보냄
     const t = m[f].type, x = f === 'stars' ? toStars_(item[f]) : item[f];
     sh.getRange(row, m[f].col).setValue(t === 'bool' ? x === true : t === 'num' ? (x === '' || x == null ? '' : num_(x))
-      : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, 1000));
+      : t === 'date' ? (/^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '') : txt_(x, f === 'quotes' ? 20000 : 1000));
   }
   if (idx < 0 && m.__no) sh.getRange(row, m.__no).setValue((row > c.head + 1 ? num_(sh.getRange(row - 1, m.__no).getValue()) : 0) + 1);
   sh.getRange(row, m.__id).setValue(String(item.id));
@@ -410,6 +437,7 @@ function doGet(e) {
   if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
+    if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
     if (e.parameter.what === 'lists') {
       return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
