@@ -37,13 +37,13 @@
   #fab, nav, dialog { position:fixed; }
   /* 상태바(시계) 뒤도 유리로 가려서 스크롤한 글자가 겹쳐 보이지 않게 */
   .topglass { position:fixed; top:0; left:0; right:0; height:env(safe-area-inset-top); z-index:6; pointer-events:none; background:var(--bg); }
-  input, select, button { font:inherit; color:inherit; }
-  input, select { width:100%; padding:12px 14px; border:0; border-radius:12px; background:var(--fill); min-width:0; outline:none; }
+  input, select, textarea, button { font:inherit; color:inherit; }
+  input, select, textarea { width:100%; padding:12px 14px; border:0; border-radius:12px; background:var(--fill); min-width:0; outline:none; }
   /* iOS 날짜·월 칸은 고유 너비가 커서 옆 칸을 침범함 → 기본 모양을 끄고 칸 너비에 맞춤 */
   input[type=date], input[type=month] { -webkit-appearance:none; appearance:none; min-height:46px; text-align:left; }
   input::-webkit-date-and-time-value { text-align:left; }
   h2:focus { outline:none; }
-  input:focus-visible, select:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   /* 움직임: 빠르게 반응하고 부드럽게 멈추는 곡선 하나로 통일 */
   :root { --ease:cubic-bezier(.2,.8,.2,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-in:cubic-bezier(.4,0,1,1); }
   button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer;
@@ -273,21 +273,19 @@
   @keyframes fadeOut { to { opacity:0; } }
   /* 왼쪽에서 나오는 메뉴 */
   #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0 28px 28px 0; border-left:0;
-    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .34s var(--ease-out); box-shadow:8px 0 24px rgba(0,0,0,.12); }
+    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .34s var(--ease-out);
+    /* 클로드 앱처럼: 펼쳐지는 동안엔 그림자가 넓게 번지다가, 다 열리면 짧고 선명해짐 (--p = 열린 정도) */
+    box-shadow:0 0 calc(56px - 40px * var(--p, 1)) rgba(0,0,0, calc(.24 * min(1, var(--p, 1) * 2) - .1 * var(--p, 1))); }
   /* 뒤 화면 어둡게: 미는 만큼(--p) 서서히 진해짐 (예전 거대한 그림자보다 아이폰에서 가벼움) */
-  #menu::backdrop { background:rgba(0,0,0,.4); opacity:var(--p, 1); animation:fadeIn .34s var(--ease-out); }
+  /* 뒤 본문은 어둡게가 아니라 하얗게 흐려짐 (다크 모드는 어둡게 흐려짐) */
+  #menu::backdrop { background:color-mix(in srgb, var(--bg) 55%, transparent); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); opacity:var(--p, 1); animation:fadeIn .34s var(--ease-out); }
   /* 밀어서 연 뒤엔 펼침 애니메이션이 다시 재생되지 않게 (settled). 닫힘(closing)은 항상 재생 */
   #menu.dragging, #menu.dragging::backdrop, #menu.settled, #menu.settled::backdrop { animation:none; }
   #menu.closing { animation:sideOut .22s var(--ease-in) forwards; }
   #menu.closing::backdrop { animation:fadeOut .22s var(--ease-in) forwards; }
   @keyframes sideOut { to { transform:translateX(-100%); } }
   #menu::before { display:none; }
-  /* 클로드 앱처럼: 메뉴가 열리면 본 화면이 메뉴 폭만큼 함께 오른쪽으로 밀려남 (--push). 끄는 동안엔 손가락을 바로 따라감 */
-  body > :not(dialog):not(#toast):not(#syncPop) { translate:var(--push, 0px) 0; transition:translate .34s var(--ease-out); }
-  html.pushing body > :not(dialog) { transition:none; }
-  html.push-out body > :not(dialog) { transition-duration:.22s; transition-timing-function:var(--ease-in); }
-  @media (prefers-reduced-motion: reduce) { body > :not(dialog) { transition:none; } }
-  @keyframes side { from { transform:translateX(-100%); } }
+  @keyframes side { from { transform:translateX(-100%); box-shadow:0 0 56px rgba(0,0,0,0); } 55% { box-shadow:0 0 40px rgba(0,0,0,.2); } }
   .menu-list { display:flex; flex-direction:column; gap:6px; }
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
@@ -322,6 +320,12 @@
   .flow-info { text-align:center; padding:0 20px; position:relative; }
   .flow-info b { display:block; font-size:1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .flow-info small { display:block; color:var(--muted); font-size:0.765rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ftabs { display:inline-flex; gap:2px; margin-top:12px; background:var(--fill); border-radius:999px; padding:3px; }
+  .ftabs button { background:none; border-radius:999px; padding:6px 16px; font-size:0.824rem; font-weight:600; color:var(--muted); }
+  .ftabs button[aria-pressed="true"] { background:var(--glass); color:var(--fg); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .freview { display:flex; gap:8px; align-items:flex-end; margin:12px auto 0; max-width:420px; }
+  .freview textarea { flex:1; resize:none; font-size:0.941rem; }
+  .freview button { flex:none; padding:12px 16px; }
   .rate { display:flex; justify-content:center; gap:8px; margin-top:12px; }
   .rate button { width:46px; height:46px; border-radius:50%; font-size:1.412rem; background:var(--fill); padding:0; opacity:.5; transition:transform .2s var(--ease), opacity .2s, background-color .2s; }
   /* 추가·수정 창 */
@@ -353,7 +357,7 @@
   @keyframes popIn { from { opacity:0; transform:scale(.94); } }
   @keyframes popOut { to { opacity:0; transform:scale(.96); } }
   dialog label.f { display:block; font-size:0.765rem; color:var(--muted); }
-  dialog label.f > input, dialog label.f > select { margin-top:4px; color:var(--fg); }
+  dialog label.f > input, dialog label.f > select, dialog label.f > textarea { margin-top:4px; color:var(--fg); }
   .seg { display:flex; gap:2px; background:var(--fill); border-radius:999px; padding:3px; }
   .seg label { flex:1; position:relative; }
   .seg input { position:absolute; opacity:0; width:1px; height:1px; }
@@ -556,7 +560,10 @@
       <button type="button" id="fAdd" class="fadd" aria-label="책 추가">＋</button>
       <div id="lFlow" class="flow" role="listbox" aria-label="책 표지 넘겨보기"></div>
       <div class="flow-info"><b id="fTitle"></b><small id="fSub"></small>
-        <div id="fRate" class="rate" role="group" aria-label="평가"></div></div>
+        <div id="fTabs" class="ftabs" role="group" aria-label="평가·감상평"><button type="button" data-t="rate" aria-pressed="true">평가</button><button type="button" data-t="review" aria-pressed="false">감상평</button></div>
+        <div id="fRate" class="rate" role="group" aria-label="평가"></div>
+        <form id="fReview" class="freview" hidden><textarea id="fReviewText" rows="2" maxlength="1000" placeholder="이 책은 어땠나요? 한 줄이면 충분해요" aria-label="감상평"></textarea>
+          <button class="primary small">저장</button></form></div>
     </div>
     <div id="lListCard" class="card"><ul id="lList" class="tx"></ul></div>
   </section>

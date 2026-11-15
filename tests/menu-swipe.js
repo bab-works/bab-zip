@@ -23,13 +23,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   // 손을 뗀 뒤 펼침 애니메이션이 다시 재생되지 않음 (두 번 펼쳐지던 문제)
   assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).animationName), 'none');
   assert.equal(await p.evaluate(() => Math.round(document.querySelector('#menu').getBoundingClientRect().left)), 0);
-  // 클로드식: 본 화면이 메뉴 폭만큼 오른쪽으로 밀려나 있음 → 닫으면 제자리
-  const pushed = () => p.evaluate(() => Math.round(document.querySelector('header').getBoundingClientRect().left));
-  await p.waitForTimeout(400); const w = await p.evaluate(() => document.querySelector('#menu').offsetWidth);
-  assert.ok(Math.abs((await pushed()) - w - 16) < 3, 'content pushed by menu width: ' + (await pushed()) + ' vs ' + w);
+  // 클로드식: 뒤 본문은 하얗게 흐려지고(블러), 다 열리면 메뉴 그림자가 짧고 선명
+  assert.match(await p.evaluate(() => getComputedStyle(document.querySelector('#menu'), '::backdrop').backdropFilter || getComputedStyle(document.querySelector('#menu'), '::backdrop').webkitBackdropFilter), /blur/);
+  assert.match(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).boxShadow), /16px/);
   await p.screenshot({ path: S + '/menu-open.png' });
   r = await swipe('#menu', 250, -200); console.log('drag left on menu', r); assert(!r.open);
-  await p.waitForTimeout(400); assert.ok(Math.abs(await pushed() - 16) < 3, 'content back in place');
   r = await swipe('#budgets', 60, 60, 10, 80); console.log('short slow drag', r); assert(!r.open);
   r = await swipe('#budgets', 60, 80, 4, 10); console.log('short fast flick', r); assert(r.open);
   await p.evaluate(() => document.querySelector('#menu').close()); await p.waitForTimeout(300);

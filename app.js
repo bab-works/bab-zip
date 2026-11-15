@@ -54,7 +54,6 @@ function countTo(el, to) {
 const realClose = HTMLDialogElement.prototype.close;
 const closeNow = d => realClose.call(d);
 HTMLDialogElement.prototype.close = function (rv) {
-  if (this.open) this.dispatchEvent(new Event('closing')); // 닫히기 시작할 때 (메뉴는 이때 본 화면을 제자리로)
   if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
   this.classList.add('closing');
   setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, 220);
@@ -854,7 +853,7 @@ const RATE_OPTS = [['', '선택 안 함'], ...RATE];
 const LIST_FIELDS = {
   book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
     ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => pad2(k + 1) + '월')]],
-    ['status', '독서 상태', 'select', ['읽는중', '완독', '보류', '중도포기']], ['stars', '평가', 'select', RATE_OPTS], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
+    ['status', '독서 상태', 'select', ['읽는중', '완독', '보류', '중도포기']], ['stars', '평가', 'select', RATE_OPTS], ['review', '감상평', 'text'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
@@ -954,7 +953,10 @@ function flowPaint() {
   $('#fTitle').textContent = LIST_ROW[curList](i)[0];
   $('#fSub').textContent = curList === 'escape' ? joinDot([i.date, i.shop, i.result]) : joinDot([i.author, curList === 'book' ? i.status : i.memo]);
   const rk = RATE_KEY[curList];
-  $('#fRate').hidden = !rk;
+  $('#fTabs').hidden = !rk;
+  $('#fRate').hidden = !rk || fTab !== 'rate';
+  $('#fReview').hidden = !rk || fTab !== 'review';
+  if (document.activeElement !== $('#fReviewText')) $('#fReviewText').value = i.review || '';
   $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i[rk] === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
 }
 let flowRaf = 0;
@@ -977,6 +979,25 @@ $('#fRate').addEventListener('click', e => {
   queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], [rk]: it[rk] } });
 });
 $('#fAdd').addEventListener('click', () => openItem());
+// 감상평 탭: 가운데 책의 감상평을 바로 쓰고 저장 (독서 「감상평」, 방탈출 「후기」 칸)
+let fTab = 'rate';
+$('#fTabs').addEventListener('click', e => {
+  const t = e.target.closest('[data-t]')?.dataset.t;
+  if (!t) return;
+  fTab = t;
+  $('#fTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === t));
+  flowShown = ''; flowPaint();
+  if (t === 'review') $('#fReviewText').focus();
+});
+$('#fReview').addEventListener('submit', e => {
+  e.preventDefault();
+  const it = (lists[curList] || []).find(i => i.id === flowShown), v = $('#fReviewText').value.trim();
+  if (!it) return;
+  it.review = v; store.set('lists', lists);
+  const key = LIST_FIELDS[curList][0][0];
+  $('#fReviewText').blur();
+  queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], review: v } }).then(ok => ok && toast('감상평을 저장했어요'));
+});
 $('#lViews').addEventListener('click', e => {
   const v = e.target.closest('[data-v]')?.dataset.v;
   if (v) { store.set(VIEWS[sec], v); renderLists(); }
@@ -1109,23 +1130,14 @@ function openMenu() {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
   $('#menu').showModal();
-  setPush(1);
 }
-// 본 화면 밀기: p = 0(닫힘)~1(열림). 손가락으로 끄는 중엔 transition 없이 바로 따라감
-const root = document.documentElement;
-function setPush(p, dragging) {
-  root.classList.toggle('pushing', !!dragging);
-  root.classList.toggle('push-out', !dragging && p === 0);
-  root.style.setProperty('--push', Math.round(p * ($('#menu').offsetWidth || 300)) + 'px');
-}
-$('#menu').addEventListener('closing', () => setPush(0));
 $('#menuBtn').addEventListener('click', openMenu);
 // 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
 // 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
 {
   const menu = $('#menu');
   const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
-  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); setPush(p, true); };
+  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); };
   let sw = null;
   document.addEventListener('touchstart', e => {
     sw = null;
@@ -1157,8 +1169,8 @@ $('#menuBtn').addEventListener('click', openMenu);
     const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
     sw = null;
     menu.style.transition = 'transform .3s var(--ease-out)';
+    menu.style.transition = 'transform .3s var(--ease-out), box-shadow .3s var(--ease-out)';
     menu.style.transform = `translateX(${keep ? 0 : -100}%)`; menu.style.setProperty('--p', keep ? 1 : 0);
-    setPush(keep ? 1 : 0); // 손을 떼면 본 화면도 같은 속도로 제자리/끝까지
     setTimeout(() => {
       if (!keep) closeNow(menu); else menu.classList.add('settled'); // 열린 채로 두면 펼침 애니메이션을 다시 틀지 않음
       menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = ''; menu.style.removeProperty('--p');
@@ -1245,6 +1257,7 @@ function openItem(it) {
     }
     const full = ['author', 'shop', 'director', 'memo', 'review', 'image', 'date'].includes(n) ? ' full' : '';
     const extra = type === 'number' ? 'inputmode="numeric" min="0"' : type === 'url' ? 'inputmode="url" placeholder="https://…"' : 'maxlength="1000"';
+    if (n === 'review') return `<label class="f full">${lab}<textarea name="${n}" rows="3" maxlength="1000" placeholder="짧게 남겨도 좋아요"></textarea></label>`;
     return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${extra}></label>`;
   }).join('');
   const f = $('#lForm').elements, today = localISO();
