@@ -13,20 +13,24 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
     r.dispatchEvent(new TouchEvent('touchstart', { touches: [t(x0)], bubbles: true, cancelable: true }));
     let mid = null;
     for (let i = 1; i <= steps; i++) { r.dispatchEvent(new TouchEvent('touchmove', { touches: [t(x0 + dx * i / steps)], bubbles: true, cancelable: true }));
-      if (i === steps / 2) { const m = document.querySelector('#menu'); mid = [m.style.transform, m.style.getPropertyValue('--p')]; } await new Promise(z => setTimeout(z, gap)); }
+      if (i === steps / 2) { const m = document.querySelector('#menu'); mid = [document.documentElement.classList.contains('pushing'), document.documentElement.style.getPropertyValue('--p')]; } await new Promise(z => setTimeout(z, gap)); }
     r.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [t(x0 + dx)], bubbles: true, cancelable: true }));
     await new Promise(z => setTimeout(z, 450));
     return { open: document.querySelector('#menu').open, mid };
   }, [sel, x0, dx, steps, gap]);
   const assert = require('assert');
-  let r = await swipe('#budgets', 60, 240); console.log('home drag right', r); assert(r.open && /translateX\(-/.test(r.mid[0]) && +r.mid[1] > 0 && +r.mid[1] < 1, 'follows finger, dim grows');
+  let r = await swipe('#budgets', 60, 240); console.log('home drag right', r); assert(r.open && r.mid[0] === true && +r.mid[1] > 0 && +r.mid[1] < 1, 'follows finger without transition');
   // 손을 뗀 뒤 펼침 애니메이션이 다시 재생되지 않음 (두 번 펼쳐지던 문제)
-  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).animationName), 'none');
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).animationName), 'none'); await p.waitForTimeout(450);
   assert.equal(await p.evaluate(() => Math.round(document.querySelector('#menu').getBoundingClientRect().left)), 0);
   // 클로드식: 뒤 본문은 하얗게 흐려지고(블러), 다 열리면 메뉴 그림자가 짧고 선명
+  // 손가락으로 연 경우: 손을 뗀 뒤 남은 거리가 끝나면 살짝 블러
+  await p.waitForTimeout(500);
   assert.match(await p.evaluate(() => getComputedStyle(document.querySelector('#menu'), '::backdrop').backdropFilter || getComputedStyle(document.querySelector('#menu'), '::backdrop').webkitBackdropFilter), /blur/);
   // 다 열리면 메뉴는 선명(투명도 1·블러 0), 본문은 메뉴 폭만큼 밀려나 있음
-  assert.deepEqual(await p.evaluate(() => { const c = getComputedStyle(document.querySelector('#menu')); return [c.opacity, c.filter]; }), ['1', 'blur(0px)']);
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('#menu')).opacity), '1');
+  // 둥근 모서리(::after)가 본문 왼쪽 끝에 딱 붙어 있음
+  assert.match(await p.evaluate(() => getComputedStyle(document.querySelector('#menu'), '::after').transform), /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
   const pushed = () => p.evaluate(() => Math.round(document.querySelector('header').getBoundingClientRect().left));
   await p.waitForTimeout(400); const w = await p.evaluate(() => document.querySelector('#menu').offsetWidth);
   assert.ok(Math.abs((await pushed()) - w - 16) < 3, 'content pushed by menu width');

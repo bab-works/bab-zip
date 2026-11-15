@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v58'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v59'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -58,7 +58,7 @@ HTMLDialogElement.prototype.close = function (rv) {
   if (this.open && !this.classList.contains('closing')) this.dispatchEvent(new Event('closing')); // 닫히기 시작 (메뉴는 이때 본문을 제자리로)
   if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
   this.classList.add('closing');
-  setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, 220);
+  setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, +this.dataset.closeMs || 220);
 };
 // ESC·뒤로가기로 닫을 때도 같은 애니메이션
 document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogElement) { e.preventDefault(); e.target.close(); } }, true);
@@ -1120,27 +1120,35 @@ $('#hList').addEventListener('click', e => {
 });
 // 메뉴 순서: 저장된 순서 + 새로 생긴 섹션은 뒤에
 const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTIONS[k]); return [...o, ...Object.keys(SECTIONS).filter(k => !o.includes(k))]; };
-function openMenu() {
+// 사이드바 (클로드 앱 방식): 「열린 정도」 --p(0~1) 하나만 바꾸면 메뉴·본문·모서리·배경이 같은 곡선·같은 시간으로 함께 움직임
+// 끄는 동안엔 transition을 끄고(html.pushing) 손가락을 그대로 따라감. 위치·투명도만 움직여서 아이폰에서도 가벼움
+const root = document.documentElement, MENU_MS = 420;
+function menuP(p, dragging) {
+  root.classList.toggle('pushing', !!dragging);
+  root.style.setProperty('--mw', ($('#menu').offsetWidth || 300) + 'px');
+  root.style.setProperty('--p', Math.min(1, Math.max(0, p)).toFixed(3));
+  if (p < 1) root.classList.remove('menu-rest');
+}
+// 다 열린 뒤에만 본문을 살짝 흐리게 (움직이는 동안 블러를 매 프레임 계산하면 아이폰에서 끊김)
+$('#menu').addEventListener('transitionend', e => { if (e.target === e.currentTarget && e.propertyName === 'opacity' && root.style.getPropertyValue('--p') === '1.000') root.classList.add('menu-rest'); });
+function openMenu(dragging) {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
+  menuP(0, true); root.classList.add('menu-open');
   $('#menu').showModal();
-  setPush(1);
+  if (dragging) return;
+  $('#menu').offsetWidth; // 닫힌 위치(0)를 한 번 그린 뒤
+  requestAnimationFrame(() => menuP(1)); // 열린 위치로 transition
 }
-// 본문 밀기: p = 0(닫힘)~1(열림), 메뉴 폭만큼. 끄는 중엔 transition 없이 손가락을 바로 따라감
-const root = document.documentElement;
-function setPush(p, dragging) {
-  root.classList.toggle('pushing', !!dragging);
-  root.classList.toggle('push-out', !dragging && p === 0);
-  root.style.setProperty('--push', Math.round(p * ($('#menu').offsetWidth || 300)) + 'px');
-}
-$('#menu').addEventListener('closing', () => setPush(0));
-$('#menuBtn').addEventListener('click', openMenu);
+$('#menu').addEventListener('closing', () => menuP(0));
+$('#menu').addEventListener('close', () => root.classList.remove('menu-open'));
+$('#menuBtn').addEventListener('click', () => openMenu());
 // 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
 // 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
 {
   const menu = $('#menu');
   const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
-  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); setPush(p, true); };
+  const paint = p => menuP(p, true);
   let sw = null;
   document.addEventListener('touchstart', e => {
     sw = null;
@@ -1157,8 +1165,7 @@ $('#menuBtn').addEventListener('click', openMenu);
       if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; } // 세로 스크롤이면 양보
       if (sw.open ? dx > -10 : dx < 10) return;
       sw.on = true; sw.x = x;
-      if (!sw.open) { openMenu(); document.activeElement?.blur(); } // 손가락으로 연 건 포커스 테두리 없이
-      menu.classList.add('dragging'); menu.style.transition = 'none';
+      if (!sw.open) { openMenu(true); document.activeElement?.blur(); } // 손가락으로 연 건 포커스 테두리 없이
       sw.w = menu.getBoundingClientRect().width || 300;
     }
     e.preventDefault();
@@ -1171,17 +1178,11 @@ $('#menuBtn').addEventListener('click', openMenu);
     if (!sw?.on) { sw = null; return; }
     const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
     sw = null;
-    menu.style.transition = 'transform .3s var(--ease-out), opacity .3s var(--ease-out), filter .3s var(--ease-out)';
-    menu.style.transform = `translateX(${keep ? 0 : -100}%)`; menu.style.setProperty('--p', keep ? 1 : 0);
-    setPush(keep ? 1 : 0); // 손을 떼면 본문도 같은 속도로
-    setTimeout(() => {
-      if (!keep) closeNow(menu); else menu.classList.add('settled'); // 열린 채로 두면 펼침 애니메이션을 다시 틀지 않음
-      menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = ''; menu.style.removeProperty('--p');
-    }, 300);
+    menuP(keep ? 1 : 0); // 손을 떼면 남은 거리를 같은 곡선으로
+    if (!keep) setTimeout(() => { if (root.style.getPropertyValue('--p') === '0.000') closeNow(menu); }, MENU_MS);
   };
   document.addEventListener('touchend', end);
   document.addEventListener('touchcancel', end);
-  menu.addEventListener('close', () => menu.classList.remove('settled'));
 }
 // 메뉴 항목을 꾹 누르면 편집 모드 → 끌어서 순서 변경, 「완료」나 메뉴를 닫으면 끝
 {

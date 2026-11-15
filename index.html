@@ -272,29 +272,28 @@
   @keyframes fadeIn { from { opacity:0; } }
   @keyframes fadeOut { to { opacity:0; } }
   /* 왼쪽에서 나오는 메뉴 */
-  /* 사이드바 (클로드 앱 방식)
-     - 메뉴가 열리면 본문이 메뉴 폭만큼 함께 옆으로 밀리고(--push), 본문 왼쪽 모서리는 둥글게 (메뉴의 ::after가 모서리 바깥을 메뉴 색으로 채움)
-     - 메뉴는 흐릿·반투명했다가 펼쳐질수록 선명해짐 (--p = 열린 정도 0~1)
-     - 뒤 본문은 살짝만 하얗게 흐려짐 */
+  /* 사이드바 (클로드 앱 방식): --p = 열린 정도(0~1), --mw = 메뉴 폭. 모두 같은 곡선·시간으로 움직임
+     - 본문: 메뉴 폭만큼 옆으로 밀리고 왼쪽 모서리가 둥글게 (메뉴의 ::after가 모서리 바깥을 메뉴 색으로 채움)
+     - 메뉴: 살짝 뒤(왼쪽)에서 따라오며 투명 → 선명 (패럴랙스)
+     - 본문 위: 옅은 흰 막 */
+  :root { --p:0; --mw:300px; --menu-ease:cubic-bezier(.32, .72, 0, 1); --menu-t:.42s; }
   #menu { margin:0 auto 0 0; width:min(78vw,300px); height:100%; max-height:100%; border-radius:0; border:0; overflow:visible;
-    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:side .36s var(--ease-out);
-    opacity:calc(.3 + .7 * var(--p, 1)); filter:blur(calc(8px * (1 - var(--p, 1)))); }
+    padding:calc(env(safe-area-inset-top) + 16px) 14px 16px; animation:none;
+    transform:translateX(calc((var(--p) - 1) * 28%)); opacity:var(--p);
+    transition:transform var(--menu-t) var(--menu-ease), opacity var(--menu-t) var(--menu-ease); }
+  #menu.closing { animation:none; }
   #menu::after { content:''; position:absolute; top:0; bottom:0; left:100%; width:22px; pointer-events:none;
+    transform:translateX(calc((var(--p) - 1) * .72 * var(--mw))); transition:transform var(--menu-t) var(--menu-ease);
     background:radial-gradient(circle at 100% 100%, transparent 21.5px, var(--glass) 22px) top left / 22px 22px no-repeat,
                radial-gradient(circle at 100% 0, transparent 21.5px, var(--glass) 22px) bottom left / 22px 22px no-repeat; }
-  #menu::backdrop { background:color-mix(in srgb, var(--bg) 18%, transparent); -webkit-backdrop-filter:blur(1.5px); backdrop-filter:blur(1.5px); opacity:var(--p, 1); animation:fadeIn .36s var(--ease-out); }
-  /* 밀어서 연 뒤엔 펼침 애니메이션이 다시 재생되지 않게 (settled). 닫힘(closing)은 항상 재생 */
-  #menu.dragging, #menu.dragging::backdrop, #menu.settled, #menu.settled::backdrop { animation:none; }
-  #menu.closing { animation:sideOut .24s var(--ease-in) forwards; }
-  #menu.closing::backdrop { animation:fadeOut .24s var(--ease-in) forwards; }
-  @keyframes side { from { transform:translateX(-100%); opacity:.3; filter:blur(8px); } }
-  @keyframes sideOut { to { transform:translateX(-100%); opacity:.3; filter:blur(8px); } }
+  #menu::backdrop { background:color-mix(in srgb, var(--bg) 35%, transparent); opacity:var(--p); animation:none; transition:opacity var(--menu-t) var(--menu-ease); }
+  #menu.closing::backdrop { animation:none; }
+  html.menu-rest #menu::backdrop { -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
   #menu::before { display:none; }
-  /* 본문 밀기: 메뉴와 같은 속도·곡선 (끄는 동안엔 손가락을 바로 따라감) */
-  body > :not(dialog):not(#toast):not(#syncPop) { translate:var(--push, 0px) 0; transition:translate .36s var(--ease-out); }
-  html.pushing body > :not(dialog) { transition:none; }
-  html.push-out body > :not(dialog) { transition-duration:.24s; transition-timing-function:var(--ease-in); }
-  @media (prefers-reduced-motion: reduce) { body > :not(dialog) { transition:none; } #menu { filter:none; } }
+  body > :not(dialog):not(#toast):not(#syncPop) { translate:calc(var(--p) * var(--mw)) 0; transition:translate var(--menu-t) var(--menu-ease); }
+  html.menu-open body > :not(dialog) { will-change:translate; }
+  html.pushing #menu, html.pushing #menu::after, html.pushing #menu::backdrop, html.pushing body > :not(dialog) { transition:none; }
+  @media (prefers-reduced-motion: reduce) { #menu, #menu::after, #menu::backdrop, body > :not(dialog) { transition:none; } }
   .menu-list { display:flex; flex-direction:column; gap:6px; }
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
@@ -647,7 +646,7 @@
   </form>
 </dialog>
 
-<dialog id="menu" aria-label="메뉴">
+<dialog id="menu" aria-label="메뉴" data-close-ms="420">
   <div class="menu-head"><h2>BAB:ZIP</h2><button type="button" id="menuDone" class="small" hidden>완료</button></div>
   <div id="menuList" class="menu-list"></div>
   <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요</p>
