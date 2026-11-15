@@ -315,15 +315,15 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 10) 홈 편집 + 카테고리 내역
   await p.click('nav button[data-view=home]');
   const order = () => p.$$eval('#v-home > [data-card]', els => els.map(e => e.dataset.card).join(','));
-  assert.equal(await order(), 'hero,alerts,daily,budget,recent');
+  assert.equal(await order(), 'hero,alerts,daily,budget,recent,upcoming');
   assert.ok(!(await p.isVisible('.mover')));
   await p.click('#homeEdit');
   await p.click('[data-card="recent"] [data-mv="-1"]'); await p.click('[data-card="recent"] [data-mv="-1"]');
   await p.click('[data-card="hero"] [data-mv="-1"]'); // 맨 위에서 위로 → 변화 없음
-  assert.equal(await order(), 'hero,alerts,recent,daily,budget');
+  assert.equal(await order(), 'hero,alerts,recent,daily,budget,upcoming');
   await p.click('#homeEdit');
   await p.reload(); await status(/동기화됨/);
-  assert.equal(await order(), 'hero,alerts,recent,daily,budget', 'order persisted');
+  assert.equal(await order(), 'hero,alerts,recent,daily,budget,upcoming', 'order persisted');
   assert.equal(await p.locator('[data-card="alerts"] > .mover + #alerts').count(), 1, 'mover kept, alerts inside wrapper');
   await p.click('#budgets [data-cat="식비"]');
   await p.waitForSelector('#catSheet', { state: 'visible' });
@@ -524,5 +524,14 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
     assert.deepEqual([sm.ok, sm.date, sm.month, sm.today, sm.budget, sm.left],
       [true, TODAY, rows.reduce((s, r) => s + net(r), 0), rows.filter(r => d0(r) === TODAY).reduce((s, r) => s + net(r), 0), bud, bud - rows.reduce((s, r) => s + net(r), 0)]);
     assert(sm.month > 0, 'summary has spending'); console.log('summary', JSON.stringify(sm)); }
+  { // 애플페이 단축어 자동 기록: 분류규칙으로 분류, 같은 분 두 번 와도 한 줄
+    const n0 = T.d.length, go = () => JSON.parse(gs.doGet({ parameter: { token: TOKEN, auto: '1', amount: '₩12,300', merchant: '스타벅스 강남점', card: 'C체크' } }));
+    const r1 = go(); go();
+    assert.equal(r1.ok, true); assert.equal(T.d.length, n0 + 1, 'dedupe same minute');
+    const row = T.d[T.d.length - 1]; assert.deepEqual([row[2], row[3], row[5], row[7], row[8]], ['지출', '카페·간식', '스타벅스 강남점', 'C체크카드', 12300]);
+    assert.equal(JSON.parse(gs.doGet({ parameter: { token: 'x', auto: '1', amount: '1' } })).ok, false, 'auto needs token');
+    JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ action: 'autoTx', token: TOKEN, amount: '5,000원', merchant: '스타벅스 역삼', card: '' }) } }));
+    assert.deepEqual(T.d[T.d.length - 1].slice(2, 6), ['지출', '카페·간식', '카페', '스타벅스 역삼'], 'POST JSON from Shortcuts');
+    console.log('AUTO TX OK'); }
   console.log('ALL PASS'); await b.close(); process.exit(0);
 });

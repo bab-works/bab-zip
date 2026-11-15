@@ -103,6 +103,12 @@
   .hero .big { font-size:2rem; font-weight:800; letter-spacing:-.03em; margin:2px 0 6px; }
   .hero .sub { display:flex; gap:16px; font-size:0.824rem; color:var(--muted); flex-wrap:wrap; }
   .hero .sub b { color:var(--fg); } .hero .sub b.out { color:var(--out); }
+  .today-can { padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+  .today-can b { display:block; font-size:1.647rem; font-weight:800; letter-spacing:-.02em; } .today-can b.out { color:var(--out); }
+  .report { position:relative; background:linear-gradient(150deg, var(--accent-soft), var(--glass)); }
+  .report ol { margin:8px 0 0; padding-left:20px; font-size:0.824rem; line-height:1.6; } .report p { margin:4px 0; font-size:0.824rem; }
+  .report .x { position:absolute; top:10px; right:10px; width:32px; height:32px; padding:0; border-radius:50%; background:var(--fill); color:var(--muted); }
+  #upcoming li { display:flex; justify-content:space-between; gap:8px; padding:8px 0; font-size:0.824rem; }
   #cmp { font-size:0.765rem; margin-top:8px; color:var(--muted); }
   .alert { border-radius:16px; padding:12px 16px; margin:8px 0; font-size:0.824rem; background:color-mix(in srgb, var(--warn) 12%, var(--glass)); }
   .alert.over { background:color-mix(in srgb, var(--out) 10%, var(--glass)); }
@@ -489,7 +495,9 @@
 
 <main>
   <section id="v-home">
+    <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
+      <div id="todayCan" class="today-can" hidden></div>
       <small>이번 달 지출 · 환불 차감, 이체 제외</small>
       <div id="exp" class="big">0원</div>
       <div class="sub"><span>수입 <b id="inc">0원</b></span><span>남은 돈 <b id="bal">0원</b></span></div>
@@ -510,6 +518,10 @@
     <div class="card" data-card="recent" data-label="최근 거래">
       <div class="row"><h2>최근 거래</h2><button id="toList" class="small">전체 보기</button></div>
       <ul id="recent" class="tx"></ul>
+    </div>
+    <div class="card" data-card="upcoming" data-label="남은 결제 예정">
+      <h2>이번 달 남은 결제 예정</h2>
+      <ul id="upcoming" class="tx"></ul>
     </div>
     <button id="homeEdit" class="small" style="display:block;margin:4px auto 0">✎ 홈 화면 편집</button>
   </section>
@@ -724,6 +736,8 @@
     <details class="adv"><summary>고급 · 다른 시트에 연결</summary>
       <label class="f">설정 링크 붙여넣기<input name="link" type="url" placeholder="https://bab-works.github.io/bab-zip/#url=…&token=…"></label>
       <label class="f">시트 주소 (웹 앱 URL)<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
+      <button type="button" id="apCopy" class="small">애플페이 자동 기록 주소 복사</button>
+      <p class="hint">아이폰 단축어 「거래」 자동화에 넣으면 결제가 자동으로 기록돼요. <a href="https://github.com/bab-works/bab-zip/blob/main/APPLEPAY.md" target="_blank" rel="noopener">설정 방법</a></p>
       <p class="hint">친구도 쓰려면 각자 자기 구글 시트를 만들어야 해요. <a href="https://github.com/bab-works/bab-zip/blob/main/FRIEND.md" target="_blank" rel="noopener">만드는 방법</a></p>
     </details>
     <div class="row" style="justify-content:flex-end; margin-top:14px">

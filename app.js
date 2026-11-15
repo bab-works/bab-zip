@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v60'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v61'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -342,9 +342,49 @@ function renderHome() {
     ? `<b>${mo}월 ${dailySel}일</b> ${won(per[dailySel - 1])} · <a href="#" id="dailyGo">그날 내역 보기</a>`
     : per[top] > 0 ? `가장 많이 쓴 날 <b>${mo}월 ${top + 1}일</b> ${won(per[top])} · 막대를 눌러 보세요` : '이번 달 지출이 없어요';
 
+  renderToday(m, exp, total, today, list); renderReport(today); renderUpcoming(today);
   $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '')).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
 let dailySel = 0;
+// 오늘 쓸 수 있는 돈 = (월 예산 − 어제까지 지출) ÷ 오늘 포함 남은 일수 − 오늘 쓴 돈. 이번 달을 볼 때만, 예산이 있을 때만
+function renderToday(m, exp, total, today, list) {
+  const el = $('#todayCan');
+  el.hidden = !total || !today.startsWith(m);
+  if (el.hidden) return;
+  const [y, mo] = m.split('-').map(Number), left = new Date(y, mo, 0).getDate() - +today.slice(8) + 1;
+  const spentToday = list.filter(i => i.date === today).reduce((t, i) => t + net(i), 0);
+  const can = Math.floor((total - (exp - spentToday)) / left) - spentToday;
+  el.innerHTML = `<small>오늘 쓸 수 있는 돈 · 남은 ${left}일</small><b class="${can < 0 ? 'out' : ''}">${can < 0 ? '−' + won(-can) + ' 넘었어요' : won(can)}</b>`;
+}
+// 매월 첫 접속 때 지난달 결산 (✕로 닫으면 그달엔 다시 안 뜸)
+function renderReport(today) {
+  const cur = today.slice(0, 7), pm = ymAdd(cur, -1), el = $('#report'), list = inMonth(pm);
+  const exp = list.reduce((t, i) => t + net(i), 0);
+  el.hidden = store.get('reportSeen') === cur || exp <= 0;
+  if (el.hidden) return;
+  const byMajor = {}, byDay = {};
+  list.forEach(i => { if (net(i)) { byMajor[i.major] = (byMajor[i.major] || 0) + net(i); byDay[i.date] = (byDay[i.date] || 0) + net(i); } });
+  const top = Object.entries(byMajor).sort((a, b) => b[1] - a[1]).slice(0, 3), [bd, bv] = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+  const prev = inMonth(ymAdd(pm, -1)).reduce((t, i) => t + net(i), 0), mo = +pm.slice(5);
+  el.innerHTML = `<button type="button" class="x" id="reportX" aria-label="결산 닫기">✕</button><h2>${mo}월 결산</h2>
+    <div class="big" style="font-size:1.412rem;font-weight:800">${won(exp)}</div>
+    ${prev > 0 ? `<p>그 전달보다 ${exp >= prev ? '▲' : '▼'} ${Math.abs(Math.round((exp - prev) / prev * 100))}% (${won(Math.abs(exp - prev))} ${exp >= prev ? '더' : '덜'} 썼어요)</p>` : ''}
+    <ol>${top.map(([k, v]) => `<li>${em(k)} ${esc(k)} <b>${won(v)}</b> · ${Math.round(v / exp * 100)}%</li>`).join('')}</ol>
+    <p>가장 많이 쓴 날 <b>${+bd.slice(5, 7)}월 ${+bd.slice(8)}일</b> ${won(bv)}</p>`;
+}
+$('#report').addEventListener('click', e => { if (e.target.id === 'reportX') { store.set('reportSeen', localISO().slice(0, 7)); $('#report').hidden = true; } });
+// 이번 달 남은 결제 예정: 아직 날짜가 안 된 반복 지출 + 진행 중인 할부
+function renderUpcoming(today) {
+  const cur = today.slice(0, 7), d = +today.slice(8), days = monthGrid(cur).days;
+  const rec = data.meta.recurring.filter(r => r.type === '지출' && r.start <= cur && (!r.end || r.end >= cur) && Math.min(+r.day, days) > d)
+    .sort((a, b) => a.day - b.day);
+  const inst = data.items.filter(i => /회차/.test(i.instState || ''));
+  const sum = rec.reduce((t, r) => t + +r.amount, 0);
+  $('#upcoming').innerHTML = rec.map(r => `<li><span>${Math.min(+r.day, days)}일 · ${esc(r.content)}</span><b>${won(r.amount)}</b></li>`).join('')
+    + (inst.length ? `<li><span>할부 진행 중 ${inst.length}건 (${esc(inst.map(i => i.content || i.major).slice(0, 2).join(', '))}${inst.length > 2 ? ' 외' : ''})</span><b>월 ${won(inst.reduce((t, i) => t + i.amount, 0))}</b></li>` : '')
+    + (rec.length ? `<li style="font-weight:700"><span>반복 결제 합계</span><b>${won(sum)}</b></li>` : '')
+    || '<li class="empty">이번 달 남은 반복 결제가 없어요</li>';
+}
 
 function txRow(i, timeOnly) {
   const [cls, sign] = { 수입: ['in', '+'], 지출: ['out', '-'], 환불: ['refund', '+'], 이체: ['move', ''] }[i.type] || ['move', ''];
@@ -772,6 +812,11 @@ $('#fReset').addEventListener('click', () => {
   ['#q', '#fType', '#fMajor', '#fPay'].forEach(s => { $(s).value = ''; });
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
   render();
+});
+$('#apCopy').addEventListener('click', async () => {
+  if (!cfg.url || !cfg.token) return toast('먼저 시트를 연결하세요');
+  try { await navigator.clipboard.writeText(cfg.url); toast('시트 주소를 복사했어요 · 단축어 URL 칸에 붙여넣으세요'); }
+  catch (e) { prompt('이 주소를 복사하세요', cfg.url); }
 });
 $('#wLater').addEventListener('click', () => $('#welcome').close());
 ['#wLink', '#wPw'].forEach(s => $(s).addEventListener('click', () => {

@@ -77,6 +77,24 @@ function deleteTx_(id) {
   if (idx >= 0) sh.deleteRow(idx + 2);
 }
 
+// 애플페이 결제 → 거래 한 줄. 분류규칙 키워드로 분류, 없으면 기타. 같은 분·같은 금액·같은 가맹점은 한 번만 (단축어가 두 번 돌아도 안전)
+function autoTx_(b) {
+  const amount = Math.round(Number(String(b.amount || '').replace(/[^\d.]/g, '')));
+  const merchant = String(b.merchant || '').trim().slice(0, 100);
+  if (!(amount > 0)) throw new Error('입력값 오류: 금액');
+  const low = merchant.toLowerCase(), now = new Date(), meta = meta_();
+  const r = meta.rules.find(r => r[0] && low.includes(r[0].toLowerCase()));
+  const pays = meta.payments.map(p => p[0]), card = String(b.card || '').trim();
+  const pay = pays.find(p => p === card) || pays.find(p => card && (card.includes(p) || p.includes(card))) || card; // 카드 이름이 결제수단과 비슷하면 그 이름으로
+  const i = {
+    id: 'ap-' + fmt_(now, 'yyyyMMddHHmm') + '-' + amount + '-' + merchant.replace(/\s/g, '').slice(0, 12),
+    date: fmt_(now, 'yyyy-MM-dd'), time: fmt_(now, 'HH:mm'),
+    type: r && TYPES.includes(r[1]) ? r[1] : '지출', major: r ? r[2] : '기타', minor: r ? r[3] : '', content: merchant, pay, amount, memo: '애플페이 자동',
+  };
+  saveTx_(i);
+  return { date: i.date, major: i.major, amount };
+}
+
 function rows_(name, cols) {
   const sh = ss_().getSheetByName(name);
   return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues();
@@ -387,6 +405,8 @@ function doGet(e) {
     b.token = e.parameter.token;
     return writeOp_(b);
   }
+  // 아이폰 단축어(애플페이 결제 자동화)용: ?token=…&auto=1&amount=₩12,300&merchant=스타벅스&card=현대카드
+  if (e.parameter.auto) return writeOp_({ action: 'autoTx', token: e.parameter.token, amount: e.parameter.amount, merchant: e.parameter.merchant, card: e.parameter.card });
   if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
@@ -435,10 +455,11 @@ function writeOp_(b) {
       else if (b.action === 'listSave') listSave_(b.list, b.item);
       else if (b.action === 'listDelete') listDelete_(b.list, b.id);
       else if (b.action === 'habitCheck') habitCheck_(b.habitId, b.stamp, b.done);
+      else if (b.action === 'autoTx') b.saved = autoTx_(b);
       else throw new Error('알 수 없는 동작');
       SpreadsheetApp.flush(); // 시트 규칙 위반 같은 오류를 여기서 잡아 글로 돌려줌 (안 그러면 오류 페이지가 가서 앱엔 Load failed로 보임)
     });
-    return out_({ ok: true, wrote: true });
+    return out_({ ok: true, wrote: true, saved: b.saved });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
     return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱|규칙/.test(err.message) });
