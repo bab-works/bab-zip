@@ -54,6 +54,7 @@ function countTo(el, to) {
 const realClose = HTMLDialogElement.prototype.close;
 const closeNow = d => realClose.call(d);
 HTMLDialogElement.prototype.close = function (rv) {
+  if (this.open) this.dispatchEvent(new Event('closing')); // 닫히기 시작할 때 (메뉴는 이때 본 화면을 제자리로)
   if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
   this.classList.add('closing');
   setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, 220);
@@ -1108,14 +1109,23 @@ function openMenu() {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
   $('#menu').showModal();
+  setPush(1);
 }
+// 본 화면 밀기: p = 0(닫힘)~1(열림). 손가락으로 끄는 중엔 transition 없이 바로 따라감
+const root = document.documentElement;
+function setPush(p, dragging) {
+  root.classList.toggle('pushing', !!dragging);
+  root.classList.toggle('push-out', !dragging && p === 0);
+  root.style.setProperty('--push', Math.round(p * ($('#menu').offsetWidth || 300)) + 'px');
+}
+$('#menu').addEventListener('closing', () => setPush(0));
 $('#menuBtn').addEventListener('click', openMenu);
 // 화면 어디서든 오른쪽으로 밀면 메뉴가 손가락을 따라 나오고, 열린 메뉴는 왼쪽으로 밀면 닫힘 (TickTick 방식)
 // 달력(달 넘김)·휠·가로 스크롤 줄에서 시작한 밀기는 원래 동작 그대로
 {
   const menu = $('#menu');
   const hScroll = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
-  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); };
+  const paint = p => { menu.style.transform = `translateX(${(p - 1) * 100}%)`; menu.style.setProperty('--p', p.toFixed(3)); setPush(p, true); };
   let sw = null;
   document.addEventListener('touchstart', e => {
     sw = null;
@@ -1147,7 +1157,8 @@ $('#menuBtn').addEventListener('click', openMenu);
     const keep = Math.abs(sw.v) > 0.4 ? sw.v > 0 : sw.p > 0.5; // 빠르게 튕기면 방향대로
     sw = null;
     menu.style.transition = 'transform .3s var(--ease-out)';
-    paint(keep ? 1 : 0);
+    menu.style.transform = `translateX(${keep ? 0 : -100}%)`; menu.style.setProperty('--p', keep ? 1 : 0);
+    setPush(keep ? 1 : 0); // 손을 떼면 본 화면도 같은 속도로 제자리/끝까지
     setTimeout(() => {
       if (!keep) closeNow(menu); else menu.classList.add('settled'); // 열린 채로 두면 펼침 애니메이션을 다시 틀지 않음
       menu.classList.remove('dragging'); menu.style.transition = menu.style.transform = ''; menu.style.removeProperty('--p');

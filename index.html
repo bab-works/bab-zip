@@ -282,6 +282,11 @@
   #menu.closing::backdrop { animation:fadeOut .22s var(--ease-in) forwards; }
   @keyframes sideOut { to { transform:translateX(-100%); } }
   #menu::before { display:none; }
+  /* 클로드 앱처럼: 메뉴가 열리면 본 화면이 메뉴 폭만큼 함께 오른쪽으로 밀려남 (--push). 끄는 동안엔 손가락을 바로 따라감 */
+  body > :not(dialog):not(#toast):not(#syncPop) { translate:var(--push, 0px) 0; transition:translate .34s var(--ease-out); }
+  html.pushing body > :not(dialog) { transition:none; }
+  html.push-out body > :not(dialog) { transition-duration:.22s; transition-timing-function:var(--ease-in); }
+  @media (prefers-reduced-motion: reduce) { body > :not(dialog) { transition:none; } }
   @keyframes side { from { transform:translateX(-100%); } }
   .menu-list { display:flex; flex-direction:column; gap:6px; }
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
