@@ -32,6 +32,12 @@ assert.equal(r.tabs['카테고리'].cells['2,1'], '식비'); assert.equal(r.tabs
 assert.match(r.props.APP_TOKEN, /^[0-9a-f]{12}$/);
 assert.equal(JSON.parse(r.ctx.doGet({ parameter: { token: 'nope', what: 'summary' } })).ok, false);
 r.ctx.appLink(); assert.ok(r.logs.some(l => l.includes('https://bab-works.github.io/bab-zip/#url=https://script.google.com/macros/s/NEW/exec&token=' + r.props.APP_TOKEN)), r.logs.join('\n'));
+// 넘겨받은 사람이 resetPassword → 새 비밀번호, 예전 것은 거부, 새 링크 출력
+const oldTok = r.props.APP_TOKEN; r.ctx.Utilities.getUuid = () => '99998888-7777-6666-5555-444433332222';
+r.ctx.resetPassword();
+assert.notEqual(r.props.APP_TOKEN, oldTok); assert.equal(r.props.APP_TOKEN, '999988887777');
+assert.equal(JSON.parse(r.ctx.doGet({ parameter: { token: oldTok, what: 'summary' } })).error, '비밀번호가 맞지 않습니다', 'old password no longer works');
+assert.ok(r.logs.some(l => l.includes('&token=999988887777')), 'new link logged');
 // 기존 사용자: 이미 있는 탭은 그대로, 비밀번호는 코드의 TOKEN 유지
 r = run('my-secret', ['거래', '카테고리']);
 r.ctx.setupSheet();

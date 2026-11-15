@@ -494,6 +494,13 @@ function setupSheet() {
   Logger.log('만든 탭: %s', made.join(', ') || '없음 (이미 다 있음)');
   Logger.log('이제 배포 → 새 배포 → 웹 앱(실행: 나, 액세스: 모든 사용자)으로 배포한 뒤 appLink를 실행하세요.');
 }
+// 시트를 넘겨받은 사람(예: 대신 세팅해 준 친구에게서)이 실행: 비밀번호를 새로 만들어 이전 사람이 알던 비밀번호를 무효로 하고, 연결 링크를 보여 줌
+// 먼저 「배포 → 새 배포 → 웹 앱(실행: 나, 액세스: 모든 사용자)」을 한 뒤 실행하세요
+function resetPassword() {
+  props_().setProperty('APP_TOKEN', Utilities.getUuid().replace(/-/g, '').slice(0, 12));
+  Logger.log('새 비밀번호를 만들었어요. 예전 비밀번호와 링크는 이제 쓸 수 없어요.');
+  appLink();
+}
 // 배포한 뒤 실행: 아이폰에서 열 연결 링크를 실행 로그에 보여 줌 (이 링크 = 내 가계부 열쇠이니 남에게 보내지 마세요)
 function appLink() {
   const url = ScriptApp.getService().getUrl(), token = props_().getProperty('APP_TOKEN') || TOKEN;
