@@ -95,7 +95,9 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   });
   const status = re => p.waitForFunction(r => new RegExp(r).test(document.querySelector('#syncPop').textContent + ' ' + document.querySelector('#status').textContent), re.source);
   await p.goto('http://localhost:8766/');
-  assert.ok(await p.isVisible('#settings'), 'settings auto-open when not connected');
+  assert.ok(await p.isVisible('#welcome'), 'welcome screen when not connected');
+  assert.equal(await p.textContent('#status'), '', 'no sheet error before connecting');
+  await p.click('#wPw'); await p.waitForSelector('#settings', { state: 'visible' });
   // 잘못된 링크 → 거부, 창 유지
   // 틀린 비밀번호 → 상태 줄이 쉬운 말로, 누르면 설정 창
   await p.fill('[name=token]', 'wrong'); await p.click('button[value=save]');
@@ -122,7 +124,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.fill('#entryForm [name=content]', '배달의민족 치킨');
   assert.equal(await p.inputValue('#entryForm [name=major]'), '식비');
   assert.equal(await p.inputValue('#entryForm [name=minor]'), '배달');
-  await p.selectOption('#entryForm [name=pay]', 'C체크카드');
+  await p.click('#payChips [data-pay="C체크카드"]');
   await p.fill('#entryForm [name=memo]', '=HYPERLINK("x")');
   await p.click('#entryForm button.primary');
   await p.waitForFunction(() => /식비 예산 82%/.test(document.querySelector('#toast').textContent));
@@ -142,7 +144,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 3) 내역: 검색·필터·정렬·수정
   await p.click('nav button[data-view=list]');
   assert.equal(await p.isVisible('#q'), false, 'search field hidden until the search button');
-  await p.click('#searchBtn'); assert.equal(await p.isVisible('nav'), false, 'tab bar turns into the search field');
+  await p.click('nav [data-search]'); assert.equal(await p.isVisible('nav'), false, 'tab bar turns into the search field');
   await p.click('#fToggle');
   await p.fill('#q', '치킨');
   assert.match(await p.textContent('#fActive'), /치킨/);
@@ -176,7 +178,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.evaluate(d => { const f = document.querySelector('#entryForm'); f.date.value = d; f.date.dispatchEvent(new Event('change', { bubbles: true })); }, ago(2) + '-01');
   await p.fill('#entryForm [name=content]', '휴대폰 요금');
   assert.equal(await p.inputValue('#entryForm [name=pay]'), 'C체크카드', 'new entry starts with the last payment method');
-  await p.selectOption('#entryForm [name=pay]', '');
+  await p.click('#payChips [data-pay=""]');
   await p.fill('#entryForm [name=amount]', '55000');
   await p.click('#majorChips [data-v="주거·통신"]');
   await p.click('#recRow .switch');
@@ -236,9 +238,9 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok(await p.isVisible('#filters')); assert.ok(!(await p.isVisible('#fAll')), 'list-only hidden on cal');
   const d01 = CUR + '-01';
   const cell = p.locator(`#calGrid [data-day="${d01}"]`);
-  assert.match(await cell.textContent(), /-505,000/); // 고깃집 450,000 + 휴대폰 55,000
+  assert.match(await cell.textContent(), /50\.5만/); // 고깃집 450,000 + 휴대폰 55,000
   assert.match(await p.textContent('#calTrend'), /지난달보다/);
-  await p.click('#calTabs [data-pt="카드"]'); assert.match(await cell.textContent(), /-450,000/); assert.doesNotMatch(await cell.textContent(), /505,000/); await p.click('#calTabs [data-pt=""]');
+  await p.click('#calTabs [data-pt="카드"]'); assert.match(await cell.textContent(), /45만/); assert.doesNotMatch(await cell.textContent(), /50\.5만/); await p.click('#calTabs [data-pt=""]');
   await cell.click();
   assert.equal(await cell.getAttribute('aria-pressed'), 'true');
   assert.equal(await p.locator('#dayList li[data-id]').count(), 2);
@@ -302,7 +304,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const p4 = await (await b.newContext()).newPage();
   await p4.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: gs.doGet({ parameter: Object.fromEntries(new URL(rt.request().url()).searchParams) }) }));
   await p4.goto('http://localhost:8766/');
-  await p4.click('.adv summary');
+  await p4.click('#wLink');
   await p4.fill('[name=link]', 'https://babjange1.github.io/Budget-book/#url=' + encodeURIComponent('https://script.google.com/macros/s/AKfy_-z9/exec') + '&token=' + encodeURIComponent(TOKEN));
   await p4.click('button[value=save]');
   await p4.waitForFunction(() => /동기화됨/.test(document.querySelector('#syncPop').textContent + document.querySelector('#status').textContent));
@@ -389,7 +391,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(B.d[4][7], '보류'); assert.equal(B.d[4][0], 4, '번호 유지'); assert.equal(B.d.filter(r => r && r[5]).length, 5);
   // 삭제: 2번째 줄(채식주의자)을 지워도 같은 줄 요약 표(K열)는 그대로
-  await p.click('#searchBtn'); assert.ok(await p.isVisible('#lSbar'), 'bottom search opens');
+  await p.click('#lNav [data-search]'); assert.ok(await p.isVisible('#lSbar'), 'bottom search opens');
   await p.fill('#lq', '채식'); assert.equal(await p.locator('#lList li[data-id]').count(), 1);
   await p.click('#lList li[data-id] >> nth=0'); await p.click('#lDelete'); await status(/삭제됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(B.d[1][5], '급류'); assert.equal(B.d[1][11], '요약1'); assert.equal(B.d[2][11], '요약2'); assert.equal(B.d[3][5], '=새 책');

@@ -23,7 +23,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.getAttribute('#lViews [data-v=flow]', 'aria-pressed'), 'true');
   assert.equal(await p.isVisible('#lListCard'), false);
   assert.equal(await p.textContent('#fTitle'), '페스트');
-  assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button').count(), 3); assert.equal(await p.isVisible('#lTabs'), false);
+  assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button[data-list]').count(), 3); assert.equal(await p.locator('#lNav [data-search]').count(), 1); assert.equal(await p.isVisible('#lTabs'), false);
   assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
   assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
   await p.click('#fAdd'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), ''); await p.click('#lCancel'); await p.waitForTimeout(300);

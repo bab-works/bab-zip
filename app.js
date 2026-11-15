@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v59'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v60'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -70,9 +70,9 @@ let syncTimer;
 const setStatus = t => {
   statusAct = ''; $('#status').classList.remove('err');
   if (/동기화됨|저장됨|삭제됨|반영됨/.test(t)) {
-    const el = $('#syncPop');
-    el.textContent = t; el.classList.add('show');
-    clearTimeout(syncTimer); syncTimer = setTimeout(() => el.classList.remove('show'), 1500);
+    $('#syncPop').textContent = t; // 화면 읽기 프로그램용 (눈에는 안 보임)
+    const u = $('#reload use'); u.setAttribute('href', '#i-check'); $('#reload').classList.add('ok');
+    clearTimeout(syncTimer); syncTimer = setTimeout(() => { u.setAttribute('href', '#i-sync'); $('#reload').classList.remove('ok'); }, 1400);
     $('#status').textContent = '';
     return;
   }
@@ -85,6 +85,7 @@ function explain(e) {
   if (!navigator.onLine) return ['인터넷이 끊겼어요 · 입력은 폰에 저장되고 연결되면 보내져요', pending.length ? 'pending' : 'retry'];
   if (/닿지 못했어요|45초|알 수 없는 응답/.test(m)) return [m + ' · 눌러서 자세히', pending.length ? 'pending' : 'retry'];
   if (/비밀번호/.test(m)) return ['비밀번호가 맞지 않아요 · 눌러서 다시 입력', 'settings'];
+  if (/연결하지 않았어요/.test(m)) return ['아직 내 시트에 연결하지 않았어요 · 눌러서 연결하기', 'welcome'];
   if (/틱틱/.test(m)) return [m + ' · 눌러서 해결 방법 보기', 'help-ticktick'];
   if (/배포|Code\.gs/.test(m)) return ['시트 쪽 코드가 예전 버전이에요 · 눌러서 해결 방법 보기', 'help-deploy'];
   if (/열 구성|P열|열 이름|열이 없어요|탭 없음|목록 탭/.test(m)) return ['시트 모양이 달라요: ' + m + ' · 눌러서 해결 방법 보기', 'help-sheet'];
@@ -152,6 +153,7 @@ $('#status').addEventListener('click', () => {
   if (statusAct === 'pending') { renderPending(); $('#pend').showModal(); return; }
   if (statusAct === 'retry') retry();
   else if (statusAct === 'settings') $('#openSettings').click();
+  else if (statusAct === 'welcome') $('#welcome').showModal();
   else if (HELP[statusAct]) openHelp(statusAct);
 });
 $('#helpRetry').addEventListener('click', () => { $('#help').close(); retry(); });
@@ -181,7 +183,7 @@ async function api(body, qs = '') {
   }
 }
 async function call(body, qs = '') {
-  if (!cfg.url) throw new Error('⚙ 설정에서 시트를 연결하세요');
+  if (!cfg.url || !cfg.token) throw new Error('아직 내 시트에 연결하지 않았어요');
   // 45초 넘게 답이 없으면 끊고 알려 줌 (안 그러면 아이폰이 「Load failed」만 남김)
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
   let res, text;
@@ -217,6 +219,7 @@ async function sendPending() {
   return true;
 }
 async function refresh() {
+  if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {
     busy(true);
     document.body.classList.toggle('loading', !data.items.length);
@@ -405,7 +408,7 @@ function daySums(list) {
 }
 let calPay = ''; // 달력 결제유형 탭 ('' = 전체)
 // 달력 손잡이: 펼침(한 달) ↔ 접힘(선택한 주 한 줄). 끌면 그 사이 높이로 움직임 (가계부 달력·습관 달력 공용)
-function foldCal(clip, grid, grab, open = true) {
+function foldCal(clip, grid, grab, open = true, hook = {}) {
   const f = { open, week: 0 };
   const row = () => (grid.querySelector('button, .other')?.offsetHeight || 60) + 2, full = () => grid.scrollHeight;
   const place = (h, animate) => {
@@ -415,9 +418,11 @@ function foldCal(clip, grid, grab, open = true) {
     grid.style.transform = `translateY(${-(1 - t) * f.week * rh}px)`;
   };
   f.fit = () => { if (clip.offsetParent) place(f.open ? full() : row(), false); }; // 숨긴 상태에선 높이를 못 재므로 보일 때 다시 맞춤
-  const toggle = () => { f.open = !f.open; place(f.open ? full() : row(), true); };
+  // hook.opening: 펼치기 직전(내용을 달력으로 바꿀 때), hook.closed: 다 접힌 뒤
+  const settle = () => { place(f.open ? full() : row(), true); if (!f.open && hook.closed) setTimeout(hook.closed, 260); };
+  const toggle = () => { if (!f.open && hook.opening) hook.opening(); f.open = !f.open; settle(); };
   let drag = null;
-  grab.addEventListener('pointerdown', e => { drag = { y: e.clientY, h: clip.offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); });
+  grab.addEventListener('pointerdown', e => { if (!f.open && hook.opening) hook.opening(); drag = { y: e.clientY, h: clip.offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); });
   grab.addEventListener('pointermove', e => {
     if (!drag) return;
     const dy = e.clientY - drag.y; if (Math.abs(dy) > 4) drag.moved = true;
@@ -426,9 +431,9 @@ function foldCal(clip, grid, grab, open = true) {
   const end = () => {
     if (!drag) return;
     const moved = drag.moved; drag = null;
-    if (!moved) return toggle(); // 눌렀으면 토글, 끌었으면 가까운 쪽으로
+    if (!moved) { if (!f.open && hook.closed) hook.closed(); return toggle(); } // 눌렀으면 토글, 끌었으면 가까운 쪽으로
     f.open = clip.offsetHeight > (row() + full()) / 2;
-    place(f.open ? full() : row(), true);
+    settle();
   };
   grab.addEventListener('pointerup', end);
   grab.addEventListener('pointercancel', end);
@@ -455,15 +460,15 @@ function renderCal() {
   const exps = Object.values(sums).map(s => s.exp).filter(v => v > 0).sort((a, b) => a - b);
   const bigCut = Math.max(1e6, 3 * (exps[Math.floor(exps.length / 2)] || 0));
   const today = localISO().slice(0, 10);
-  // 칸이 좁아서 100만 이상만 줄여 쓰고, 그 아래는 전부 표시
-  const amt = n => Math.abs(n) >= 1e6 ? compact(n) : Math.abs(Math.round(n)).toLocaleString('ko-KR');
+  // 칸엔 지출만 만 단위로 (15.6만), 수입은 파란 점. 정확한 금액은 날짜를 누르면 아래 목록에
+  const man = n => { n = Math.abs(n); return n >= 1e4 ? `${+(n / 1e4).toFixed(n >= 1e6 ? 0 : 1)}만` : n.toLocaleString('ko-KR'); };
   let html = lead;
   for (let d = 1; d <= days; d++) {
     const ds = `${m}-${pad2(d)}`, s = sums[ds], wd = (first + d - 1) % 7;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-day="${ds}" class="${cls}" aria-pressed="${ds === selDay}" aria-label="${mo}월 ${d}일${s ? ` 수입 ${won(s.inc)} 지출 ${won(s.exp)}` : ''}">
-      <span class="d">${d}</span>${s && s.inc ? `<small class="in">+${amt(s.inc)}</small>` : ''}${s && s.exp ? (s.exp > 0
-        ? `<small class="${s.exp >= bigCut ? 'big' : 'spend'}">-${amt(s.exp)}</small>` : `<small class="refund">+${amt(s.exp)}</small>`) : ''}</button>`;
+      <span class="d">${d}</span>${s && s.inc ? '<i class="inc-dot" aria-hidden="true"></i>' : ''}${s && s.exp ? (s.exp > 0
+        ? `<small class="man ${s.exp >= bigCut ? 'big' : 'spend'}">${man(s.exp)}</small>` : `<small class="man refund">+${man(s.exp)}</small>`) : ''}</button>`;
   }
   calGrid.innerHTML = html + tail;
   calF.week = Math.floor((first + +selDay.slice(8) - 1) / 7);
@@ -558,6 +563,7 @@ function openEntry(it, date) {
   F.time.value = it ? (it.time || '') : (F.date.value === localISO().slice(0, 10) ? localISO().slice(11, 16) : '');
   entryCats(it?.major, it?.minor);
   fillSelect(F.pay, payments(), '결제수단 선택 안 함'); F.pay.value = ''; setSel(F.pay, it ? it.pay : payments().includes(store.get('lastPay')) ? store.get('lastPay') : ''); // 새 거래는 지난번 결제수단으로
+  renderPayChips();
   F.amount.value = it?.amount || '';
   F.content.value = it?.content || '';
   F.memo.value = it?.memo || '';
@@ -567,7 +573,24 @@ function openEntry(it, date) {
   $('#entryDelete').hidden = !it;
   $('#entryTitle').textContent = it ? '거래 수정' : '거래 추가';
   $('#entry').showModal();
+  if (!it) F.amount.focus(); // 새 거래는 바로 숫자 키패드
 }
+// 결제수단: 최근 쓴 3개 칩 + 더보기(전체 목록 시트). 값은 숨은 select에 넣음
+const payRecent = () => [...new Set([...store.get('payRecent', []), ...payments()])].filter(p => payments().includes(p)).slice(0, 3);
+function renderPayChips() {
+  const cur = F.pay.value, top = payRecent(), chips = cur && !top.includes(cur) ? [cur, ...top.slice(0, 2)] : top;
+  $('#payChips').innerHTML = chips.map(p => `<button type="button" data-pay="${esc(p)}" aria-pressed="${p === cur}">${esc(p)}</button>`).join('')
+    + `<button type="button" data-pay="" aria-pressed="${!cur}">없음</button>` + (payments().length > 3 ? '<button type="button" data-paymore>더보기</button>' : '');
+}
+$('#payChips').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.hasAttribute('data-paymore')) {
+    $('#payList').innerHTML = payments().map(p => `<button type="button" data-pay="${esc(p)}" aria-pressed="${p === F.pay.value}">${esc(p)}</button>`).join('');
+    return $('#paySheet').showModal();
+  }
+  F.pay.value = b.dataset.pay; renderPayChips();
+});
+$('#payList').addEventListener('click', e => { const b = e.target.closest('[data-pay]'); if (b) { setSel(F.pay, b.dataset.pay); renderPayChips(); $('#paySheet').close(); } });
 const recHint = () => { $('#recHint').textContent = F.rec.checked && F.date.value ? `매월 ${+F.date.value.slice(8)}일` : ''; };
 $('#entryForm').addEventListener('change', e => {
   if (e.target.name === 'type') entryCats();
@@ -604,7 +627,7 @@ $('#entryForm').addEventListener('submit', e => {
   const idx = data.items.findIndex(x => x.id === it.id);
   if (idx >= 0) data.items[idx] = { ...data.items[idx], ...it, instState: '' }; else data.items.push(it);
   $('#entry').close();
-  if (it.pay) store.set('lastPay', it.pay);
+  if (it.pay) { store.set('lastPay', it.pay); store.set('payRecent', [it.pay, ...store.get('payRecent', []).filter(p => p !== it.pay)].slice(0, 5)); }
   queue({ action: 'save', item: it });
   checkBudget(m, it.major, before);
 });
@@ -728,6 +751,7 @@ $('#dailyInfo').addEventListener('click', e => {
 ['#month', '#fType', '#fMajor', '#fPay', '#fSort', '#fAll'].forEach(s => $(s).addEventListener('change', render));
 $('#q').addEventListener('input', () => { renderFilters(); renderCal(); renderList(); });
 // 하단 검색: 동그란 단추를 누르면 탭 바 자리가 검색창이 됨 (홈에서 누르면 내역으로). ✕는 검색어를 지우고 탭 바로
+document.addEventListener('click', e => { if (e.target.closest('nav [data-search]')) $('#searchBtn').click(); });
 $('#searchBtn').addEventListener('click', () => {
   document.body.classList.add('searching');
   if (sec !== 'money') return $('#lq').focus();
@@ -749,6 +773,13 @@ $('#fReset').addEventListener('click', () => {
   $('#fSort').value = 'date-desc'; $('#fAll').checked = false;
   render();
 });
+$('#wLater').addEventListener('click', () => $('#welcome').close());
+['#wLink', '#wPw'].forEach(s => $(s).addEventListener('click', () => {
+  $('#welcome').close(); $('#openSettings').click();
+  const f = $('#settingsForm');
+  if (s === '#wLink') { f.querySelector('details.adv').open = true; f.link.focus(); } else f.token.focus();
+}));
+document.addEventListener('click', e => { const k = e.target.closest('[data-help]')?.dataset.help; if (k && HELP[k]) openHelp(k); });
 $('#reload').addEventListener('click', () => sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 $('#openSettings').addEventListener('click', () => {
   const f = $('#settingsForm');
@@ -902,7 +933,9 @@ function renderLists() {
   // 독서처럼 목록이 여러 개면 가계부처럼 아래 탭 바로 (위쪽 탭 줄은 쓰지 않음)
   $('#lTabs').hidden = true;
   $('#lNav').hidden = tabs.length < 2;
-  $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-l-${k}"/></svg>${label}</button>`).join('');
+  $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-l-${k}"/></svg>${label}</button>`).join('')
+    + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>';
+  document.body.classList.toggle('tabbar', tabs.length >= 2);
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
@@ -934,7 +967,8 @@ const lView = () => store.get(VIEWS[sec], 'flow');
 let flowItems = [], flowId = '', flowShown = '';
 const FC = 80; // 커버플로우에서 책 사이 간격(px) = 한 칸 넘길 때 움직이는 거리
 const coverHTML = i => { const t = esc(LIST_ROW[curList](i)[0]);
-  return i.image ? `<img class="cover" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-t="${t}">` : `<span class="cover ph">${t}</span>`; };
+  return i.image ? `<img class="cover" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-t="${t}">` : `<span class="cover ph" style="--h:${hue(t)}">${t}</span>`; };
+const hue = t => [...t].reduce((h, c) => (h * 31 + c.codePointAt(0)) % 360, 7); // 같은 제목은 늘 같은 색
 function renderFlow(a) {
   const el = $('#lFlow');
   flowItems = a; flowShown = '';
@@ -997,6 +1031,7 @@ $('#lViews').addEventListener('click', e => {
   if (v) { store.set(VIEWS[sec], v); renderLists(); }
 });
 async function refreshLists() {
+  if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {
     busy(true);
     document.body.classList.toggle('loading', !(lists[curList] || []).length);
@@ -1015,6 +1050,7 @@ function setSection(k) {
   document.body.classList.remove('white'); // 독서 커버플로우에서만 흰 바탕 (renderLists가 다시 켬)
   document.body.classList.remove('searching');
   document.body.classList.toggle('money', k === 'money');
+  document.body.classList.toggle('tabbar', k === 'money'); // 탭 바 안에 검색 항목이 있으면 떠 있는 검색 단추는 숨김
   $('#searchBtn').hidden = k === 'habit';
   if ($('#lq').value) $('#lq').value = '';
   store.set('sec', k);
@@ -1040,7 +1076,7 @@ function setSection(k) {
   }
 }
 // ── 습관: 틱틱과 실시간 연동 (시트의 Apps Script가 중계) ──
-let habits = store.get('habits', []), hDay = localISO().slice(0, 10);
+let habits = store.get('habits', []), hDay = localISO().slice(0, 10), hOff = false;
 const HICON = { habit_daily_check_in: '✅', habit_reading: '📖', habit_skincare: '🧴', habit_learn_words: '🗣️', habit_take_medicine: '💊',
   habit_exercising: '🏃', habit_eat_dinner: '🍚', habit_quit_drinking: '🍺', habit_drink_water: '💧', habit_sleep: '😴', habit_meditation: '🧘' };
 const stampOf = iso => +iso.replace(/-/g, '');
@@ -1060,22 +1096,27 @@ function streak(h) {
   }
   return n;
 }
-const hF = foldCal($('#hClip'), $('#hGrid'), $('#hGrab'), false); // 처음엔 이번 주만, 손잡이를 내리면 한 달
+const hF = foldCal($('#hClip'), $('#hGrid'), $('#hGrab'), false, { opening: () => renderHabits(true), closed: () => renderHabits() }); // 접힘: 최근 7일, 펼침: 한 달
 let hMon = hDay.slice(0, 7);
-function renderHabits() {
+function renderHabits(month = hF.open) {
   const today = localISO().slice(0, 10), { y, mo, first, days, lead, tail } = monthGrid(hMon);
-  $('#hMonth').textContent = `${y}년 ${mo}월`;
+  $('#hMonth').textContent = month ? `${y}년 ${mo}월` : '최근 7일';
+  $('#hPrev').hidden = $('#hNext').hidden = !month;
   $('#hNext').disabled = hMon >= today.slice(0, 7);
-  let html = lead;
-  for (let d = 1; d <= days; d++) {
-    const ds = `${hMon}-${pad2(d)}`, wd = (first + d - 1) % 7, due = habits.filter(h => dueOn(h, ds));
+  // 접혀 있으면 오늘이 맨 오른쪽인 최근 7일, 펼치면 달력
+  const cells = month ? range(1, days).map(d => `${hMon}-${pad2(d)}`) : range(0, 6).map(k => isoAdd(today, k - 6));
+  // 요일 머리글도 칸 순서대로 (최근 7일은 오늘 요일이 맨 오른쪽)
+  $('#hWeek').innerHTML = cells.slice(0, 7).map((ds, k) => { const w = month ? k : new Date(ds + 'T12:00:00').getDay(); return `<span class="${w === 0 ? 'sun' : w === 6 ? 'sat' : ''}">${'일월화수목금토'[w]}</span>`; }).join('');
+  let html = month ? lead : '';
+  for (const ds of cells) {
+    const d = +ds.slice(8), wd = new Date(ds + 'T12:00:00').getDay(), due = habits.filter(h => dueOn(h, ds));
     const n = due.filter(h => h.done.includes(stampOf(ds))).length, pct = due.length ? Math.round(n / due.length * 100) : 0;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
-      <span class="d">${d}</span>${due.length && ds <= today ? `<i class="${pct === 100 ? 'all' : ''}" style="--p:${pct}%" aria-hidden="true"></i>` : ''}</button>`;
+      <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${due.length && ds <= today ? `<i class="${pct === 100 ? 'all' : ''}" style="--p:${pct}%" aria-hidden="true"></i>` : ''}</button>`;
   }
-  $('#hGrid').innerHTML = html + tail;
-  hF.week = hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
+  $('#hGrid').innerHTML = html + (month ? tail : '');
+  hF.week = month && hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
   hF.fit();
   const due = habits.filter(h => dueOn(h, hDay)), st = stampOf(hDay), n = due.filter(h => h.done.includes(st)).length;
   $('#hInfo').textContent = habits.length ? `${hDay === today ? '오늘' : `${+hDay.slice(5, 7)}월 ${+hDay.slice(8)}일`} ${n}/${due.length} 완료` : '';
@@ -1084,19 +1125,21 @@ function renderHabits() {
     return `<li style="--c:${esc(h.color)}" class="${on ? 'done' : ''}"><span class="hic" aria-hidden="true">${HICON[h.icon] || '⭐'}</span>
       <div><span>${esc(h.name)}</span><small>${s ? `🔥 ${s}일 연속 · ` : ''}총 ${h.total}일${h.enc ? ' · ' + esc(h.enc) : ''}</small></div>
       <button type="button" class="hcheck" data-h="${esc(h.id)}" aria-pressed="${on}" aria-label="${esc(h.name)} ${on ? '체크 해제' : '체크'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></li>`;
-  }).join('') || `<li class="empty">${habits.length ? '이날은 할 습관이 없어요' : '틱틱 습관을 불러오는 중이거나, 아직 연결 전이에요'}</li>`;
+  }).join('') || (hOff ? `<li class="empty hoff"><b>틱틱 습관을 여기서 체크할 수 있어요</b><span>틱틱 계정을 시트에 한 번 연결하면, 체크가 틱틱에도 바로 반영돼요.</span><button type="button" class="small" data-help="help-ticktick">연결 방법 보기</button></li>`
+    : `<li class="empty">${habits.length ? '이날은 할 습관이 없어요' : '틱틱 습관을 불러오는 중이에요'}</li>`);
   const rest = habits.length - due.length;
   $('#hRest').textContent = rest ? `이날 쉬는 습관 ${rest}개` : '';
 }
 async function refreshHabits() {
+  if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {
     busy(true);
     if (await sync()) {
       try {
         const r = await api(null, '&what=habits');
         if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
-        else { habits = r.habits; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
-      } catch (e) { showError(e); }
+        else { habits = r.habits; hOff = false; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
+      } catch (e) { if (!habits.length && /틱틱/.test(e.message)) hOff = true; else showError(e); } // 한 번도 연결한 적 없으면 오류 대신 안내
     }
     if (sec === 'habit') renderHabits();
   } finally { busy(false); }
@@ -1133,7 +1176,7 @@ function menuP(p, dragging) {
 $('#menu').addEventListener('transitionend', e => { if (e.target === e.currentTarget && e.propertyName === 'opacity' && root.style.getPropertyValue('--p') === '1.000') root.classList.add('menu-rest'); });
 function openMenu(dragging) {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
-    `<button type="button" data-sec="${k}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}</button>`).join('');
+    `<button type="button" data-sec="${k}" data-hidden="${store.get('menuHidden', []).includes(k) && k !== sec ? 1 : 0}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}${k === 'money' ? '' : '<span class="eye" data-eye role="button" aria-label="메뉴에서 숨기기·보이기">👁</span>'}</button>`).join('');
   menuP(0, true); root.classList.add('menu-open');
   $('#menu').showModal();
   if (dragging) return;
@@ -1193,6 +1236,10 @@ $('#menuBtn').addEventListener('click', () => openMenu());
   list.addEventListener('pointerdown', e => {
     const b = e.target.closest('[data-sec]');
     if (!b) return;
+    if (editing() && e.target.closest('[data-eye]')) { // 눈: 이 섹션을 메뉴에서 숨기기/보이기
+      b.dataset.hidden = b.dataset.hidden === '1' ? '0' : '1';
+      return store.set('menuHidden', [...list.querySelectorAll('[data-hidden="1"]')].map(x => x.dataset.sec));
+    }
     if (editing()) { drag = { b, y: e.clientY }; b.setPointerCapture(e.pointerId); b.classList.add('lift'); return; }
     start = { x: e.clientX, y: e.clientY };
     timer = setTimeout(() => { timer = null; setEdit(true); navigator.vibrate?.(12); }, 450);
@@ -1268,6 +1315,15 @@ function openItem(it) {
   const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책' };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
   $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
+  if (curList === 'book') { // 연도·월은 시간처럼 휠 하나로 (값은 원래 두 select에 그대로)
+    const ym = document.createElement('input'), y = f.year.value.match(/\d{4}/)?.[0], m = f.month.value.match(/\d+/)?.[0];
+    f.year.closest('label').hidden = f.month.closest('label').hidden = true;
+    const lab = document.createElement('label'); lab.className = 'f'; lab.textContent = '읽은 달'; lab.append(ym);
+    f.month.closest('label').after(lab);
+    ym.value = y && m ? `${y}-${pad2(+m)}` : '';
+    pickerField(ym, 'month', '읽은 달', { blank: true });
+    ym.addEventListener('change', () => { const [yy, mm] = ym.value.split('-'); setSel(f.year, yy ? yy + '년' : ''); if (!yy) f.year.value = ''; setSel(f.month, mm ? mm + '월' : ''); if (!mm) f.month.value = ''; });
+  }
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
@@ -1418,12 +1474,12 @@ function pickerField(input, kind, title, opt = {}) {
 }
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
 
-document.body.classList.add('money');
+document.body.classList.add('money', 'tabbar');
 const now = localISO();
 $('#month').value = now.slice(0, 7);
 render();
 refresh();
-if (!cfg.token) $('#settings').showModal(); // 비밀번호 전이면 바로 설정 창
+if (!cfg.token) $('#welcome').showModal(); // 연결 전이면 시작 화면
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
 $('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // 앱 아이콘 길게 누르기 메뉴(안드로이드)가 여는 주소: ?add=1 · ?view=cal · ?sec=book&add=1

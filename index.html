@@ -102,7 +102,7 @@
   .hero small { color:var(--muted); font-size:0.765rem; }
   .hero .big { font-size:2rem; font-weight:800; letter-spacing:-.03em; margin:2px 0 6px; }
   .hero .sub { display:flex; gap:16px; font-size:0.824rem; color:var(--muted); flex-wrap:wrap; }
-  .hero .sub b { color:var(--fg); }
+  .hero .sub b { color:var(--fg); } .hero .sub b.out { color:var(--out); }
   #cmp { font-size:0.765rem; margin-top:8px; color:var(--muted); }
   .alert { border-radius:16px; padding:12px 16px; margin:8px 0; font-size:0.824rem; background:color-mix(in srgb, var(--warn) 12%, var(--glass)); }
   .alert.over { background:color-mix(in srgb, var(--out) 10%, var(--glass)); }
@@ -188,14 +188,14 @@
   .cal-week, .cal { display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:2px; }
   .cal-week span { text-align:center; font-size:0.706rem; color:var(--muted); padding:4px 0; }
   .cal-week span:first-child, .cal .sun .d { color:var(--out); } .cal-week span:last-child, .cal .sat .d { color:var(--in); }
-  .cal-week span { opacity:.8; }
+  .cal-week span { opacity:.8; } #hWeek span { color:var(--muted); } #hWeek .sun { color:var(--out); } #hWeek .sat { color:var(--in); }
   /* 달력 손잡이: 끌어서 한 주 ↔ 한 달 */
   .clip { overflow:hidden; }
   .clip.anim { transition:height .25s ease; }
   #calGrid.anim { transition:transform .25s ease; }
   .grab { display:flex; justify-content:center; padding:10px 0 0; touch-action:none; cursor:grab; }
   .grab span { width:44px; height:5px; border-radius:3px; background:var(--muted); opacity:.45; }
-  .cal button { display:flex; flex-direction:column; align-items:center; gap:2px; min-height:66px; padding:6px 0; border-radius:14px;
+  .cal button { position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; min-height:66px; padding:6px 0; border-radius:14px;
     background:none; overflow:hidden; letter-spacing:-.03em; }
   .cal button .d { font-size:1.118rem; font-weight:400; margin-bottom:3px; }
   .cal button small { font-size:0.588rem; line-height:1.15; white-space:nowrap; }
@@ -223,7 +223,7 @@
   :root { --edge:max(0px, calc(50vw - 280px)); }
   nav { position:fixed; left:calc(var(--edge) + 12px); right:calc(var(--edge) + 84px); bottom:max(8px, calc(env(safe-area-inset-bottom) - 12px)); display:flex; border-radius:999px; padding:5px; z-index:5; }
   nav button { flex:1; background:none; color:var(--muted); font-size:0.706rem; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 0; }
-  nav { box-shadow:0 4px 20px rgba(0,0,0,.08); right:calc(var(--edge) + 142px); }
+  nav { box-shadow:0 4px 20px rgba(0,0,0,.08); right:calc(var(--edge) + 84px); }
   /* 하단 검색 (키보드가 올라오면 --kb만큼 같이 올라감) */
   .sbtn, .sbar { position:fixed; bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + var(--kb, 0px)); z-index:5; background:var(--glass); box-shadow:0 4px 20px rgba(0,0,0,.08); }
   nav, #fab { bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + var(--kb, 0px)); }
@@ -231,11 +231,14 @@
   .sbar { left:calc(var(--edge) + 12px); right:calc(var(--edge) + 84px); height:54px; margin-bottom:4px; border-radius:999px; display:none; align-items:center; gap:8px; padding:0 8px 0 18px; color:var(--muted); }
   .sbar input { flex:1; min-width:0; border:0; background:none; padding:10px 0; font-size:1rem; color:var(--fg); box-shadow:none; outline:none; }
   .sbar input::-webkit-search-cancel-button { -webkit-appearance:none; display:none; } /* ✕는 우리 단추 하나만 */
-  body.nofab nav { right:calc(var(--edge) + 72px); } body.nofab .sbtn, body.nofab .sbar { right:calc(var(--edge) + 12px); }
+  body.nofab nav { right:calc(var(--edge) + 12px); } body.nofab .sbtn, body.nofab .sbar { right:calc(var(--edge) + 12px); }
   .sbar .sclose, .sbar #sClose { width:36px; height:36px; border-radius:50%; padding:0; background:var(--fill); color:var(--muted); font-size:0.882rem; }
   body.searching.money #sbar, body.searching:not(.money) #lSbar { display:flex; animation:popIn .25s var(--ease-out); }
   body.searching nav, body.searching #searchBtn, .sbtn[hidden] { display:none; }
+  body.tabbar #searchBtn { display:none; } /* 탭 바가 있으면 검색은 탭 바 안 돋보기 */
   .frow { display:flex; justify-content:flex-end; }
+  .cal small.man { font-size:0.706rem; font-weight:700; letter-spacing:-.02em; }
+  .cal .inc-dot { position:absolute; top:6px; right:6px; width:6px; height:6px; border-radius:50%; background:var(--in); }
   .chip-btn { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:999px; background:var(--glass); font-size:0.824rem; font-weight:600; color:var(--fg); }
   .chip-btn svg.i { width:16px; height:16px; }
   nav button[aria-current="page"] { color:var(--accent); background:transparent; font-weight:700; }
@@ -305,7 +308,7 @@
   .lviews button[aria-pressed="true"] { background:var(--glass); color:var(--fg); box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .cover { display:block; width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:8px; background:var(--fill); }
   .cover.ph { display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; font-size:0.706rem; font-weight:700; line-height:1.3;
-    color:#fff; background:linear-gradient(160deg, #5b6b8c, #2c3446); overflow:hidden; word-break:keep-all; }
+    color:#2b2f36; background:linear-gradient(160deg, hsl(var(--h,220) 70% 86%), hsl(var(--h,220) 55% 74%)); overflow:hidden; word-break:keep-all; }
   #lList.grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px 10px; }
   #lList.grid li { display:block; padding:0; border:0; cursor:pointer; }
   #lList.grid li.empty { grid-column:1 / -1; }
@@ -330,6 +333,7 @@
   .flow-info small { display:block; color:var(--muted); font-size:0.765rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* 커버플로우 화면은 위쪽 여백을 줄이고, 키가 작은 폰에선 표지·평가 단추를 줄여 평가와 한 줄 리뷰가 한 화면에 */
   body.white #lHead { padding:4px 0 0; margin:0; }
+  #lHead { padding:6px; margin:4px 0 6px; } #lInfo { margin:0 0 4px; } #status:empty { min-height:0; margin:0; }
   body.white #lInfo { margin:6px 4px 0; }
   @media (max-height:740px) {
     .flow-card { --cw:clamp(64px, 11vh, 124px); }
@@ -360,7 +364,16 @@
   /* 꾹 눌러 편집: 롱프레스 메뉴·글자 선택을 막고, 편집 중엔 끌기만 (스크롤 안 함) */
   .menu-list button { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
   .menu-list.editing button { touch-action:none; cursor:grab; background:var(--fill); animation:wiggle .3s ease-in-out infinite alternate; }
-  .menu-list.editing button::after { content:'≡'; margin-left:auto; font-size:1.176rem; color:var(--muted); }
+  .menu-list.editing button::after { content:'≡'; font-size:1.176rem; color:var(--muted); }
+  .menu-list .eye { display:none; margin-left:auto; padding:4px 6px; font-size:1rem; cursor:pointer; }
+  .menu-list.editing .eye { display:inline; } .menu-list:not(.editing) [data-hidden="1"] { display:none; } .menu-list.editing [data-hidden="1"] { opacity:.45; }
+  .hoff { display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; padding:28px 12px; }
+  .hoff span { color:var(--muted); font-size:0.824rem; }
+  .welcome h2 { font-size:1.412rem; text-align:center; margin:6px 0 4px; } .welcome p.hint { text-align:center; margin-bottom:14px; }
+  .welcome .wbtn { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:14px 16px; margin:8px 0; border-radius:16px; background:var(--fill); color:var(--fg); text-decoration:none; font-weight:700; }
+  .welcome .wbtn small { color:var(--muted); font-weight:500; font-size:0.765rem; }
+  #payChips { display:flex; gap:6px; flex-wrap:wrap; } .pay-list button { display:block; width:100%; text-align:left; padding:12px 14px; margin:4px 0; background:var(--fill); }
+  .pay-list button[aria-pressed="true"] { background:var(--accent); color:#fff; }
   .menu-list.editing button:nth-child(even) { animation-delay:-.15s; }
   .menu-list button.lift { animation:none; transition:none; z-index:1; position:relative; box-shadow:0 8px 24px rgba(0,0,0,.18); background:var(--glass); }
   @keyframes wiggle { from { rotate:-.6deg; } to { rotate:.6deg; } }
@@ -424,10 +437,8 @@
   .minis { display:flex; gap:6px; flex-wrap:wrap; }
   .minis:empty { display:none; }
   .chips button[aria-pressed="true"], .minis button[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  #syncPop { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom) + var(--kb, 0px)); transform:translateX(-50%); z-index:10; pointer-events:none;
-    background:#191f28; color:#fff; padding:7px 14px; border-radius:20px; font-size:0.765rem; font-weight:600; opacity:0;
-    transform:translate(-50%, 10px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
-  #syncPop.show { opacity:1; transform:translate(-50%, 0); }
+  #syncPop { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); } /* 성공 알림은 화면 읽기용, 눈에는 새로고침 단추 ✓ */
+  #reload.ok { color:var(--in); animation:popIn .3s var(--ease-out); }
   #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
     background:#191f28; color:#fff; padding:10px 16px; border-radius:14px; font-size:0.824rem; font-weight:600; opacity:0; pointer-events:none;
     transform:translate(-50%, 12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
@@ -455,6 +466,7 @@
   <symbol id="i-l-book" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6v14"/></symbol>
   <symbol id="i-l-buy" viewBox="0 0 24 24"><path d="M3 4h2l2.5 11h11L21 7H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
   <symbol id="i-l-wish" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
   <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
 </svg>
@@ -552,7 +564,7 @@
   <section id="v-habit" hidden>
     <div class="card hcal">
       <div class="hmon"><button type="button" id="hPrev" class="icon-btn" aria-label="이전 달">‹</button><b id="hMonth"></b><button type="button" id="hNext" class="icon-btn" aria-label="다음 달">›</button></div>
-      <div class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div id="hWeek" class="cal-week" aria-hidden="true"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
       <div id="hClip" class="clip"><div id="hGrid" class="cal hgrid" role="grid" aria-label="습관 달력"></div></div>
       <div id="hGrab" class="grab" role="button" tabindex="0" aria-label="습관 달력 주간·월간 전환 (끌거나 누르기)"><span></span></div>
     </div>
@@ -595,6 +607,7 @@
   <button data-view="home" aria-current="page"><svg class="i"><use href="#i-home"/></svg>홈</button>
   <button data-view="cal"><svg class="i"><use href="#i-cal"/></svg>달력</button>
   <button data-view="list"><svg class="i"><use href="#i-list"/></svg>내역</button>
+  <button type="button" data-search><svg class="i"><use href="#i-search"/></svg>검색</button>
 </nav>
 <nav id="lNav" aria-label="목록 종류" hidden></nav>
 <!-- iOS 26처럼 검색은 아래: 가계부는 탭 바 옆 동그란 검색 단추 → 누르면 탭 바 자리가 검색창으로, 취미 목록은 아래 검색창 -->
@@ -630,7 +643,8 @@
     <select name="major" hidden aria-hidden="true" tabindex="-1"></select>
     <select name="minor" hidden aria-hidden="true" tabindex="-1"></select>
     <div class="dt-row full"><input name="date" type="date" required aria-label="날짜"><input name="time" type="time" aria-label="시간"></div>
-    <select name="pay" aria-label="결제수단"></select>
+    <select name="pay" hidden aria-hidden="true" tabindex="-1"></select>
+    <div id="payChips" class="minis full" role="group" aria-label="결제수단"></div>
     <input name="inst" type="number" inputmode="numeric" min="0" max="60" placeholder="할부 개월 (선택)" aria-label="할부 개월">
     <input class="full" name="memo" placeholder="메모 (선택)" maxlength="200" aria-label="메모">
     <div id="recRow" class="rec-row full">
@@ -690,6 +704,19 @@
   <div id="wsCols" class="wpick"></div>
 </dialog>
 
+<dialog id="paySheet" class="sheet">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 style="text-align:center">결제수단</h2>
+  <div id="payList" class="pay-list"></div>
+</dialog>
+<dialog id="welcome" class="welcome" aria-labelledby="wTitle">
+  <h2 id="wTitle">BAB:ZIP 시작하기</h2>
+  <p class="hint">가계부와 취미 기록을 내 구글 시트에 저장해요</p>
+  <button type="button" class="wbtn" id="wLink">연결 링크를 받았어요<small>받은 링크를 붙여넣어요</small></button>
+  <button type="button" class="wbtn" id="wPw">비밀번호가 있어요<small>시트에 정한 비밀번호를 입력해요</small></button>
+  <a class="wbtn" href="https://github.com/bab-works/bab-zip/blob/main/FRIEND.md" target="_blank" rel="noopener">처음이에요<small>내 시트 만드는 방법 (10분)</small></a>
+  <div class="row" style="justify-content:center; margin-top:6px"><button type="button" id="wLater" class="small">나중에 하기</button></div>
+</dialog>
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
     <h2>내 시트 연결</h2>
