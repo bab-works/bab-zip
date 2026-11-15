@@ -853,17 +853,18 @@ const RATE_OPTS = [['', '선택 안 함'], ...RATE];
 const LIST_FIELDS = {
   book: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['year', '연도', 'select', yearOpts],
     ['month', '월', 'select', ['', ...Array.from({ length: 12 }, (_, k) => pad2(k + 1) + '월')]],
-    ['status', '독서 상태', 'select', ['읽는중', '완독', '보류', '중도포기']], ['stars', '평가', 'select', RATE_OPTS], ['review', '감상평', 'text'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
+    ['status', '독서 상태', 'select', ['읽는중', '완독', '보류', '중도포기']], ['stars', '평가', 'select', RATE_OPTS], ['review', '한 줄 리뷰', 'text'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   buy: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['done', '구매 완료', 'bool'], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   wish: [['title', '책 제목', 'text'], ['author', '저자', 'text'], ['kind', '구분', 'select', ['추천받은 책', '추가 목록']], ['memo', '메모', 'text'], ['image', '표지 이미지 주소', 'url']],
   escape: [['theme', '테마', 'text'], ['date', '방문일', 'date'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['result', '결과', 'select', ['', '성공', '실패']],
     ['rating', '평점', 'select', RATE_OPTS], ['people', '인원', 'number'], ['hints', '힌트 수', 'number'], ['left', '남은 시간(분)', 'number'],
-    ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text'], ['image', '포스터 이미지 주소', 'url']],
-  board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+    ['cost', '비용(원)', 'number'], ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
+  board: [['name', '보드게임', 'text'], ['date', '날짜', 'date'], ['place', '장소', 'text'], ['with', '함께한 사람', 'text'], ['rating', '평점', 'select', RATE_OPTS],
+    ['review', '한 줄 리뷰', 'text'], ['image', '이미지 주소', 'url']],
   movie: [['title', '영화 제목', 'text'], ['director', '감독', 'text'], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['rating', '평점', 'select', RATE_OPTS],
-    ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+    ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
   play: [['title', '작품명', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['cast', '출연', 'text'],
-    ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '후기', 'text']],
+    ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
 const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭' };
@@ -873,7 +874,7 @@ const LIST_ROW = {
   buy: i => [i.title, joinDot([i.author, i.memo]), i.done ? '✅ 구매함' : '미구매'],
   wish: i => [i.title, joinDot([i.author, i.kind, i.memo]), ''],
   escape: i => [i.theme, joinDot([i.date, i.shop, i.area, i.with, i.review]), joinDot([i.result, i.rating])],
-  board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), ''],
+  board: i => [i.name, joinDot([i.date, i.place, i.with, i.review]), i.rating],
   movie: i => [i.title, joinDot([i.director, i.date, i.place, i.with, i.review]), i.rating],
   play: i => [i.title, joinDot([i.kind, i.date, i.place, i.cast, i.with, i.review]), i.rating || i.kind],
 };
@@ -915,7 +916,7 @@ function renderLists() {
   setFab(view === 'flow' && a.length > 0); // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
   if (view === 'flow' && a.length) return renderFlow(a);
   if (view === 'grid') {
-    $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author || i.shop, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
+    $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author || i.shop || i.director || i.place, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
       || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
     return;
   }
@@ -925,7 +926,8 @@ function renderLists() {
 }
 // ── 독서 보기: flow(아이팟 커버플로우, 기본) · grid(표지 카드 3열) · list(목록) ──
 // 보기 3가지는 표지·포스터가 있는 독서·방탈출. 평가 칸은 목록마다 이름이 달라요 (독서 별점 stars, 방탈출 평점 rating)
-const VIEWS = { book: 'bookView', escape: 'escapeView' }, RATE_KEY = { book: 'stars', escape: 'rating' };
+const VIEWS = { book: 'bookView', escape: 'escapeView', board: 'boardView', movie: 'movieView', play: 'playView' };
+const RATE_KEY = { book: 'stars', escape: 'rating', board: 'rating', movie: 'rating', play: 'rating' };
 const lView = () => store.get(VIEWS[sec], 'flow');
 let flowItems = [], flowId = '', flowShown = '';
 const FC = 80; // 커버플로우에서 책 사이 간격(px) = 한 칸 넘길 때 움직이는 거리
@@ -951,11 +953,10 @@ function flowPaint() {
   if (!i || i.id === flowShown) return;
   flowShown = flowId = i.id;
   $('#fTitle').textContent = LIST_ROW[curList](i)[0];
-  $('#fSub').textContent = curList === 'escape' ? joinDot([i.date, i.shop, i.result]) : joinDot([i.author, curList === 'book' ? i.status : i.memo]);
+  $('#fSub').textContent = { escape: () => joinDot([i.date, i.shop, i.result]), board: () => joinDot([i.date, i.place, i.with]), movie: () => joinDot([i.director, i.date, i.place]),
+    play: () => joinDot([i.kind, i.date, i.place]) }[curList]?.() ?? joinDot([i.author, curList === 'book' ? i.status : i.memo]);
   const rk = RATE_KEY[curList];
-  $('#fTabs').hidden = !rk;
-  $('#fRate').hidden = !rk || fTab !== 'rate';
-  $('#fReview').hidden = !rk || fTab !== 'review';
+  $('#fRate').hidden = $('#fReview').hidden = !rk; // 평가와 한 줄 리뷰를 한 화면에 함께
   if (document.activeElement !== $('#fReviewText')) $('#fReviewText').value = i.review || '';
   $('#fRate').innerHTML = RATE.map(([e, l]) => `<button type="button" data-r="${e}" aria-pressed="${i[rk] === e}" aria-label="${l.slice(e.length + 1)}">${e}</button>`).join('');
 }
@@ -979,16 +980,7 @@ $('#fRate').addEventListener('click', e => {
   queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], [rk]: it[rk] } });
 });
 $('#fAdd').addEventListener('click', () => openItem());
-// 감상평 탭: 가운데 책의 감상평을 바로 쓰고 저장 (독서 「감상평」, 방탈출 「후기」 칸)
-let fTab = 'rate';
-$('#fTabs').addEventListener('click', e => {
-  const t = e.target.closest('[data-t]')?.dataset.t;
-  if (!t) return;
-  fTab = t;
-  $('#fTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === t));
-  flowShown = ''; flowPaint();
-  if (t === 'review') $('#fReviewText').focus();
-});
+// 한 줄 리뷰: 가운데 항목의 리뷰를 바로 쓰고 저장 (독서 「한 줄 리뷰」, 나머지는 「후기」 칸)
 $('#fReview').addEventListener('submit', e => {
   e.preventDefault();
   const it = (lists[curList] || []).find(i => i.id === flowShown), v = $('#fReviewText').value.trim();
@@ -996,7 +988,7 @@ $('#fReview').addEventListener('submit', e => {
   it.review = v; store.set('lists', lists);
   const key = LIST_FIELDS[curList][0][0];
   $('#fReviewText').blur();
-  queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], review: v } }).then(ok => ok && toast('감상평을 저장했어요'));
+  queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], review: v } }).then(ok => ok && toast('한 줄 리뷰를 저장했어요'));
 });
 $('#lViews').addEventListener('click', e => {
   const v = e.target.closest('[data-v]')?.dataset.v;
@@ -1257,7 +1249,7 @@ function openItem(it) {
     }
     const full = ['author', 'shop', 'director', 'memo', 'review', 'image', 'date'].includes(n) ? ' full' : '';
     const extra = type === 'number' ? 'inputmode="numeric" min="0"' : type === 'url' ? 'inputmode="url" placeholder="https://…"' : 'maxlength="1000"';
-    if (n === 'review') return `<label class="f full">${lab}<textarea name="${n}" rows="3" maxlength="1000" placeholder="짧게 남겨도 좋아요"></textarea></label>`;
+    if (n === 'review') return `<label class="f full">${lab}<textarea name="${n}" rows="2" maxlength="1000" placeholder="한 줄이면 충분해요"></textarea></label>`;
     return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${extra}></label>`;
   }).join('');
   const f = $('#lForm').elements, today = localISO();

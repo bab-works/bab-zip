@@ -43,10 +43,9 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.getAttribute('#fRate [data-r="😍"]', 'aria-pressed'), 'true');
   await p.click('#fRate [data-r="😍"]'); await p.waitForTimeout(300); assert.equal(posts.at(-1).item.stars, '', 'tap again clears');
   // 감상평 탭: 가운데 책의 감상평을 쓰고 저장 → 그 책만 review 칸으로
-  await p.click('#fTabs [data-t=review]'); assert.equal(await p.isVisible('#fRate'), false);
+  assert.equal(await p.isVisible('#fRate'), true); assert.equal(await p.isVisible('#fReview'), true, 'rating and one-line review on one screen');
   await p.fill('#fReviewText', '반전이 좋았다'); await p.click('#fReview button'); await p.waitForTimeout(400);
   assert.deepEqual(posts.at(-1), { action: 'listSave', list: 'book', item: { id: 'b4', title: '투명한 나선', review: '반전이 좋았다' }, token: 't' });
-  await p.click('#fTabs [data-t=rate]'); assert.equal(await p.isVisible('#fRate'), true);
   // 가운데 책을 누르면 편집 창
   await p.click('#lFlow .fc:nth-child(4)', { force: true }); await p.waitForSelector('#lItem[open]');
   assert.equal(await p.inputValue('#lForm [name=title]'), '투명한 나선'); await p.click('#lCancel'); await p.waitForTimeout(300);
@@ -67,5 +66,5 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
   assert.equal(await p.isVisible('#lNav'), false, 'single-list sections have no bottom tab bar');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
-  assert.equal(await p.isVisible('#lViews'), false); assert.equal(await p.isVisible('#lHead'), false, 'no empty top box'); assert.equal(await p.isVisible('#lListCard'), true);
+  assert.equal(await p.isVisible('#lViews'), true, 'movies too');
   console.log('BOOK VIEWS OK'); await b.close(); process.exit(0); });
