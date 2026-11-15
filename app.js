@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v63'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v64'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -839,11 +839,6 @@ $('#lockOn').addEventListener('change', async e => {
     store.set('lockId', b64(c.rawId)); toast('다음부터 앱을 열 때 Face ID로 잠금을 풀어요');
   } catch (err) { e.target.checked = false; toast('이 기기에서는 Face ID 잠금을 켤 수 없어요'); }
 });
-$('#apCopy').addEventListener('click', async () => {
-  if (!cfg.url || !cfg.token) return toast('먼저 시트를 연결하세요');
-  try { await navigator.clipboard.writeText(cfg.url); toast('시트 주소를 복사했어요 · 단축어 URL 칸에 붙여넣으세요'); }
-  catch (e) { prompt('이 주소를 복사하세요', cfg.url); }
-});
 $('#wLater').addEventListener('click', () => $('#welcome').close());
 ['#wLink', '#wPw'].forEach(s => $(s).addEventListener('click', () => {
   $('#welcome').close(); $('#openSettings').click();
@@ -1003,7 +998,7 @@ function listInfo(k, a) {
   if (k === 'play') return `${n}편 · 뮤지컬 ${a.filter(i => i.kind === '뮤지컬').length} · 연극 ${a.filter(i => i.kind === '연극').length}`;
   return `${n}개 기록`;
 }
-// 목록 위 요약: 독서 연간 목표 고리, 방탈출 성공률·힌트·함께한 사람, 영화·연극·보드게임 평가 분포
+// 목록 위 요약: 독서 연간 목표 고리, 영화·연극·보드게임 평가 분포
 function renderStats(k, a) {
   const el = $('#lStats'), y = localISO().slice(0, 4);
   let h = '';
@@ -1014,13 +1009,6 @@ function renderStats(k, a) {
       <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="tr"/><circle cx="32" cy="32" r="26" class="pg" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/></svg>
       <b>${done}${goal ? `<small>/${goal}</small>` : ''}</b></button>
       <div><b>${y}년 독서 목표</b><small>${goal ? (done >= goal ? '목표 달성! 🎉' : `${goal - done}권 남았어요 · 고리를 눌러 바꾸기`) : '고리를 눌러 올해 몇 권 읽을지 정해요'}</small></div>`;
-  } else if (k === 'escape' && a.length) {
-    const tried = a.filter(i => i.result), ok = tried.filter(i => i.result === '성공').length, hs = a.filter(i => i.hints !== '' && i.hints != null);
-    const ppl = {}; a.forEach(i => String(i.with || '').split(/[,·、/]+|\s{2,}/).map(t => t.trim()).filter(Boolean).forEach(t => { ppl[t] = (ppl[t] || 0) + 1; }));
-    const top = Object.entries(ppl).sort((x, z) => z[1] - x[1]).slice(0, 3);
-    h = `<div class="stat3"><span><b>${tried.length ? Math.round(ok / tried.length * 100) + '%' : '-'}</b><small>성공률 ${ok}/${tried.length}</small></span>
-      <span><b>${hs.length ? (hs.reduce((t, i) => t + +i.hints, 0) / hs.length).toFixed(1) : '-'}</b><small>평균 힌트</small></span>
-      <span><b>${top.length ? esc(top[0][0]) : '-'}</b><small>${top.length ? '자주 함께 · ' + top.map(([n, c]) => `${esc(n)} ${c}`).join(' · ') : '함께한 사람'}</small></span></div>`;
   } else if (RATE_KEY[k] && k !== 'book' && a.some(i => i[RATE_KEY[k]])) {
     const cnt = RATE.map(([e]) => a.filter(i => i[RATE_KEY[k]] === e).length), max = Math.max(...cnt);
     h = `<div class="rdist" role="img" aria-label="내 평가 분포 ${RATE.map(([e, l], n) => l.slice(e.length + 1) + ' ' + cnt[n]).join(', ')}">${RATE.map(([e], n) =>

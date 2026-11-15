@@ -529,15 +529,6 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
     assert.match(await p.textContent('#rcList'), /한 해 동안 쓴 돈/);
     assert(await p.evaluate(async () => (await recapImage()).size) > 20000, 'recap png drawn');
     await p.click('#rcClose'); console.log('RECAP OK'); }
-  { // 애플페이 단축어 자동 기록: 분류규칙으로 분류, 같은 분 두 번 와도 한 줄
-    const n0 = T.d.length, go = () => JSON.parse(gs.doGet({ parameter: { token: TOKEN, auto: '1', amount: '₩12,300', merchant: '스타벅스 강남점', card: 'C체크' } }));
-    const r1 = go(); go();
-    assert.equal(r1.ok, true); assert.equal(T.d.length, n0 + 1, 'dedupe same minute');
-    const row = T.d[T.d.length - 1]; assert.deepEqual([row[2], row[3], row[5], row[7], row[8]], ['지출', '카페·간식', '스타벅스 강남점', 'C체크카드', 12300]);
-    assert.equal(JSON.parse(gs.doGet({ parameter: { token: 'x', auto: '1', amount: '1' } })).ok, false, 'auto needs token');
-    JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ action: 'autoTx', token: TOKEN, amount: '5,000원', merchant: '스타벅스 역삼', card: '' }) } }));
-    assert.deepEqual(T.d[T.d.length - 1].slice(2, 6), ['지출', '카페·간식', '카페', '스타벅스 역삼'], 'POST JSON from Shortcuts');
-    console.log('AUTO TX OK'); }
   { // 밑줄 문장: 제목 줄에 칸이 없으면 맨 끝에 만들어 저장 / 보고 싶어요 탭: 읽을 땐 없어도 빈 목록, 처음 저장할 때 만듦
     const B = bookSS['독서 기록'], post = o => JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ token: TOKEN, ...o }) } }));
     const ic = B.d[0].indexOf('id'), row = B.d.find((r, k) => k && r && r[ic] && r[5]), id = row[ic], title = row[5];
