@@ -161,7 +161,24 @@ function toast(t, ms = 3500) {
 }
 
 // ── 시트 통신 ──
+// 저장(POST)이 아이폰에서 「Load failed」로 끊기는 경우가 있어, 그러면 같은 작업을 GET(?op=)으로 다시 보냄
+// 저장 작업은 모두 id로 덮어쓰는 방식이라 두 번 들어가도 중복이 생기지 않음. 한 번 GET이 통하면 다음부터 GET 먼저
 async function api(body, qs = '') {
+  if (!body) return call('', qs);
+  const viaGet = () => call('', '&op=' + encodeURIComponent(JSON.stringify(body))).then(r => {
+    if (!r.wrote) throw new Error('시트 쪽 코드가 예전 버전이에요 · Code.gs를 새 버전으로 배포해 주세요');
+    return r;
+  });
+  if (store.get('writeViaGet')) return viaGet();
+  try { return await call(body); }
+  catch (e) {
+    if (!e.unreached) throw e;
+    const r = await viaGet();
+    store.set('writeViaGet', true);
+    return r;
+  }
+}
+async function call(body, qs = '') {
   if (!cfg.url) throw new Error('⚙ 설정에서 시트를 연결하세요');
   // 45초 넘게 답이 없으면 끊고 알려 줌 (안 그러면 아이폰이 「Load failed」만 남김)
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
@@ -173,7 +190,7 @@ async function api(body, qs = '') {
       : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token) + qs, { signal: ctl.signal });
     text = await res.text();
   } catch (e) {
-    throw new Error(e.name === 'AbortError' ? '시트가 45초 넘게 답이 없어요' : `시트에 닿지 못했어요 (${e.message})`);
+    throw Object.assign(new Error(e.name === 'AbortError' ? '시트가 45초 넘게 답이 없어요' : `시트에 닿지 못했어요 (${e.message})`), { unreached: e.name !== 'AbortError' });
   } finally { clearTimeout(timer); }
   let r;
   try { r = JSON.parse(text); } catch { throw new Error(`시트가 알 수 없는 응답을 보냈어요 (HTTP ${res.status}) ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}`); }

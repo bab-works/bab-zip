@@ -376,6 +376,12 @@ function summary_() {
 }
 
 function doGet(e) {
+  if (e.parameter.op) { // 저장 작업을 GET으로 받은 경우
+    let b;
+    try { b = JSON.parse(e.parameter.op); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
+    b.token = e.parameter.token;
+    return writeOp_(b);
+  }
   if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
@@ -409,6 +415,10 @@ function doGet(e) {
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
+  return writeOp_(b);
+}
+// 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
+function writeOp_(b) {
   if (!authOk_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     withLock_(() => {
@@ -422,7 +432,7 @@ function doPost(e) {
       else if (b.action === 'habitCheck') habitCheck_(b.habitId, b.stamp, b.done);
       else throw new Error('알 수 없는 동작');
     });
-    return out_({ ok: true });
+    return out_({ ok: true, wrote: true });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
     return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱/.test(err.message) });

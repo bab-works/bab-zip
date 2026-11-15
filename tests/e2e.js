@@ -76,7 +76,7 @@ const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS:
 const gs = new Function(...Object.keys(g), fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'test-token';") + ';return {doGet, doPost}')(...Object.values(g));
 const TOKEN = 'test-token';
 const T = sheets.거래, col = c => T.d.slice(1).map(r => r[c - 1]);
-let offline = false;
+let offline = false, postBlocked = false, oldServer = false;
 http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]));
   fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.woff2') ? 'font/woff2' : f.endsWith('.js') ? 'text/javascript' : f.endsWith('.html') ? 'text/html' : 'application/octet-stream' }); r.end(b); }); })
   .listen(8766, async () => {
@@ -86,7 +86,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   let promptAnswer = '';
   p.on('dialog', d => d.type() === 'prompt' ? d.accept(promptAnswer) : d.accept());
   await p.route('https://script.google.com/**', async rt => {
-    if (offline) return rt.abort();
+    if (offline || (postBlocked && rt.request().method() === 'POST')) return rt.abort();
+    if (oldServer && /[?&]op=/.test(rt.request().url())) return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"items":[]}' });
     const q = rt.request(), u = new URL(q.url());
     const body = q.method() === 'POST' ? gs.doPost({ postData: { contents: q.postData() } }) : gs.doGet({ parameter: Object.fromEntries(u.searchParams) });
     if (/"ok":false/.test(body)) console.log('SERVER', body.slice(0,200)); rt.fulfill({ contentType: 'application/json', body });
@@ -209,7 +210,19 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const before = T.d.length;
   offline = false; await p.click('#pendRetry'); await p.waitForFunction(() => /모두 시트에 저장됐어요/.test(document.querySelector('#pendErr').textContent));
   await p.click('#pendClose'); await status(/동기화됨/);
-  assert.equal(T.d.length, before + 1);
+  // 아이폰처럼 저장(POST)만 끊기면 같은 작업을 GET(?op=)으로 보내 저장됨
+  postBlocked = true;
+  { const n0 = T.d.length;
+    await p.click('#fab'); await p.fill('#entryForm [name=amount]', '3300'); await p.fill('#entryForm [name=content]', 'GET으로 저장'); await p.click('#entryForm button.primary');
+    await status(/저장됨/); assert.equal(T.d.length, n0 + 1); assert.equal(T.d.at(-1)[5], 'GET으로 저장');
+    assert.equal(await p.evaluate(() => localStorage.getItem('writeViaGet')), 'true', 'remembers GET for next time');
+    // 예전 서버(배포 전)는 op를 무시하고 목록만 돌려주므로, 저장된 것으로 착각하지 않고 배포 안내
+    oldServer = true;
+    await p.click('#fab'); await p.fill('#entryForm [name=amount]', '1100'); await p.fill('#entryForm [name=content]', '예전 서버'); await p.click('#entryForm button.primary');
+    await p.waitForFunction(() => /예전 버전/.test(document.querySelector('#status').textContent)); assert.equal(T.d.length, n0 + 1, 'not lost: still pending');
+    oldServer = false; postBlocked = false; await p.evaluate(() => localStorage.removeItem('writeViaGet'));
+    await p.click('#reload'); await status(/동기화됨/); assert.equal(T.d.at(-1)[5], '예전 서버'); }
+  assert.equal(T.d.length, before + 3); // 오프라인 1건 + GET 저장 2건
   await p.screenshot({ path: SHOTS + '/home.png' });
   await p.click('nav button[data-view=list]');
   await p.screenshot({ path: SHOTS + '/list.png' });
