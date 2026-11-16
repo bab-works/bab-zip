@@ -497,7 +497,11 @@
   #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
     background:#191f28; color:#fff; padding:10px 16px; border-radius:14px; font-size:0.824rem; font-weight:600; opacity:0; pointer-events:none;
     transform:translate(-50%, 12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
-  #toast.show { opacity:1; transform:translate(-50%, 0); }
+  #toast.show { opacity:1; transform:translate(-50%, 0); } #toast { white-space:pre-line; }
+  #toast.act { display:flex; align-items:center; gap:12px; pointer-events:auto; } #toast.act:not(.show) { pointer-events:none; }
+  #toast button { flex:none; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.18); color:#7db3ff; font-weight:700; font-size:0.824rem; }
+  .lmove { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-radius:14px; background:var(--fill); }
+  .lmove span { color:var(--muted); font-size:0.765rem; margin-right:auto; } .lmove[hidden] { display:none; }
   .home-quick { display:flex; padding:0; gap:0; overflow:hidden; } .home-quick > button { background:none; color:inherit; padding:16px 18px; border-radius:0; box-shadow:none; }
   #homeQuick { flex:1; min-width:0; display:flex; justify-content:space-between; align-items:center; text-align:left; } #homeQuick > span:first-child { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* ＋와 똑같은 반투명 동그라미에 선 아이콘 (다른 아이콘들과 같은 굵기) */
@@ -608,7 +612,6 @@
       <div class="sub"><span>수입 <b id="inc">0원</b></span><span>남은 돈 <b id="bal">0원</b></span></div>
       <div id="cmp"></div>
     </div>
-    <div data-card="alerts" data-label="예산 경고"><div id="alerts"></div></div>
     <div class="card" data-card="daily" data-label="일별 지출">
       <h2>일별 지출</h2>
       <div id="dailyInfo" aria-live="polite"></div>
@@ -792,6 +795,7 @@
     <h2 id="lTitle" class="full" style="text-align:center;margin:0" tabindex="-1" autofocus></h2>
     <div id="lPreview" class="full" style="display:flex;justify-content:center"></div>
     <div id="lFields" class="full grid2"></div>
+    <div id="lMove" class="lmove full" hidden></div>
     <div class="row full sheet-foot">
       <button type="button" id="lDelete" class="danger">삭제</button>
       <span style="flex:1"></span>

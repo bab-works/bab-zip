@@ -138,7 +138,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#entryForm button.primary');
   await p.waitForFunction(() => /식비 예산 초과/.test(document.querySelector('#toast').textContent));
   await status(/저장됨/);
-  assert.match(await p.textContent('.alert.over'), /식비/);
+  assert.equal(await p.locator('.alert').count(), 0, 'budget warnings are toasts, not stuck on home');
   assert.equal(T.d.length, 5); assert.ok(T.maxR > 4, 'rows grown');
 
   // 3) 내역: 검색·필터·정렬·수정
@@ -315,16 +315,15 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 10) 홈 편집 + 카테고리 내역
   await p.click('nav button[data-view=home]');
   const order = () => p.$$eval('#v-home > [data-card]', els => els.map(e => e.dataset.card).join(','));
-  assert.equal(await order(), 'hero,alerts,daily,budget,recent,upcoming');
+  assert.equal(await order(), 'hero,daily,budget,recent,upcoming');
   assert.ok(!(await p.isVisible('.mover')));
   await p.click('#homeEdit');
   await p.click('[data-card="recent"] [data-mv="-1"]'); await p.click('[data-card="recent"] [data-mv="-1"]');
   await p.click('[data-card="hero"] [data-mv="-1"]'); // 맨 위에서 위로 → 변화 없음
-  assert.equal(await order(), 'hero,alerts,recent,daily,budget,upcoming');
+  assert.equal(await order(), 'hero,recent,daily,budget,upcoming');
   await p.click('#homeEdit');
   await p.reload(); await status(/동기화됨/);
-  assert.equal(await order(), 'hero,alerts,recent,daily,budget,upcoming', 'order persisted');
-  assert.equal(await p.locator('[data-card="alerts"] > .mover + #alerts').count(), 1, 'mover kept, alerts inside wrapper');
+  assert.equal(await order(), 'hero,recent,daily,budget,upcoming', 'order persisted');
   await p.click('#budgets [data-cat="식비"]');
   await p.waitForSelector('#catSheet', { state: 'visible' });
   assert.match(await p.textContent('#catTitle'), /식비/);

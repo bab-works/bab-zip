@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v71'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v72'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -161,9 +161,11 @@ $('#status').addEventListener('click', () => {
 $('#helpRetry').addEventListener('click', () => { $('#help').close(); retry(); });
 $('#helpClose').addEventListener('click', () => $('#help').close());
 let toastTimer;
-function toast(t, ms = 3500) {
+// undo: 누르면 되돌리는 함수 → 토스트에 「되돌리기」 단추
+function toast(t, ms = 3500, undo) {
   const el = $('#toast');
-  el.textContent = t; el.classList.add('show');
+  el.textContent = t; el.classList.add('show'); el.classList.toggle('act', !!undo);
+  if (undo) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '되돌리기'; b.onclick = () => { el.classList.remove('show'); undo(); }; el.append(b); ms = Math.max(ms, 6000); }
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
@@ -322,8 +324,10 @@ function renderHome() {
   // 경고는 단계별로 한 줄씩 묶어서 (여러 개가 화면을 밀어내지 않게)
   const names = lv => rows.filter(r => level(r.used, r.budget) === lv).map(r => `${esc(r.k)} ${Math.round(r.used / r.budget * 100)}%`);
   const over = names(2), warn = names(1);
-  $('#alerts').innerHTML = (over.length ? `<div class="alert over">🚨 <b>예산 초과 ${over.length}개</b> · ${over.join(', ')}</div>` : '') +
-    (warn.length ? `<div class="alert">⚠️ <b>80% 넘음 ${warn.length}개</b> · ${warn.join(', ')}</div>` : '');
+  // 예산 경고는 홈에 붙여 두지 않고 토스트로 한 번만 (같은 내용은 하루 한 번, 이번 달을 볼 때만)
+  const warnTxt = [over.length && `🚨 예산 초과 ${over.length}개 · ${over.join(', ')}`, warn.length && `⚠️ 80% 넘음 ${warn.length}개 · ${warn.join(', ')}`].filter(Boolean).join('\n');
+  const warnKey = localISO().slice(0, 10) + warnTxt;
+  if (warnTxt && m === localISO().slice(0, 7) && store.get('warnShown') !== warnKey && !brag) { store.set('warnShown', warnKey); setTimeout(() => toast(warnTxt, 5000), 600); }
   $('#notifyBtn').hidden = !('Notification' in window) || Notification.permission !== 'default';
 
   // 지난달 같은 기간(이번 달이면 오늘 날짜까지)과 비교
@@ -702,15 +706,21 @@ $('#addMenu').addEventListener('click', e => {
 });
 document.addEventListener('pointerdown', e => { if (document.body.classList.contains('adding') && !e.target.closest('#addMenu, #fab')) addMenu(false); });
 // 리퀴드 글래스 알약: 선택된 탭 뒤로 스프링처럼 미끄러지며 살짝 늘어났다 돌아옴
+// 탭 바를 다시 그려도(목록 탭) 알약은 nav에 기억해 둔 지난 위치에서 출발 → 누른 탭으로 미끄러짐 (왼쪽 끝에서 튀어나오지 않게)
 function movePill(nav) {
-  if (!nav) return;
-  let pill = nav.querySelector('.tab-pill');
-  if (!pill) { pill = document.createElement('span'); pill.className = 'tab-pill'; pill.setAttribute('aria-hidden', 'true'); nav.prepend(pill); }
+  if (!nav || !nav.offsetWidth) return; // 숨은 탭 바는 위치를 잴 수 없음
   const b = nav.querySelector('[aria-current="page"]');
+  let pill = nav.querySelector('.tab-pill');
+  if (!pill) {
+    pill = document.createElement('span'); pill.className = 'tab-pill'; pill.setAttribute('aria-hidden', 'true'); nav.prepend(pill);
+    const from = nav._pill || (b && [b.offsetLeft, b.offsetWidth]); // 처음이면 제자리에서 시작
+    if (from) { pill.style.transition = 'none'; pill.style.setProperty('--px', from[0] + 'px'); pill.style.setProperty('--pw', from[1] + 'px'); void pill.offsetWidth; pill.style.transition = ''; }
+  }
   pill.hidden = !b;
   if (!b) return;
-  const moved = pill.style.getPropertyValue('--px') && pill.style.getPropertyValue('--px') !== b.offsetLeft + 'px';
-  pill.style.setProperty('--px', b.offsetLeft + 'px'); pill.style.setProperty('--pw', b.offsetWidth + 'px');
+  const to = [b.offsetLeft, b.offsetWidth], moved = nav._pill && nav._pill[0] !== to[0];
+  nav._pill = to;
+  pill.style.setProperty('--px', to[0] + 'px'); pill.style.setProperty('--pw', to[1] + 'px');
   if (moved && !calm()) replay(pill, 'moving');
 }
 addEventListener('resize', () => document.querySelectorAll('nav').forEach(movePill));
@@ -1067,7 +1077,7 @@ function renderLists() {
   $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#${document.getElementById('i-l-' + k) ? 'i-l-' + k : 'i-s-' + sec}"/></svg>${label}</button>`).join('')
     + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>'; // 책 추가는 가계부처럼 떠 있는 ＋
   document.body.classList.add('tabbar');
-  requestAnimationFrame(() => movePill($('#lNav')));
+  movePill($('#lNav')); requestAnimationFrame(() => movePill($('#lNav'))); // 바로 다시 붙여서 깜빡임 없이 (방금 보이게 된 경우는 다음 프레임에)
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
@@ -1533,6 +1543,8 @@ let lEditing = null;
 function openItem(it, pre) {
   const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
   lEditing = it || null;
+  $('#lMove').hidden = !it || !BOOK_LISTS[curList];
+  if (it && BOOK_LISTS[curList]) $('#lMove').innerHTML = '<span>다른 목록으로</span>' + Object.entries(BOOK_LISTS).filter(([k]) => k !== curList).map(([k, n]) => `<button type="button" class="small" data-move="${k}">→ ${n}</button>`).join('');
   const opt = (n, base) => base.map(([v, l]) => `<label><input type="radio" name="${n}" value="${esc(v)}"><span>${esc(l)}</span></label>`).join('');
   $('#lFields').innerHTML = fs.map(([n, lab, type, opts], k) => {
     if (k === 0) return `<input class="full ltitle" name="${n}" placeholder="${lab}" aria-label="${lab}" maxlength="1000" required autocomplete="off">${BOOKISH[curList] ? '<div id="bookHits" class="book-hits full" role="listbox" aria-label="알라딘 검색 결과"></div>' : ''}`;
@@ -1619,6 +1631,27 @@ $('#lForm').addEventListener('submit', e => {
   store.set('lists', lists);
   $('#lItem').close();
   queue({ action: 'listSave', list: curList, item });
+});
+// 읽는 책 · 위시리스트 · 추천 목록 사이 옮기기 (새 목록에 저장 → 원래 목록에서 지움), 토스트로 되돌리기
+const BOOK_LISTS = { book: '읽는 책', buy: '위시리스트', wish: '추천 목록' };
+function moveBook(it, from, to) {
+  const t = localISO(), arr = lists[to] = lists[to] || [];
+  const item = { id: crypto.randomUUID(), title: it.title, author: it.author || '', memo: it.memo || '', ...(/^https:/.test(it.image || '') ? { image: it.image } : {}),
+    ...{ book: { year: t.slice(0, 4) + '년', month: t.slice(5, 7) + '월', status: '읽는중' }, buy: { done: false }, wish: { kind: '추천받은 책' } }[to] };
+  if (to === 'book') item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;
+  arr.push(item); lists[from] = (lists[from] || []).filter(i => i.id !== it.id); store.set('lists', lists);
+  queue({ action: 'listSave', list: to, item }).then(ok => ok && queue({ action: 'listDelete', list: from, id: it.id })); // 저장이 된 뒤에만 지움 (책이 사라지지 않게)
+  renderLists();
+  toast(`「${it.title}」을 ${BOOK_LISTS[to]}(으)로 옮겼어요`, 6000, () => {
+    lists[to] = (lists[to] || []).filter(i => i.id !== item.id); (lists[from] = lists[from] || []).push(it); store.set('lists', lists);
+    queue({ action: 'listSave', list: from, item: it }).then(ok => ok && queue({ action: 'listDelete', list: to, id: item.id }));
+    renderLists(); toast('되돌렸어요');
+  });
+}
+$('#lMove').addEventListener('click', e => {
+  const to = e.target.closest('[data-move]')?.dataset.move;
+  if (!to || !lEditing) return;
+  $('#lItem').close(); moveBook(lEditing, curList, to);
 });
 $('#lDelete').addEventListener('click', () => {
   if (!confirm('이 기록을 시트에서 삭제할까요?')) return;

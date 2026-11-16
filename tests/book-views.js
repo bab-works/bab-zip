@@ -73,6 +73,18 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.locator('#lList.grid').count(), 0); assert.equal(await p.locator('#lList li[data-id]').count(), 8);
   // 고른 보기는 기억, 다른 취미 목록은 늘 목록 보기
   await p.reload(); await p.waitForSelector('#lList li[data-id]'); assert.equal(await p.getAttribute('#lViews [data-v=list]', 'aria-pressed'), 'true');
+  // 읽는 책 → 위시리스트로 옮기기: 위시리스트에 저장한 뒤 읽는 책에서 지움, 토스트 「되돌리기」로 원래대로
+  await p.click('#lList li[data-id] >> nth=0'); await p.waitForSelector('#lItem[open]');
+  const moving = await p.inputValue('#lForm [name=title]');
+  assert.deepEqual(await p.$$eval('#lMove [data-move]', b => b.map(x => x.dataset.move)), ['buy', 'wish']);
+  const m0 = posts.length; await p.click('#lMove [data-move=buy]'); await p.waitForTimeout(800);
+  const mv = posts.slice(m0).map(x => [x.action, x.list, x.item?.title || x.id]);
+  assert.deepEqual(mv.map(x => x.slice(0, 2)), [['listSave', 'buy'], ['listDelete', 'book']]); assert.equal(mv[0][2], moving);
+  assert.equal(await p.locator('#lList li[data-id]').count(), 7, 'gone from 읽는 책');
+  assert.match(await p.textContent('#toast'), /위시리스트\(으\)로 옮겼어요/);
+  const u0 = posts.length; await p.click('#toast button'); await p.waitForTimeout(800);
+  assert.deepEqual(posts.slice(u0).map(x => [x.action, x.list]), [['listSave', 'book'], ['listDelete', 'buy']]);
+  assert.equal(await p.locator('#lList li[data-id]').count(), 8, 'back in 읽는 책');
   await p.click('#lViews [data-v=flow]');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
