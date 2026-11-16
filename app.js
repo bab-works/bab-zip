@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v73'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v74'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -19,6 +19,10 @@ function cfgFrom(hash) {
 const fromLink = cfgFrom(location.hash.slice(1));
 if (fromLink) { cfg = fromLink; store.set('cfg', cfg); }
 navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로 지우지 않게 요청
+// 누구로 연결했나: 주인(가계부까지) / 친구(접속코드, 취미 기록·습관만). 시트에 물어보기 전엔 코드 모양(f + 11자리)으로 짐작
+let me = store.get('me', {});
+const isFriend = () => me.token === cfg.token ? me.role === 'friend' : /^f[0-9a-f]{11}$/.test(cfg.token || '');
+const people = () => (me.token === cfg.token && me.people) || [];
 // 시트(원본)의 화면용 사본. meta = 카테고리·예산·결제수단·분류규칙·반복
 let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
 let pending = store.get('pending', []); // 아직 시트에 못 보낸 작업 (오프라인 대비, 순서대로 전송)
@@ -223,6 +227,7 @@ async function sendPending() {
   return true;
 }
 async function refresh() {
+  if (isFriend()) return; // 친구 코드는 가계부 없음
   if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {
     busy(true);
@@ -694,7 +699,7 @@ const addMenu = open => {
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
+$('#fab').addEventListener('click', () => sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
@@ -1099,7 +1104,7 @@ function renderLists() {
     return;
   }
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
-    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}${i.shared ? `<span class="badge shared-badge">${esc(i.shared)} 기록</span>` : ''}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 // ── 독서 보기: flow(아이팟 커버플로우, 기본) · grid(표지 카드 3열) · list(목록) ──
@@ -1134,6 +1139,7 @@ function flowPaint() {
   $('#fTitle').textContent = LIST_ROW[curList](i)[0];
   $('#fSub').textContent = { escape: () => joinDot([i.date, i.shop, i.result]), board: () => joinDot([i.date, i.place, i.with]), movie: () => joinDot([i.director, i.date, i.place]),
     play: () => joinDot([i.kind, i.date, i.place]) }[curList]?.() ?? joinDot([i.author, curList === 'book' ? i.status : i.memo]);
+  if (i.shared) $('#fSub').textContent = joinDot([$('#fSub').textContent, `${i.shared}님 기록`]);
   const rk = RATE_KEY[curList];
   $('#fRate').hidden = $('#fReview').hidden = !rk; // 평가와 한 줄 리뷰를 한 화면에 함께
   const nq = quotesOf(i).length;
@@ -1155,6 +1161,7 @@ $('#lFlow').addEventListener('click', e => {
 $('#fRate').addEventListener('click', e => {
   const rk = RATE_KEY[curList], r = e.target.closest('[data-r]')?.dataset.r, it = r && rk && (lists[curList] || []).find(i => i.id === flowShown);
   if (!it) return;
+  if (it.shared) return toast(`${it.shared}님의 기록이라 평가는 ${it.shared}님만 바꿀 수 있어요`);
   it[rk] = it[rk] === r ? '' : r;
   store.set('lists', lists);
   flowShown = ''; flowPaint();
@@ -1249,6 +1256,7 @@ $('#fReview').addEventListener('submit', e => {
   e.preventDefault();
   const it = (lists[curList] || []).find(i => i.id === flowShown), v = $('#fReviewText').value.trim();
   if (!it) return;
+  if (it.shared) return toast(`${it.shared}님의 기록이라 리뷰는 ${it.shared}님만 쓸 수 있어요`);
   it.review = v; store.set('lists', lists);
   const key = LIST_FIELDS[curList][0][0];
   $('#fReviewText').blur();
@@ -1267,7 +1275,7 @@ async function refreshLists() {
       try {
         const r = await api(null, '&what=lists');
         if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
-        else { lists = r.lists; store.set('lists', lists); setStatus('시트와 동기화됨'); }
+        else { lists = r.lists; store.set('lists', lists); if (r.people && me.token === cfg.token) { me.people = r.people; store.set('me', me); } setStatus('시트와 동기화됨'); }
       } catch (e) { showError(e); }
     }
     renderLists();
@@ -1295,7 +1303,7 @@ function setSection(k) {
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
-    setFab(habit);
+    setFab(habit && !isFriend()); // 친구는 습관도 ＋로 직접 만듦
     if (habit) { renderHabits(); refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
     $('#lq').value = '';
@@ -1307,7 +1315,8 @@ function setSection(k) {
 // ── 습관: 틱틱과 실시간 연동 (시트의 Apps Script가 중계) ──
 // 습관 화면엔 절주·운동만 (틱틱의 다른 습관은 불러와도 안 보임)
 const MY_HABITS = h => /^(절주|운동)/.test(h.name);
-let habits = store.get('habits', []).filter(MY_HABITS), hDay = localISO().slice(0, 10), hOff = false;
+const myHabits = a => isFriend() ? a : a.filter(MY_HABITS); // 친구는 자기가 만든 습관 전부
+let habits = myHabits(store.get('habits', [])), hDay = localISO().slice(0, 10), hOff = false;
 const HICON = { habit_daily_check_in: '✅', habit_reading: '📖', habit_skincare: '🧴', habit_learn_words: '🗣️', habit_take_medicine: '💊',
   habit_exercising: '🏃', habit_eat_dinner: '🍚', habit_quit_drinking: '🍺', habit_drink_water: '💧', habit_sleep: '😴', habit_meditation: '🧘' };
 const stampOf = iso => +iso.replace(/-/g, '');
@@ -1354,10 +1363,11 @@ function renderHabits(month = hF.open) {
   $('#hInfo').textContent = habits.length ? `${hDay === today ? '오늘' : `${+hDay.slice(5, 7)}월 ${+hDay.slice(8)}일`} ${n}/${due.length} 완료` : '';
   $('#hList').innerHTML = due.map(h => {
     const on = h.done.includes(st), s = streak(h);
-    return `<li style="--c:${esc(h.color)}" class="${on ? 'done' : ''}" data-hd="${esc(h.id)}"><span class="hic" aria-hidden="true">${HICON[h.icon] || '⭐'}</span>
+    return `<li style="--c:${esc(h.color)}" class="${on ? 'done' : ''}" data-hd="${esc(h.id)}"><span class="hic" aria-hidden="true">${esc(hIcon(h))}</span>
       <div><span>${esc(h.name)}</span><small>${s ? `🔥 ${s}일 연속 · ` : ''}총 ${h.total}일${h.enc ? ' · ' + esc(h.enc) : ''}</small></div>
       <button type="button" class="hcheck" data-h="${esc(h.id)}" aria-pressed="${on}" aria-label="${esc(h.name)} ${on ? '체크 해제' : '체크'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></li>`;
-  }).join('') || (hOff ? `<li class="empty hoff"><b>틱틱 습관을 여기서 체크할 수 있어요</b><span>틱틱 계정을 시트에 한 번 연결하면, 체크가 틱틱에도 바로 반영돼요.</span><button type="button" class="small" data-help="help-ticktick">연결 방법 보기</button></li>`
+  }).join('') || (isFriend() ? `<li class="empty hoff"><b>${habits.length ? '이날은 할 습관이 없어요' : '나만의 습관을 만들어 보세요'}</b><span>＋를 눌러 물 마시기, 운동처럼 매일 체크할 습관을 추가해요.</span></li>`
+    : hOff ? `<li class="empty hoff"><b>틱틱 습관을 여기서 체크할 수 있어요</b><span>틱틱 계정을 시트에 한 번 연결하면, 체크가 틱틱에도 바로 반영돼요.</span><button type="button" class="small" data-help="help-ticktick">연결 방법 보기</button></li>`
     : `<li class="empty">${habits.length ? '이날은 할 습관이 없어요' : '틱틱 습관을 불러오는 중이에요'}</li>`);
   const rest = habits.length - due.length;
   $('#hRest').textContent = rest ? `이날 쉬는 습관 ${rest}개` : '';
@@ -1370,7 +1380,7 @@ async function refreshHabits() {
       try {
         const r = await api(null, '&what=habits');
         if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
-        else { habits = r.habits.filter(MY_HABITS); hOff = false; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
+        else { habits = myHabits(r.habits); hOff = false; store.set('habits', habits); setStatus(isFriend() ? '시트와 동기화됨' : '틱틱과 동기화됨'); }
       } catch (e) { if (!habits.length && /틱틱/.test(e.message)) hOff = true; else showError(e); } // 한 번도 연결한 적 없으면 오류 대신 안내
     }
     if (sec === 'habit') renderHabits();
@@ -1391,7 +1401,7 @@ $('#hList').addEventListener('click', e => {
   h.total = Math.max(0, h.total + (done ? 1 : -1));
   store.set('habits', habits);
   renderHabits();
-  queue({ action: 'habitCheck', habitId: h.id, stamp: st, done }).then(ok => ok && setStatus('틱틱에 반영됨'));
+  queue({ action: 'habitCheck', habitId: h.id, stamp: st, done }).then(ok => ok && setStatus(isFriend() ? '저장됨' : '틱틱에 반영됨'));
 });
 // 습관 상세: 최근 1년 잔디(주마다 한 줄, 오른쪽 끝이 이번 주) + 최장 연속
 function openHabit(h) {
@@ -1403,15 +1413,82 @@ function openHabit(h) {
     if (on && d.startsWith(today.slice(0, 4))) yearN++;
     cells += `<i class="${on ? 'on' : due && d < today ? 'miss' : ''}" title="${d}${on ? ' 완료' : ''}"></i>`;
   }
-  $('#hdTitle').textContent = `${HICON[h.icon] || '⭐'} ${h.name}`;
+  $('#hdTitle').textContent = `${hIcon(h)} ${h.name}`;
+  $('#hdDelete').hidden = !h.local; $('#hdDelete').dataset.id = h.id;
   $('#hdStats').innerHTML = `<span><b>${streak(h)}일</b><small>지금 연속</small></span><span><b>${best}일</b><small>최장 연속</small></span><span><b>${yearN}일</b><small>올해 완료</small></span><span><b>${h.total}일</b><small>전체</small></span>`;
   const g = $('#hdGrid'); g.style.setProperty('--c', h.color || 'var(--accent)'); g.innerHTML = cells;
   $('#hDetail').showModal();
   g.parentElement.scrollLeft = 1e6; // 이번 주가 보이게
 }
 $('#hdClose').addEventListener('click', () => $('#hDetail').close());
+// ── 친구 습관 (틱틱 없이 시트에): 만들기·지우기 ──
+const hIcon = h => HICON[h.icon] || (h.local && h.icon) || '⭐';
+const H_EMOJI = ['💧', '🏃', '📖', '🧘', '💊', '🥗', '😴', '✍️', '🚭', '🍺'], H_COLOR = ['#3182f6', '#20c997', '#f59f00', '#f06595', '#845ef7', '#fa5252'];
+function openHabitAdd() {
+  $('#haName').value = '';
+  $('#haIcons').innerHTML = H_EMOJI.map((e, k) => `<button type="button" data-e="${e}" aria-pressed="${!k}">${e}</button>`).join('');
+  $('#haColors').innerHTML = H_COLOR.map((c, k) => `<button type="button" data-c="${c}" style="--c:${c}" aria-pressed="${!k}" aria-label="색 ${k + 1}"></button>`).join('');
+  $('#habitAdd').showModal(); $('#haName').focus();
+}
+['#haIcons', '#haColors'].forEach(s => $(s).addEventListener('click', e => { const b = e.target.closest('button'); if (b) $(s).querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); }));
+$('#haForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#haName').value.trim(); if (!name) return;
+  const h = { id: 'h' + crypto.randomUUID().replace(/-/g, '').slice(0, 16), name, icon: $('#haIcons [aria-pressed=true]').dataset.e, color: $('#haColors [aria-pressed=true]').dataset.c,
+    rule: 'RRULE:FREQ=DAILY', enc: '', total: 0, done: [], local: true };
+  habits.push(h); store.set('habits', habits); $('#habitAdd').close(); renderHabits();
+  queue({ action: 'habitAdd', habitId: h.id, name: h.name, icon: h.icon, color: h.color }).then(ok => ok && toast(`「${h.name}」 습관을 만들었어요`));
+});
+$('#haCancel').addEventListener('click', () => $('#habitAdd').close());
+$('#hdDelete').addEventListener('click', () => {
+  const h = habits.find(x => x.id === $('#hdDelete').dataset.id);
+  if (!h || !confirm(`「${h.name}」 습관과 체크 기록을 지울까요?`)) return;
+  habits = habits.filter(x => x !== h); store.set('habits', habits); $('#hDetail').close(); renderHabits();
+  queue({ action: 'habitDelete', habitId: h.id });
+});
 // 메뉴 순서: 저장된 순서 + 새로 생긴 섹션은 뒤에
-const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTIONS[k]); return [...o, ...Object.keys(SECTIONS).filter(k => !o.includes(k))]; };
+const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTIONS[k]); return [...o, ...Object.keys(SECTIONS).filter(k => !o.includes(k))].filter(k => !(k === 'money' && isFriend())); };
+// 시트에 「나는 누구?」를 물어 역할·이름·태그할 사람 목록을 받음. 친구면 가계부를 숨기고 독서로
+async function loadMe() {
+  if (!cfg.token) return;
+  try {
+    const r = await api(null, '&what=me');
+    if (!r.role) return; // 예전 Code.gs
+    me = { token: cfg.token, role: r.role, name: r.name || '', people: r.people || [], friends: r.friends || [] }; store.set('me', me);
+  } catch (e) { return; }
+  applyRole();
+}
+// 설정 창: 주인은 친구 초대·접속코드 관리, 친구는 「친구 코드로 연결됨」
+const friendLink = code => `${location.origin}${location.pathname}#url=${encodeURIComponent(cfg.url)}&token=${code}`;
+function renderFriends() {
+  const owner = !!cfg.token && !isFriend() && me.token === cfg.token;
+  $('#friendBox').hidden = !owner; $('#friendMe').hidden = !isFriend();
+  if (isFriend()) $('#friendMe').textContent = `친구 접속코드로 연결됨${me.name ? ' · ' + me.name : ''} · 가계부 없이 취미 기록과 습관을 써요`;
+  if (!owner) return;
+  if (document.activeElement !== $('#myName')) $('#myName').value = me.name || '';
+  $('#friendList').innerHTML = (me.friends || []).map(f => `<li><span><b>${esc(f.name)}</b></span><button type="button" class="small" data-copy="${esc(f.code)}">접속 링크 복사</button><button type="button" class="small danger" data-uninvite="${esc(f.code)}">삭제</button></li>`).join('')
+    || '<li class="hint">아직 초대한 친구가 없어요</li>';
+}
+const copyText = async t => { try { await navigator.clipboard.writeText(t); toast('복사했어요 · 친구에게 보내 주세요'); } catch (e) { prompt('이 링크를 복사해 친구에게 보내 주세요', t); } };
+async function friendOp(body, done) {
+  try { const r = await api(body); await loadMe(); done && done(r); } catch (e) { toast(e.message.replace(/^입력값 오류:?\s*/, '')); }
+}
+$('#myNameSave').addEventListener('click', () => { const n = $('#myName').value.trim(); if (n) friendOp({ action: 'setName', name: n }, () => toast('이름을 저장했어요')); });
+$('#inviteBtn').addEventListener('click', () => {
+  const n = $('#inviteName').value.trim(); if (!n) return;
+  friendOp({ action: 'invite', name: n }, r => { $('#inviteName').value = ''; if (r.code) copyText(friendLink(r.code)); });
+});
+$('#friendList').addEventListener('click', e => {
+  const c = e.target.closest('[data-copy]')?.dataset.copy, u = e.target.closest('[data-uninvite]')?.dataset.uninvite;
+  if (c) copyText(friendLink(c));
+  if (u && confirm('이 친구의 접속코드를 없앨까요? 친구 앱은 더 이상 연결되지 않아요 (기록은 시트에 남아요)')) friendOp({ action: 'uninvite', code: u });
+});
+$('#openSettings').addEventListener('click', () => { renderFriends(); loadMe(); });
+function applyRole() {
+  document.body.classList.toggle('friend', isFriend());
+  if (isFriend() && sec === 'money') setSection('book');
+  renderFriends();
+}
 // 사이드바 (클로드 앱 방식): 「열린 정도」 --p(0~1) 하나만 바꾸면 메뉴·본문·모서리·배경이 같은 곡선·같은 시간으로 함께 움직임
 // 끄는 동안엔 transition을 끄고(html.pushing) 손가락을 그대로 따라감. 위치·투명도만 움직여서 아이폰에서도 가벼움
 const root = document.documentElement, MENU_MS = 420;
@@ -1542,6 +1619,7 @@ document.addEventListener('error', e => {
 // 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
 let lEditing = null;
 function openItem(it, pre) {
+  if (it?.shared) return toast(`${it.shared}님이 나를 태그해서 남긴 기록이에요 · 고치는 건 ${it.shared}님만 할 수 있어요`);
   const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
   lEditing = it || null;
   $('#lMove').hidden = !it || !BOOK_LISTS[curList];
@@ -1567,6 +1645,18 @@ function openItem(it, pre) {
   const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책', ...pre };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
   $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
+  // 「함께한 사람」 아래 앱 쓰는 사람 칩: 누르면 이름이 들어가고, 그 사람 앱에도 이 기록이 보임
+  const tagTo = f.with, others = people().filter(n => n !== me.name);
+  if (tagTo && others.length) {
+    const box = document.createElement('div'); box.className = 'tag-chips full'; tagTo.closest('label').after(box);
+    const names = () => tagTo.value.split(/[,·、/&+\s]+/).map(x => x.trim()).filter(Boolean);
+    const paint = () => { box.innerHTML = '<small>앱 친구 태그 · 그 친구 앱에도 보여요</small>' + others.map(n => `<button type="button" class="small" data-tag="${esc(n)}" aria-pressed="${names().includes(n)}">@${esc(n)}</button>`).join(''); };
+    box.addEventListener('click', e => {
+      const n = e.target.closest('[data-tag]')?.dataset.tag; if (!n) return;
+      const a = names(); tagTo.value = (a.includes(n) ? a.filter(x => x !== n) : [...a, n]).join(', '); paint();
+    });
+    tagTo.addEventListener('input', paint); paint();
+  }
   if (curList === 'book') { // 연도·월은 시간처럼 휠 하나로 (값은 원래 두 select에 그대로)
     const ym = document.createElement('input'), y = f.year.value.match(/\d{4}/)?.[0], m = f.month.value.match(/\d+/)?.[0];
     f.year.closest('label').hidden = f.month.closest('label').hidden = true;
@@ -1783,6 +1873,7 @@ refresh();
 if (!cfg.token) $('#welcome').showModal(); // 연결 전이면 시작 화면
 else lockNow();
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
+applyRole(); loadMe(); // 친구 코드면 가계부 대신 독서로 (시트에 다시 물어 확인)
 function setBrag(on) {
   brag = on; store.set('brag', on);
   document.body.classList.toggle('brag', on); $('#bragBadge').hidden = !on;

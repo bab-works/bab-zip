@@ -1,0 +1,70 @@
+// 친구 접속코드 화면: 가계부 숨김 → 독서로, 남이 태그한 기록은 읽기 전용 배지, 습관은 ＋로 직접 / 주인 설정의 친구 초대
+const { chromium, devices } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path'), assert = require('assert');
+http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8788, async () => {
+  const b = await chromium.launch();
+  const page = async (token, role) => {
+    const ctx = await b.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' }), p = await ctx.newPage(), posts = [], gets = [];
+    p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
+    await ctx.addInitScript(t => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: t })), token);
+    let friends = [{ name: '민지', code: 'f0123456789a' }];
+    await p.route('https://script.google.com/**', rt => {
+      const q = rt.request(), u = q.url();
+      if (q.method() === 'POST') {
+        const o = JSON.parse(q.postData()); posts.push(o);
+        if (o.action === 'invite') { friends.push({ name: o.name, code: 'fbbbbbbbbbbb' }); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true,"code":"fbbbbbbbbbbb"}' }); }
+        return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true}' });
+      }
+      gets.push(u);
+      const body = /what=me/.test(u) ? { ok: true, role, name: role === 'owner' ? '나리' : '민지', people: ['나리', '민지', '준호'], friends: role === 'owner' ? friends : undefined }
+        : /what=lists/.test(u) ? { ok: true, people: ['나리', '민지', '준호'], lists: { book: [], buy: [], wish: [], escape: [{ id: 's:owner:e9', theme: '오시리스', shop: '서울이스케이프룸', with: '민지', shared: '나리' }] } }
+        : /what=habits/.test(u) ? { ok: true, habits: [] }
+        : role === 'friend' ? { ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' } : { ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } };
+      rt.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await p.goto('http://localhost:8788/'); await p.waitForTimeout(1200);
+    return { p, posts, gets };
+  };
+
+  // 친구
+  const { p, posts, gets } = await page('f0123456789a', 'friend');
+  assert.equal(await p.textContent('#appTitle'), '독서', 'friend lands on 독서, not 가계부');
+  assert.ok(!gets.some(u => !/what=/.test(u) || /what=summary/.test(u)), 'never asks for money data');
+  await p.click('#menuBtn'); await p.waitForTimeout(500);
+  assert.equal(await p.locator('#menuList [data-sec=money]').count(), 0, 'no MONEY in menu');
+  // 태그된 기록: 배지 + 읽기 전용
+  await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(800); await p.click('#lViews [data-v=list]');
+  assert.match(await p.textContent('#lList'), /오시리스.*나리 기록/);
+  await p.click('#lList li[data-id]'); await p.waitForTimeout(300);
+  assert.equal(await p.locator('#lItem[open]').count(), 0, 'shared record opens read-only (toast)'); assert.match(await p.textContent('#toast'), /나리님이 나를 태그/);
+  // 직접 입력 → 「함께한 사람」 아래 앱 친구 칩 (나는 빼고)
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#lItem[open]');
+  assert.deepEqual(await p.$$eval('.tag-chips [data-tag]', b => b.map(x => x.dataset.tag)), ['나리', '준호']);
+  await p.fill('#lForm [name=with]', '엄마'); await p.click('.tag-chips [data-tag="준호"]');
+  assert.equal(await p.inputValue('#lForm [name=with]'), '엄마, 준호');
+  assert.equal(await p.getAttribute('.tag-chips [data-tag="준호"]', 'aria-pressed'), 'true');
+  await p.click('#lCancel'); await p.waitForTimeout(300);
+  // 습관: 틱틱 안내 대신 ＋로 만들기
+  await p.click('#menuBtn'); await p.waitForTimeout(500); await p.click('#menuList [data-sec=habit]'); await p.waitForTimeout(600);
+  assert.match(await p.textContent('#hList'), /나만의 습관/); assert.doesNotMatch(await p.textContent('#hList'), /틱틱/);
+  await p.click('#fab'); await p.waitForSelector('#habitAdd[open]');
+  await p.fill('#haName', '물 마시기'); await p.click('#haIcons [data-e="💧"]'); await p.click('#haForm button.primary'); await p.waitForTimeout(600);
+  const add = posts.find(o => o.action === 'habitAdd'); assert.deepEqual([add.name, add.icon, add.color], ['물 마시기', '💧', '#3182f6']); assert.match(add.habitId, /^h[0-9a-f]{16}$/);
+  assert.match(await p.textContent('#hList'), /물 마시기/);
+  await p.click('#hList .hcheck'); await p.waitForTimeout(400);
+  assert.equal(posts.at(-1).action, 'habitCheck'); assert.equal(posts.at(-1).habitId, add.habitId);
+  p.once('dialog', d => d.accept()); await p.click('#hList li div'); await p.waitForSelector('#hDetail[open]'); await p.click('#hdDelete'); await p.waitForTimeout(400);
+  assert.equal(posts.at(-1).action, 'habitDelete');
+  // 설정: 친구 코드로 연결됨, 초대 칸 없음
+  await p.click('#openSettings'); await p.waitForTimeout(400);
+  assert.equal(await p.isVisible('#friendBox'), false); assert.match(await p.textContent('#friendMe'), /친구 접속코드로 연결됨 · 민지/);
+
+  // 주인: 설정에서 친구 초대 → 접속 링크 복사
+  const o = await page('owner-pw', 'owner');
+  assert.equal(await o.p.textContent('#appTitle'), 'MONEY');
+  await o.p.click('#openSettings'); await o.p.waitForTimeout(600); await o.p.click('#friendBox summary');
+  assert.match(await o.p.textContent('#friendList'), /민지/); assert.equal(await o.p.inputValue('#myName'), '나리');
+  o.p.once('dialog', d => d.accept());
+  await o.p.fill('#inviteName', '준호'); await o.p.click('#inviteBtn'); await o.p.waitForTimeout(800);
+  assert.deepEqual(o.posts.find(x => x.action === 'invite').name, '준호');
+  assert.match(await o.p.textContent('#friendList'), /준호/);
+  console.log('FRIEND APP OK'); await b.close(); process.exit(0); });

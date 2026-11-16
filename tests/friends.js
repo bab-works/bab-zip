@@ -1,0 +1,82 @@
+// 친구 접속코드: 초대 → 친구는 가계부 못 봄, 취미 기록·습관은 친구마다 따로, 「함께한 사람」 태그는 서로의 앱에 같이 보임
+const fs = require('fs'), vm = require('vm'), path = require('path'), assert = require('assert');
+class Sheet {
+  constructor(rows) { this.d = rows.map(r => [...r]); }
+  cell(r, c) { const v = (this.d[r - 1] || [])[c - 1]; return v == null ? '' : v; }
+  set(r, c, v) { if (typeof v === 'string' && v.startsWith("'")) v = v.slice(1); while (this.d.length < r) this.d.push([]); this.d[r - 1][c - 1] = v; }
+  getRange(r, c, nr = 1, nc = 1) {
+    const s = this;
+    return { getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => s.cell(r + i, c + j))),
+      setValues: v => v.forEach((row, i) => row.forEach((x, j) => s.set(r + i, c + j, x))),
+      getFormulas: () => Array.from({ length: nr }, () => Array(nc).fill('')), getValue: () => s.cell(r, c), setValue: x => s.set(r, c, x) };
+  }
+  getMaxRows() { return 1000 } getMaxColumns() { return 40 } insertRowsAfter() {} insertColumnsAfter() {}
+  getLastColumn() { return Math.max(1, ...this.d.map(r => (r || []).length)); }
+  getLastRow() { let l = 0; this.d.forEach((r, i) => { if (r && r.some(x => x !== '' && x != null)) l = i + 1; }); return l; }
+  deleteRow(r) { this.d.splice(r - 1, 1); }
+  appendRow(v) { const r = this.getLastRow() + 1; v.forEach((x, j) => this.set(r, j + 1, x)); }
+}
+const tabs = {}, props = {}; let uid = 0;
+const ctx = {
+  SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => tabs[n] || null, insertSheet: n => (tabs[n] = new Sheet([])), getSpreadsheetTimeZone: () => 'Asia/Seoul' }), flush() {} },
+  ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
+  LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+  PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
+  Utilities: { getUuid: () => String(++uid).padStart(8, '0') + '-cccc-dddd-eeee-ffffffffffff', formatDate: d => d.toISOString().slice(0, 10) },
+};
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'owner-pw';"), ctx);
+// 주인 시트의 취미 탭들 (setupSheet가 만드는 제목 줄 그대로)
+const TABS = vm.runInContext('TABS_', ctx), LISTS = vm.runInContext('LISTS', ctx);
+Object.values(LISTS).filter(c => !c.create).forEach(c => { tabs[c.tab] = new Sheet(TABS[c.tab]); });
+const get = (token, what, extra = {}) => JSON.parse(ctx.doGet({ parameter: { token, what, ...extra } }));
+const post = (token, o) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify({ token, ...o }) } }));
+const OWNER = 'owner-pw';
+
+// 주인: 이름 정하고 친구 초대 → 접속코드
+assert.equal(post(OWNER, { action: 'setName', name: '나리' }).ok, true);
+const inv = post(OWNER, { action: 'invite', name: '민지' }); assert.equal(inv.ok, true); assert.match(inv.code, /^f[0-9a-f]{11}$/);
+const MJ = inv.code, JH = post(OWNER, { action: 'invite', name: '준호' }).code;
+assert.equal(post(OWNER, { action: 'invite', name: '민지' }).ok, false, 'duplicate name');
+assert.equal(post(OWNER, { action: 'invite', name: '김 민지' }).ok, false, 'no spaces (tags split on spaces)');
+assert.deepEqual(get(OWNER, 'me').people, ['나리', '민지', '준호']);
+assert.deepEqual([get(MJ, 'me').role, get(MJ, 'me').name], ['friend', '민지']);
+assert.equal(get(MJ, 'me').friends, undefined, 'friends cannot see others’ codes');
+assert.equal(get('nope-code-1', 'me').ok, false);
+
+// 친구는 가계부 금지 (읽기·쓰기·초대)
+assert.match(get(MJ, undefined).error, /가계부/); assert.match(get(MJ, 'summary').error, /가계부/);
+assert.equal(post(MJ, { action: 'save', item: { id: 'x', date: '2026-11-16', type: '지출', major: '식비', amount: 1 } }).ok, false);
+assert.equal(post(MJ, { action: 'invite', name: '해커' }).ok, false);
+
+// 친구 기록은 친구 것만 + 일부만 바꿔도 나머지 유지
+assert.equal(post(MJ, { action: 'listSave', list: 'escape', item: { id: 'e1', theme: '오시리스', shop: '서울이스케이프룸', with: '나리, 준호', date: '2026-11-15' } }).ok, true);
+assert.equal(post(MJ, { action: 'listSave', list: 'escape', item: { id: 'e1', theme: '오시리스', rating: '😍' } }).ok, true);
+assert.equal(post(MJ, { action: 'listSave', list: 'book', item: { id: 'b1', title: '페스트', author: '카뮈' } }).ok, true);
+const mj = get(MJ, 'lists').lists;
+assert.deepEqual([mj.escape.length, mj.escape[0].with, mj.escape[0].rating, mj.book[0].title], [1, '나리, 준호', '😍', '페스트']);
+assert.equal(get(JH, 'lists').lists.book.length, 0, 'friends do not see each other’s own lists');
+
+// 태그: 민지가 「나리, 준호」와 간 방탈출 → 나리(주인)·준호 앱에 읽기 전용으로
+const ownerEsc = get(OWNER, 'lists').lists.escape.find(i => i.shared);
+assert.deepEqual([ownerEsc.theme, ownerEsc.shared, ownerEsc.id], ['오시리스', '민지', 's:' + MJ + ':e1']);
+assert.equal(get(JH, 'lists').lists.escape[0].shared, '민지');
+assert.equal(post(OWNER, { action: 'listSave', list: 'escape', item: { id: ownerEsc.id, theme: 'x' } }).ok, false, 'cannot edit someone else’s record');
+assert.equal(post(JH, { action: 'listSave', list: 'escape', item: { id: ownerEsc.id, theme: 'x' } }).ok, false);
+// 주인이 민지를 태그한 기록 → 민지 앱에
+assert.equal(post(OWNER, { action: 'listSave', list: 'movie', item: { id: 'm1', title: '파묘', with: '민지' } }).ok, true);
+const mjMovie = get(MJ, 'lists').lists.movie; assert.deepEqual(mjMovie.map(i => [i.title, i.shared]), [['파묘', '나리']]);
+assert.equal(get(JH, 'lists').lists.movie.length, 0, 'not tagged → not shown');
+
+// 친구 습관 (틱틱 없이)
+assert.equal(post(MJ, { action: 'habitAdd', habitId: 'h1234abcd', name: '물 마시기', icon: '💧', color: '#3182f6' }).ok, true);
+assert.equal(post(MJ, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261116, done: true }).ok, true);
+let h = get(MJ, 'habits').habits; assert.deepEqual([h.length, h[0].name, h[0].icon, h[0].done, h[0].local], [1, '물 마시기', '💧', [20261116], true]);
+post(MJ, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261116, done: false }); assert.deepEqual(get(MJ, 'habits').habits[0].done, []);
+assert.equal(get(JH, 'habits').habits.length, 0, 'habits are per code');
+assert.equal(post(JH, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261116, done: true }).ok, false, 'cannot check someone else’s habit');
+post(MJ, { action: 'habitDelete', habitId: 'h1234abcd' }); assert.equal(get(MJ, 'habits').habits.length, 0);
+
+// 초대 취소 → 그 코드는 더 못 씀
+post(OWNER, { action: 'uninvite', code: JH }); assert.equal(get(JH, 'lists').ok, false);
+console.log('FRIENDS OK');

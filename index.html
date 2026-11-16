@@ -546,6 +546,14 @@
   body.adding::after { content:''; position:fixed; inset:0; z-index:6; background:rgba(0,0,0,.12); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); animation:fadeIn .25s; }
   body.adding #fab { z-index:7; }
   @keyframes fadeIn { from { opacity:0; } }
+  /* 친구 */
+  .friends { margin:4px 0 10px; } .friends summary { font-weight:700; padding:8px 0; cursor:pointer; }
+  .frow2 { display:flex; gap:6px; margin:6px 0; } .frow2 input { flex:1; min-width:0; }
+  .tag-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:-2px; } .tag-chips small { width:100%; color:var(--muted); font-size:0.706rem; }
+  .tag-chips button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  .shared-badge { display:inline-block; margin-left:6px; background:var(--accent-soft); color:var(--accent); }
+  .ha-pick { display:flex; flex-wrap:wrap; gap:8px; } .ha-pick button { width:44px; height:44px; padding:0; border-radius:12px; font-size:1.3rem; background:var(--fill); }
+  .ha-pick button[aria-pressed="true"] { box-shadow:0 0 0 2px var(--accent); } .ha-colors button { background:var(--c); border-radius:50%; }
 </style>
 </head>
 <body>
@@ -840,7 +848,7 @@
   <div id="hdStats" class="stat3 stat4"></div>
   <p class="hint" style="margin-top:14px">최근 1년 · 진한 칸이 한 날, 흐린 칸이 빠진 날</p>
   <div class="heat-wrap"><div class="heat-days" aria-hidden="true"><span></span><span>월</span><span></span><span>수</span><span></span><span>금</span><span></span></div><div id="hdGrid" class="heat" role="img" aria-label="최근 1년 체크 기록"></div></div>
-  <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="hdClose">닫기</button></div>
+  <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="hdDelete" class="danger" hidden>습관 지우기</button><span style="flex:1"></span><button type="button" id="hdClose">닫기</button></div>
 </dialog>
 <dialog id="lock" class="lock" aria-label="잠김">
   <div class="lock-in"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><h2>BAB:ZIP</h2><p class="hint">잠겨 있어요</p>
@@ -867,6 +875,16 @@
   <details class="raw"><summary>읽은 글자 보기</summary><pre id="phRaw" class="hint" style="white-space:pre-wrap"></pre></details>
   <div class="row sheet-foot" style="margin-top:10px"><button type="button" id="phClose">닫기</button><button type="button" id="phSave" class="primary">선택한 거래 저장</button></div>
 </dialog>
+<dialog id="habitAdd" class="sheet" aria-labelledby="haTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <form id="haForm">
+    <h2 id="haTitle" style="text-align:center;margin:0 0 10px">새 습관</h2>
+    <input id="haName" placeholder="예: 물 2L 마시기" maxlength="40" required aria-label="습관 이름" style="width:100%">
+    <p class="hint">아이콘</p><div id="haIcons" class="ha-pick"></div>
+    <p class="hint">색</p><div id="haColors" class="ha-pick ha-colors"></div>
+    <div class="row sheet-foot" style="margin-top:14px"><button type="button" id="haCancel">닫기</button><button class="primary">만들기</button></div>
+  </form>
+</dialog>
 <dialog id="paySheet" class="sheet">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <h2 style="text-align:center">결제수단</h2>
@@ -885,6 +903,13 @@
     <h2>설정</h2>
     <label class="switch" style="margin:4px 0 14px"><input type="checkbox" id="lockOn"><i aria-hidden="true"></i>Face ID 잠금 (앱을 열 때)</label>
     <label class="f">시트 비밀번호<input name="token" type="password" autocomplete="current-password"></label>
+    <p id="friendMe" class="hint" hidden></p>
+    <details id="friendBox" class="friends" hidden><summary>친구 초대 · 접속코드</summary>
+      <p class="hint">친구는 가계부 없이 취미 기록·습관만 써요. 친구 기록은 내 시트 「친구 기록」 탭에 친구마다 따로 저장돼요 (시트 주인인 나는 볼 수 있어요).</p>
+      <div class="frow2"><input id="myName" placeholder="내 이름 (친구가 태그할 때 쓰는 이름)" maxlength="20" aria-label="내 이름"><button type="button" id="myNameSave" class="small">저장</button></div>
+      <div class="frow2"><input id="inviteName" placeholder="친구 이름 (띄어쓰기 없이)" maxlength="20" aria-label="초대할 친구 이름"><button type="button" id="inviteBtn" class="small primary">초대</button></div>
+      <ul id="friendList" class="pend-list"></ul>
+    </details>
     <details class="adv"><summary>고급 · 다른 시트에 연결</summary>
       <label class="f">설정 링크 붙여넣기<input name="link" type="url" placeholder="https://bab-works.github.io/bab-zip/#url=…&token=…"></label>
       <label class="f">시트 주소 (웹 앱 URL)<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>

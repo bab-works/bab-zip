@@ -160,6 +160,85 @@ function escapeSearch_(q) {
 }
 const escapeStatus_ = () => { const sh = ss_().getSheetByName(ESC_TAB_); return { count: sh ? Math.max(0, sh.getLastRow() - 1) : 0, building: PropertiesService.getScriptProperties().getProperty('ESC_DONE') !== '1' }; };
 
+// ── 친구: 주인이 앱 설정에서 이름으로 초대 → 친구마다 접속코드. 친구는 가계부를 못 보고, 취미 기록·습관은 친구마다 따로 저장 ──
+// 「친구」 탭: 이름 | 접속코드 | 만든 날 / 「친구 기록」 탭: 코드 | 목록 | id | 내용(JSON) | 수정일 / 「친구 습관」 탭: 코드 | id | 이름 | 아이콘 | 색 | 한 날(JSON) | 만든 날
+const FRIEND_TAB_ = '친구', FREC_TAB_ = '친구 기록', FHAB_TAB_ = '친구 습관';
+const ownerName_ = () => PropertiesService.getScriptProperties().getProperty('OWNER_NAME') || '';
+const tab_ = (name, head) => { let sh = ss_().getSheetByName(name); if (!sh) { sh = ss_().insertSheet(name); sh.getRange(1, 1, 1, head.length).setValues([head]); } return sh; };
+const body_ = sh => sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues() : [];
+const friends_ = () => body_(ss_().getSheetByName(FRIEND_TAB_)).filter(r => r[0] && r[1]).map(r => ({ name: String(r[0]).trim(), code: String(r[1]) }));
+function who_(t) {
+  if (authOk_(t)) return { role: 'owner', name: ownerName_(), code: '' };
+  const f = t && String(t).length >= 8 && friends_().find(x => x.code === String(t));
+  return f ? { role: 'friend', name: f.name, code: f.code } : null;
+}
+const people_ = () => [ownerName_(), ...friends_().map(f => f.name)].filter(Boolean);
+// 「함께한 사람」 칸에 이름이 있으면 태그된 것 (쉼표·가운뎃점·띄어쓰기로 나눔)
+const tagged_ = (item, name) => !!name && String(item.with || '').split(/[,·、/&+\s]+/).map(x => x.trim()).includes(name);
+function fRecs_() { return body_(ss_().getSheetByName(FREC_TAB_)).map(r => { let o = {}; try { o = JSON.parse(r[3]); } catch (e) {} return { code: String(r[0]), list: String(r[1]), id: String(r[2]), item: o }; }); }
+function fListSave_(me, k, item) {
+  if (!LISTS[k] || !item || !item.id || String(item.id).startsWith('s:')) throw new Error('입력값 오류');
+  const sh = tab_(FREC_TAB_, ['코드', '목록', 'id', '내용', '수정일']), rows = body_(sh);
+  const i = rows.findIndex(r => String(r[0]) === me.code && String(r[1]) === k && String(r[2]) === String(item.id));
+  const old = i >= 0 ? (() => { try { return JSON.parse(rows[i][3]); } catch (e) { return {}; } })() : {};
+  const merged = JSON.stringify(Object.assign(old, item)); // 평가만 바꿀 때처럼 일부만 와도 나머지는 그대로
+  if (merged.length > 45000) throw new Error('입력값 오류: 너무 길어요');
+  const row = [me.code, k, String(item.id), merged, new Date()];
+  if (i >= 0) sh.getRange(i + 2, 1, 1, 5).setValues([row]); else sh.appendRow(row);
+}
+function fListDelete_(me, k, id) {
+  const sh = ss_().getSheetByName(FREC_TAB_), rows = body_(sh);
+  const i = rows.findIndex(r => String(r[0]) === me.code && String(r[1]) === k && String(r[2]) === String(id));
+  if (i >= 0) sh.deleteRow(i + 2);
+}
+// 목록 읽기: 내 기록 + 남이 나를 태그한 기록(읽기 전용, shared = 기록한 사람 이름)
+function listsFor_(me) {
+  const lists = {}, fr = friends_(), nameOf = c => (fr.find(f => f.code === c) || {}).name || '친구', recs = fRecs_();
+  Object.keys(LISTS).forEach(k => { lists[k] = me.role === 'owner' ? listRead_(k) : recs.filter(r => r.code === me.code && r.list === k).map(r => r.item); });
+  const share = (k, it, by, from) => (lists[k] = lists[k] || []).push(Object.assign({}, it, { id: 's:' + from + ':' + it.id, shared: by }));
+  if (me.name) {
+    if (me.role === 'friend' && ownerName_()) Object.keys(LISTS).forEach(k => listRead_(k).filter(it => tagged_(it, me.name)).forEach(it => share(k, it, ownerName_(), 'owner')));
+    recs.filter(r => r.code !== me.code && tagged_(r.item, me.name)).forEach(r => share(r.list, r.item, nameOf(r.code), r.code));
+  }
+  return lists;
+}
+// 친구 습관 (틱틱 없이): 앱이 틱틱 습관과 같은 모양으로 받음
+function fHabits_(me) {
+  return body_(ss_().getSheetByName(FHAB_TAB_)).filter(r => String(r[0]) === me.code).map(r => {
+    let done = []; try { done = JSON.parse(r[5] || '[]'); } catch (e) {}
+    return { id: String(r[1]), name: String(r[2]), icon: String(r[3]), color: String(r[4]) || '#3182f6', rule: 'RRULE:FREQ=DAILY', enc: '', total: done.length, done, local: true };
+  });
+}
+function fHabit_(me, b) {
+  const sh = tab_(FHAB_TAB_, ['코드', 'id', '이름', '아이콘', '색', '한 날', '만든 날']), rows = body_(sh);
+  const i = rows.findIndex(r => String(r[0]) === me.code && String(r[1]) === String(b.habitId));
+  if (b.action === 'habitAdd') {
+    const name = String(b.name || '').trim().slice(0, 40);
+    if (!name || !/^h[0-9a-f-]{8,40}$/.test(String(b.habitId))) throw new Error('입력값 오류');
+    if (i < 0) sh.appendRow([me.code, String(b.habitId), "'" + name, String(b.icon || '⭐').slice(0, 4), /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : '#3182f6', '[]', new Date()]);
+    return;
+  }
+  if (i < 0) throw new Error('입력값 오류: 없는 습관');
+  if (b.action === 'habitDelete') return sh.deleteRow(i + 2);
+  if (!/^\d{8}$/.test(String(b.stamp))) throw new Error('입력값 오류');
+  let done = []; try { done = JSON.parse(rows[i][5] || '[]'); } catch (e) {}
+  done = done.filter(x => x !== Number(b.stamp)); if (b.done) done.push(Number(b.stamp));
+  sh.getRange(i + 2, 6).setValue(JSON.stringify(done));
+}
+// 주인만: 내 이름 정하기, 친구 초대(접속코드 발급), 초대 취소
+function invite_(b) {
+  if (b.action === 'setName') { const n = String(b.name || '').trim().slice(0, 20); if (!n) throw new Error('입력값 오류'); PropertiesService.getScriptProperties().setProperty('OWNER_NAME', n); return {}; }
+  const sh = tab_(FRIEND_TAB_, ['이름', '접속코드', '만든 날']);
+  if (b.action === 'uninvite') { const i = body_(sh).findIndex(r => String(r[1]) === String(b.code)); if (i >= 0) sh.deleteRow(i + 2); return {}; }
+  const name = String(b.name || '').trim().slice(0, 20);
+  if (!name || /[,·、/&+\s]/.test(name)) throw new Error('입력값 오류: 이름은 띄어쓰기 없이');
+  if (people_().includes(name)) throw new Error('입력값 오류: 이미 있는 이름');
+  const code = 'f' + Utilities.getUuid().replace(/-/g, '').slice(0, 11);
+  sh.appendRow(["'" + name, code, new Date()]);
+  return { code };
+}
+const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'setName', 'invite', 'uninvite'];
+
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
 function bookSearch_(q) {
@@ -502,14 +581,17 @@ function doGet(e) {
     b.token = e.parameter.token;
     return writeOp_(b);
   }
-  if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+  const me = who_(e.parameter.token);
+  if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
+    if (e.parameter.what === 'me') return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_() : undefined });
+    if (me.role === 'friend' && !['escape', 'book', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
-    if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
+    if (e.parameter.what === 'habits') return out_({ ok: true, habits: me.role === 'owner' ? habits_() : fHabits_(me) }); // 주인은 틱틱, 친구는 시트
     if (e.parameter.what === 'lists') {
-      return out_(withLock_(() => { const lists = {}; Object.keys(LISTS).forEach(k => { lists[k] = listRead_(k); }); return { ok: true, lists }; }));
+      return out_(withLock_(() => ({ ok: true, lists: listsFor_(me), people: people_() })));
     }
     // since=날짜: 그날 이후 거래만 보내고, 그 이전 줄은 지문(old.h)만 보냄 → 앱은 지문이 같으면 가진 것을 그대로 씀
     // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
@@ -538,28 +620,36 @@ function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
   if (b.action === 'ocr') { // 사진 글자 읽기 (시트는 안 건드림)
-    if (!authOk_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+    if (!who_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
     try { return out_({ ok: true, text: ocr_(b.image) }); } catch (err) { return out_({ ok: false, error: '사진 인식 실패: ' + err.message }); }
   }
   return writeOp_(b);
 }
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
 function writeOp_(b) {
-  if (!authOk_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+  const me = who_(b.token);
+  if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+  if (me.role === 'friend' && OWNER_ONLY_.includes(b.action)) return out_({ ok: false, error: '입력값 오류: 친구 코드로는 할 수 없어요' });
+  let res = {};
   try {
     withLock_(() => {
-      if (b.action === 'save') saveTx_(b.item);
+      if (/^(setName|invite|uninvite)$/.test(b.action)) res = invite_(b);
+      else if (me.role === 'friend' && b.action === 'listSave') fListSave_(me, b.list, b.item);
+      else if (me.role === 'friend' && b.action === 'listDelete') fListDelete_(me, b.list, b.id);
+      else if (me.role === 'friend' && /^habit(Check|Add|Delete)$/.test(b.action)) fHabit_(me, b);
+      else if (b.action === 'save') saveTx_(b.item);
       else if (b.action === 'delete') deleteTx_(b.id);
       else if (b.action === 'recSave') saveRec_(b.rule);
       else if (b.action === 'recDelete') deleteRec_(b.id);
       else if (b.action === 'budget') budget_(b.major, b.amount);
+      else if (/^list(Save|Delete)$/.test(b.action) && String((b.item || {}).id || b.id).startsWith('s:')) throw new Error('입력값 오류: 친구가 남긴 기록은 바꿀 수 없어요');
       else if (b.action === 'listSave') listSave_(b.list, b.item);
       else if (b.action === 'listDelete') listDelete_(b.list, b.id);
       else if (b.action === 'habitCheck') habitCheck_(b.habitId, b.stamp, b.done);
       else throw new Error('알 수 없는 동작');
       SpreadsheetApp.flush(); // 시트 규칙 위반 같은 오류를 여기서 잡아 글로 돌려줌 (안 그러면 오류 페이지가 가서 앱엔 Load failed로 보임)
     });
-    return out_({ ok: true, wrote: true });
+    return out_({ ok: true, wrote: true, ...res });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시
     return out_({ ok: false, error: err.message, retry: !/입력값|알 수 없는|없는 대분류|탭 없음|틱틱|규칙/.test(err.message) });
