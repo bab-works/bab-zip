@@ -107,39 +107,50 @@ function allowPhoto() {
 const ESC_TAB_ = '방탈출 테마 목록';
 function escParse_(url, html) {
   const id = (url.match(/themeId=(\d+)/) || [])[1] || '';
-  const meta = p => { const m = html.match(new RegExp('<meta property="' + p + '" content="([^"]*)"')); return m ? m[1].replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>') : ''; };
+  const un = x => x.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  const meta = p => { const m = html.match(new RegExp('<meta property="' + p + '" content="([^"]*)"')); return m ? un(m[1]) : ''; };
   const t = meta('og:title').replace(/ 방탈출 테마 후기 - 전국방탈출$/, ''), cut = t.lastIndexOf(' - ');
-  if (!id || cut < 0) return [id, '', '', '', '', url];
+  if (!id || cut < 0) return [id, '', '', '', '', url, '-'];
   const genre = (meta('og:description').split(' · ')[1] || '').trim();
-  return [id, t.slice(0, cut), t.slice(cut + 3), /분$|평점/.test(genre) ? '' : genre, meta('og:image'), url];
+  const addr = un((html.match(/주소:\s*([^<"]+)/) || [])[1] || '').trim(); // 「서울 강남구 강남대로…」 → 지역 「서울 강남구」
+  return [id, t.slice(0, cut), t.slice(cut + 3), /분$|평점/.test(genre) ? '' : genre, meta('og:image'), url, addr.split(/\s+/).slice(0, 2).join(' ') || '-'];
 }
+// 상태: 다 모았는지(ESC_DONE). 앱 검색 결과가 비었을 때 「아직 모으는 중」이라고 알려 주려고
 function escapeIndex() {
+  const props = PropertiesService.getScriptProperties();
   const sh = ss_().getSheetByName(ESC_TAB_) || ss_().insertSheet(ESC_TAB_);
-  if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 6).setValues([['themeId', '테마', '매장', '장르', '포스터', '주소']]);
-  const have = new Set(sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0])) : []);
+  sh.getRange(1, 1, 1, 7).setValues([['themeId', '테마', '매장', '장르', '포스터', '주소', '지역']]);
+  const old = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 7).getValues() : [];
+  const rowOf = {}; old.forEach((r, k) => { rowOf[String(r[0])] = k + 2; });
   const locs = x => (x.match(/<loc>[^<]*<\/loc>/g) || []).map(s => s.replace(/<\/?loc>/g, '').replace(/&amp;/g, '&'));
   const maps = locs(UrlFetchApp.fetch('https://www.roomescape.co.kr/sitemap.xml').getContentText()).filter(u => /sitemap-theme/.test(u));
-  const todo = [].concat(...maps.map(m => locs(UrlFetchApp.fetch(m).getContentText()))).filter(u => !have.has((u.match(/themeId=(\d+)/) || [])[1]));
+  const idOf = u => (u.match(/themeId=(\d+)/) || [])[1];
+  // 할 일: 아직 없는 테마 + 예전에 지역 없이 모은 테마 (한 번만 다시 읽어 지역 채움)
+  const todo = [].concat(...maps.map(m => locs(UrlFetchApp.fetch(m).getContentText()))).filter(u => { const r = rowOf[idOf(u)]; return !r || (old[r - 2][1] && !old[r - 2][6]); });
+  if (todo.length) props.setProperty('ESC_DONE', '');
   const t0 = Date.now(); let i = 0;
   for (; i < todo.length && Date.now() - t0 < 4 * 60e3; i += 10) { // 10쪽씩, 쉬어 가며 (사이트에 부담 안 주게)
     const part = todo.slice(i, i + 10), rows = UrlFetchApp.fetchAll(part.map(u => ({ url: u, muteHttpExceptions: true }))).map((r, k) => escParse_(part[k], r.getContentText()));
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
+    const fresh = [];
+    rows.forEach((row, k) => { const at = rowOf[idOf(part[k])]; if (at) sh.getRange(at, 1, 1, 7).setValues([row]); else fresh.push(row); });
+    if (fresh.length) sh.getRange(sh.getLastRow() + 1, 1, fresh.length, 7).setValues(fresh);
     Utilities.sleep(1000);
   }
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'escapeIndex').forEach(t => ScriptApp.deleteTrigger(t));
   if (i < todo.length) ScriptApp.newTrigger('escapeIndex').timeBased().after(60e3).create(); // 남은 건 1분 뒤 이어서
-  else ScriptApp.newTrigger('escapeIndex').timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create(); // 다 읽었으면 매주 새 테마만
-  Logger.log('방탈출 테마 ' + Math.min(i, todo.length) + '개 추가 · 남은 ' + Math.max(0, todo.length - i) + '개' + (i < todo.length ? ' (1분 뒤 저절로 이어서 읽어요)' : ' · 다 읽었어요'));
+  else { props.setProperty('ESC_DONE', '1'); ScriptApp.newTrigger('escapeIndex').timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create(); } // 다 읽었으면 매주 새 테마만
+  Logger.log('방탈출 테마 ' + Math.min(i, todo.length) + '개 읽음 · 남은 ' + Math.max(0, todo.length - i) + '개' + (i < todo.length ? ' (1분 뒤 저절로 이어서 읽어요)' : ' · 다 읽었어요'));
 }
 function escapeSearch_(q) {
   const sh = ss_().getSheetByName(ESC_TAB_), k = String(q || '').replace(/\s+/g, '').toLowerCase();
   if (!sh || sh.getLastRow() < 2) throw new Error('먼저 Apps Script에서 escapeIndex를 실행해 테마 목록을 만들어 주세요');
   if (k.length < 1) return [];
   const flat = s => String(s).replace(/\s+/g, '').toLowerCase();
-  return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().filter(r => r[1] && flat(r[1] + r[2]).includes(k))
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 7).getValues().filter(r => r[1] && flat(r[1] + r[2]).includes(k))
     .sort((a, b) => (flat(b[1]).startsWith(k) - flat(a[1]).startsWith(k)) || (flat(b[1]).includes(k) - flat(a[1]).includes(k)))
-    .slice(0, 6).map(r => ({ theme: String(r[1]), shop: String(r[2]), genre: String(r[3]), image: /^https:\/\//.test(r[4]) ? String(r[4]) : '', url: String(r[5]) }));
+    .slice(0, 6).map(r => ({ theme: String(r[1]), shop: String(r[2]), genre: String(r[3]), image: /^https:\/\//.test(r[4]) ? String(r[4]) : '', url: String(r[5]), area: r[6] === '-' ? '' : String(r[6] || '') }));
 }
+const escapeStatus_ = () => { const sh = ss_().getSheetByName(ESC_TAB_); return { count: sh ? Math.max(0, sh.getLastRow() - 1) : 0, building: PropertiesService.getScriptProperties().getProperty('ESC_DONE') !== '1' }; };
 
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
@@ -486,7 +497,7 @@ function doGet(e) {
   if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
-    if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q) }); // 방탈출 테마 검색 (목록 탭에서)
+    if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
     if (e.parameter.what === 'lists') {

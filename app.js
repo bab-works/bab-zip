@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v72'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v73'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1169,11 +1169,12 @@ let findHits = [], findT = 0;
 const escMode = () => sec === 'escape';
 function openFind() {
   $('#findTitle').textContent = escMode() ? '테마 검색해서 추가' : '책 검색해서 추가';
+  $('#findManual').textContent = escMode() ? '찾는 테마가 없어요 · 직접 입력' : '찾는 책이 없어요 · 직접 입력';
   $('#findQ').placeholder = escMode() ? '테마나 매장 이름' : '책 제목이나 저자';
   $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${escMode() ? '테마나 매장 이름을 검색해요 · 전국방탈출 정보' : '책 제목이나 저자를 검색해요'}</li>`;
   $('#bookFind').showModal(); $('#findQ').focus();
 }
-const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
+const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.area, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
     <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="escape">＋ 기록하기</button></div></div></li>`;
 const findRow = (b, k) => {
   if (escMode()) return escRow(b, k);
@@ -1193,7 +1194,7 @@ $('#findQ').addEventListener('input', () => {
       const hits = escMode() ? r.themes : r.books;
       if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
       findHits = hits;
-      $('#findList').innerHTML = findHits.map(findRow).join('') || '<li class="empty">검색 결과가 없어요</li>';
+      $('#findList').innerHTML = findHits.map(findRow).join('') || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
     } catch (e) { $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
   }, 400);
 });
@@ -1201,7 +1202,7 @@ $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.b
 $('#findList').addEventListener('click', e => {
   const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
   if (!b) return;
-  if (btn.dataset.to === 'escape') { $('#bookFind').close(); return openItem(null, { theme: b.theme, shop: b.shop, ...(b.image ? { image: b.image } : {}) }); } // 날짜·결과는 직접
+  if (btn.dataset.to === 'escape') { $('#bookFind').close(); return openItem(null, { theme: b.theme, shop: b.shop, area: b.area || '', ...(b.image ? { image: b.image } : {}) }); } // 날짜·결과는 직접
   const to = btn.dataset.to, t = localISO(), arr = lists[to] = lists[to] || [];
   const item = { id: crypto.randomUUID(), title: b.title, author: b.author, memo: '', ...(b.image ? { image: b.image } : {}),
     ...{ book: { year: t.slice(0, 4) + '년', month: t.slice(5, 7) + '월', status: '읽는중' }, buy: { done: false }, wish: { kind: '추천받은 책' } }[to] };
