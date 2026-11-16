@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v64'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v65'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -817,15 +817,16 @@ $('#fReset').addEventListener('click', () => {
 // shortcut: 서명을 서버에서 확인하지 않음, 진짜 보안이 필요하면 Code.gs에서 검증
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const rand = n => crypto.getRandomValues(new Uint8Array(n));
-async function unlock() {
+async function unlock(auto) {
   try {
     await navigator.credentials.get({ publicKey: { challenge: rand(32), allowCredentials: [{ type: 'public-key', id: unb64(store.get('lockId')) }], userVerification: 'required', timeout: 60000 } });
     $('#lock').close();
-  } catch (e) { toast('Face ID를 확인하지 못했어요 · 다시 누르거나 비밀번호로 열어요'); }
+  } catch (e) { if (auto !== true) toast('Face ID를 확인하지 못했어요 · 다시 누르거나 비밀번호로 열어요'); } // 자동 시도가 막히면(손가락 터치 필요) 조용히 단추로
 }
-const lockNow = () => { if (store.get('lockId') && cfg.token && !$('#lock').open) { $('#lock').showModal(); $('#lockPw').pw.value = ''; } };
+// 잠기면 바로 Face ID 창을 띄움 (아이폰이 터치 없이는 막는 경우엔 「Face ID로 열기」 단추)
+const lockNow = () => { if (store.get('lockId') && cfg.token && !$('#lock').open) { $('#lock').showModal(); $('#lockPw').pw.value = ''; setTimeout(() => unlock(true), 150); } };
 $('#lock').addEventListener('cancel', e => e.preventDefault()); // Esc로 못 닫게
-$('#unlock').addEventListener('click', unlock);
+$('#unlock').addEventListener('click', () => unlock());
 $('#lockPw').addEventListener('submit', e => { e.preventDefault(); if (e.target.pw.value === cfg.token) $('#lock').close(); else toast('비밀번호가 맞지 않아요'); });
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); else if (hiddenAt && Date.now() - hiddenAt > 60e3) lockNow(); }); // 1분 넘게 나갔다 오면 다시 잠금
@@ -1204,7 +1205,9 @@ function setSection(k) {
   }
 }
 // ── 습관: 틱틱과 실시간 연동 (시트의 Apps Script가 중계) ──
-let habits = store.get('habits', []), hDay = localISO().slice(0, 10), hOff = false;
+// 습관 화면엔 절주·운동만 (틱틱의 다른 습관은 불러와도 안 보임)
+const MY_HABITS = h => /^(절주|운동)/.test(h.name);
+let habits = store.get('habits', []).filter(MY_HABITS), hDay = localISO().slice(0, 10), hOff = false;
 const HICON = { habit_daily_check_in: '✅', habit_reading: '📖', habit_skincare: '🧴', habit_learn_words: '🗣️', habit_take_medicine: '💊',
   habit_exercising: '🏃', habit_eat_dinner: '🍚', habit_quit_drinking: '🍺', habit_drink_water: '💧', habit_sleep: '😴', habit_meditation: '🧘' };
 const stampOf = iso => +iso.replace(/-/g, '');
@@ -1238,10 +1241,11 @@ function renderHabits(month = hF.open) {
   let html = month ? lead : '';
   for (const ds of cells) {
     const d = +ds.slice(8), wd = new Date(ds + 'T12:00:00').getDay(), due = habits.filter(h => dueOn(h, ds));
-    const n = due.filter(h => h.done.includes(stampOf(ds))).length, pct = due.length ? Math.round(n / due.length * 100) : 0;
+    const n = due.filter(h => h.done.includes(stampOf(ds))).length;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
-      <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${due.length && ds <= today ? `<i class="${pct === 100 ? 'all' : ''}" style="--p:${pct}%" aria-hidden="true"></i>` : ''}</button>`;
+      <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${due.length && ds <= today ? `<span class="hdots" aria-hidden="true">${due.map(h =>
+        `<i class="${h.done.includes(stampOf(ds)) ? 'on' : ''}" style="--c:${esc(h.color)}"></i>`).join('')}</span>` : ''}</button>`;
   }
   $('#hGrid').innerHTML = html + (month ? tail : '');
   hF.week = month && hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
@@ -1266,7 +1270,7 @@ async function refreshHabits() {
       try {
         const r = await api(null, '&what=habits');
         if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
-        else { habits = r.habits; hOff = false; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
+        else { habits = r.habits.filter(MY_HABITS); hOff = false; store.set('habits', habits); setStatus('틱틱과 동기화됨'); }
       } catch (e) { if (!habits.length && /틱틱/.test(e.message)) hOff = true; else showError(e); } // 한 번도 연결한 적 없으면 오류 대신 안내
     }
     if (sec === 'habit') renderHabits();
@@ -1487,9 +1491,10 @@ $('#lFields').addEventListener('input', e => {
     try {
       const r = await api(null, '&what=book&q=' + encodeURIComponent(q));
       if (q !== $('#lForm').elements.title?.value.trim()) return; // 그새 더 쳤으면 버림
-      bookHits = r.books || [];
-      $('#bookHits').innerHTML = bookHits.map((b, k) => `<button type="button" data-hit="${k}" role="option">${b.image ? `<img src="${esc(b.image)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span></button>`).join('');
-    } catch (err) { /* 검색은 덤: 실패해도 직접 입력하면 됨 */ }
+      if (!r.books) { $('#bookHits').innerHTML = '<p class="hint">책 검색은 시트의 Code.gs를 새 버전으로 배포해야 돼요</p>'; return; } // 예전 서버는 what=book을 몰라 거래를 보냄
+      bookHits = r.books;
+      $('#bookHits').innerHTML = (bookHits.length ? '' : '<p class="hint">검색 결과가 없어요 · 직접 입력해 주세요</p>') + bookHits.map((b, k) => `<button type="button" data-hit="${k}" role="option">${b.image ? `<img src="${esc(b.image)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span></button>`).join('');
+    } catch (err) { $('#bookHits').innerHTML = `<p class="hint">책 검색이 안 돼요 (${esc(err.message)}) · 직접 입력해 주세요</p>`; }
   }, 450);
 });
 $('#lFields').addEventListener('click', e => {

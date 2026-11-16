@@ -12,10 +12,10 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#openSettings'); await p.click('#settings .switch:has(#lockOn)'); await p.waitForTimeout(800);
   assert.ok(await p.evaluate(() => JSON.parse(localStorage.getItem('lockId') || '""')), 'credential saved');
   await p.reload(); await p.waitForTimeout(500);
-  assert.equal(await p.locator('#lock[open]').count(), 1, 'locked on open');
-  await p.click('#unlock'); await p.waitForTimeout(800);
-  assert.equal(await p.locator('#lock[open]').count(), 0, 'unlocked with passkey');
-  await p.reload(); await p.waitForTimeout(500);
+  await p.waitForTimeout(1000); assert.equal(await p.locator('#lock[open]').count(), 0, 'Face ID asked right away on launch');
+  await p.evaluate(() => { navigator.credentials.get = () => Promise.reject(new Error('NotAllowed')); }); // 자동 시도가 막히는 아이폰 흉내
+  await p.evaluate(() => { localStorage.setItem('x', 1); lockNow(); }); await p.waitForTimeout(500);
+  assert.equal(await p.locator('#lock[open]').count(), 1, 'stays locked if auto prompt blocked');
   await p.fill('#lockPw [name=pw]', 'nope'); await p.click('#lockPw button'); assert.equal(await p.locator('#lock[open]').count(), 1);
   await p.fill('#lockPw [name=pw]', 'pw1'); await p.click('#lockPw button'); await p.waitForTimeout(600); assert.equal(await p.locator('#lock[open]').count(), 0, 'password fallback');
   console.log('LOCK OK'); await b.close(); process.exit(0); });

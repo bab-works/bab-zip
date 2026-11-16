@@ -85,10 +85,15 @@ function bookSearch_(q) {
   const html = UrlFetchApp.fetch('https://www.aladin.co.kr/search/wsearchresult.aspx?SearchTarget=Book&SearchWord=' + encodeURIComponent(q),
     { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }).getContentText();
   const un = t => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-  return html.split('class="ss_book_box"').slice(1).map(b => {
+  const al = html.split('class="ss_book_box"').slice(1).map(b => {
     const t = b.match(/class="bo3"[^>]*>(?:<b>)?([^<]+)/), a = b.match(/AuthorSearch=[^>]*>([^<]+)<\/a>/), c = b.match(/<img src="(https:\/\/image\.aladin\.co\.kr\/product\/[^"]+)"/);
     return t ? { title: un(t[1]), author: a ? un(a[1]) : '', image: c ? c[1].replace(/\/cover\d*\//, '/cover500/') : '' } : null;
   }).filter(Boolean).slice(0, 3);
+  if (al.length) return al;
+  // 알라딘이 구글 서버 요청을 막거나 화면이 바뀌었으면 구글 도서 검색으로 (키 필요 없음)
+  const g = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/books/v1/volumes?maxResults=3&q=' + encodeURIComponent(q), { muteHttpExceptions: true }).getContentText() || '{}');
+  return (g.items || []).map(v => v.volumeInfo || {}).map(v => ({ title: v.title || '', author: (v.authors || []).join(', '),
+    image: ((v.imageLinks || {}).thumbnail || '').replace(/^http:/, 'https:') })).filter(b => b.title);
 }
 
 function rows_(name, cols) {

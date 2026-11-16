@@ -12,4 +12,7 @@ assert.deepEqual(r[0], { title: '페스트', author: '알베르 카뮈', image: 
 assert.equal(r[1].title, '톰 & 제리');
 assert.match(url, /SearchWord=%ED%8E%98/);
 assert.deepEqual(vm.runInContext('bookSearch_("a")', ctx), [], 'too short');
+// 알라딘 결과가 비면 구글 도서로
+ctx.UrlFetchApp.fetch = u => ({ getContentText: () => /googleapis/.test(u) ? JSON.stringify({ items: [{ volumeInfo: { title: '페스트', authors: ['알베르 카뮈'], imageLinks: { thumbnail: 'http://books.google.com/x.jpg' } } }] }) : '<html>차단</html>' });
+assert.deepEqual(vm.runInContext('bookSearch_("페스트")', ctx), [{ title: '페스트', author: '알베르 카뮈', image: 'https://books.google.com/x.jpg' }]);
 console.log('ALADIN OK');
