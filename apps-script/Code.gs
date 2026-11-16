@@ -684,8 +684,8 @@ function doGet(e) {
     if (me.role === 'friend' && !['escape', 'book', 'board', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
-    if (e.parameter.what === 'board') return out_({ ok: true, games: boardSearch_(e.parameter.q) }); // 코리아보드게임즈 검색
-    if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
+    if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
+    if (e.parameter.what === 'book') return out_({ ok: true, books: cached_('QB:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => bookSearch_(e.parameter.q)) }); // 알라딘 검색 (시트 안 건드림)
     const fresh = e.parameter.fresh === '1';
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트
     if (e.parameter.what === 'lists') {

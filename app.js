@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v83'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v84'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -984,10 +984,30 @@ async function logout() {
 $('#menuLogout').addEventListener('click', logout);
 $('#prefLogout').addEventListener('click', logout);
 document.addEventListener('click', e => { const k = e.target.closest('[data-help]')?.dataset.help; if (k && HELP[k]) openHelp(k); });
-$('#reload').addEventListener('click', async () => {
+// 당겨서 새로고침: 맨 위에서 아래로 70px 넘게 끌었다 놓으면 새로고침 단추와 똑같이
+{
+  let y0 = null, pull = 0;
+  const el = $('#ptr'), off = t => document.querySelector('dialog[open]') || t.closest('input, textarea, select, .wcol, #lFlow, #calGrab, #hGrab, .sheet-grab') || window.scrollY > 0;
+  document.addEventListener('touchstart', e => { y0 = e.touches.length === 1 && !off(e.target) ? e.touches[0].clientY : null; pull = 0; }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    pull = Math.max(0, Math.min(110, (e.touches[0].clientY - y0) * .5)); // 손가락의 절반만큼 (고무줄 느낌)
+    if (window.scrollY > 0) { y0 = null; pull = 0; }
+    el.style.setProperty('--pull', pull + 'px'); el.classList.toggle('on', pull > 8); el.classList.toggle('ready', pull > 70);
+  }, { passive: true });
+  document.addEventListener('touchend', async () => {
+    if (y0 == null) return; y0 = null;
+    const go = pull > 70; pull = 0; el.classList.remove('on', 'ready'); el.style.setProperty('--pull', '0px');
+    if (!go || !cfg.token) return;
+    navigator.vibrate?.(10); el.classList.add('spin');
+    try { await doReload(); } finally { el.classList.remove('spin'); }
+  });
+}
+const doReload = async () => {
   forceFresh = true;
   try { await (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : sec === 'home' ? Promise.all([refreshLists(), refreshHabits()]).then(renderDash) : refreshLists()); } finally { forceFresh = false; }
-});
+};
+$('#reload').addEventListener('click', () => doReload());
 // ── 테마 5가지: 기능은 같고 모양만 완전히 다름. html[data-skin]으로 index.html의 테마 CSS가 켜짐 (첫 화면 깜빡임 없게 head에서도 미리 적용) ──
 const SKINS = [['main', '메인 테마', '#f2f4f6', '#ffffff', '#3182f6', '10px', '0 1px 2px rgba(0,0,0,.06)'],
   ['clay', '클레이모피즘', '#fbefe5', '#fff7f0', '#ff7a3d', '12px', '3px 3px 6px rgba(214,160,125,.35), inset 1px 1px 2px #fff'],
@@ -1363,21 +1383,25 @@ const findRow = (b, k) => {
   return `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.title)}</span><small>${esc(b.author)}${has.length ? ' · ' + has.join('·') + '에 있어요' : ''}</small>
     <div class="find-to">${FIND_TO.map(([l, n]) => `<button type="button" class="small" data-k="${k}" data-to="${l}">＋ ${n}</button>`).join('')}</div></div></li>`;
 };
+const findMemo = new Map();
 $('#findQ').addEventListener('input', () => {
   clearTimeout(findT);
   const q = $('#findQ').value.trim();
   if (q.length < 2) return;
+  const what = escMode() ? 'escape' : sec === 'board' ? 'board' : 'book', key = what + ':' + q;
   $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
   findT = setTimeout(async () => {
     try {
-      const r = await api(null, `&what=${escMode() ? 'escape' : sec === 'board' ? 'board' : 'book'}&q=` + encodeURIComponent(q));
+      // 같은 검색어는 이 화면이 켜져 있는 동안 다시 묻지 않음 (서버도 6시간 기억)
+      const r = findMemo.get(key) || await api(null, `&what=${what}&q=` + encodeURIComponent(q));
+      if (!(what === 'escape' && r.building)) findMemo.set(key, r);
       if (q !== $('#findQ').value.trim()) return;
       const hits = escMode() ? r.themes : sec === 'board' ? r.games : r.books;
       if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
       findHits = hits;
       $('#findList').innerHTML = findHits.map(findRow).join('') || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
     } catch (e) { $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
-  }, 400);
+  }, findMemo.has(key) ? 0 : 250);
 });
 $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 $('#findList').addEventListener('click', e => {
@@ -1964,13 +1988,13 @@ $('#lFields').addEventListener('input', e => {
   if (q.length < 2) { $('#bookHits').innerHTML = ''; return; }
   bookT = setTimeout(async () => {
     try {
-      const r = await api(null, '&what=book&q=' + encodeURIComponent(q));
+      const r = findMemo.get('book:' + q) || await api(null, '&what=book&q=' + encodeURIComponent(q)); findMemo.set('book:' + q, r);
       if (q !== $('#lForm').elements.title?.value.trim()) return; // 그새 더 쳤으면 버림
       if (!r.books) { $('#bookHits').innerHTML = '<p class="hint">책 검색은 시트의 Code.gs를 새 버전으로 배포해야 돼요</p>'; return; } // 예전 서버는 what=book을 몰라 거래를 보냄
       bookHits = r.books;
       $('#bookHits').innerHTML = (bookHits.length ? '' : '<p class="hint">검색 결과가 없어요 · 직접 입력해 주세요</p>') + bookHits.map((b, k) => `<button type="button" data-hit="${k}" role="option">${b.image ? `<img src="${esc(b.image)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span></button>`).join('');
     } catch (err) { $('#bookHits').innerHTML = `<p class="hint">책 검색이 안 돼요 (${esc(err.message)}) · 직접 입력해 주세요</p>`; }
-  }, 450);
+  }, 300);
 });
 $('#lFields').addEventListener('click', e => {
   const b = bookHits[e.target.closest('[data-hit]')?.dataset.hit];

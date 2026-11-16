@@ -507,10 +507,18 @@
   .chips button[aria-pressed="true"], .minis button[aria-pressed="true"] { background:var(--accent); color:#fff; }
   #syncPop { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); } /* 성공 알림은 화면 읽기용, 눈에는 새로고침 단추 ✓ */
   #reload.ok { color:var(--in); animation:popIn .3s var(--ease-out); }
-  #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); max-width:90vw; z-index:10;
-    background:#191f28; color:#fff; padding:10px 16px; border-radius:14px; font-size:0.824rem; font-weight:600; opacity:0; pointer-events:none;
-    transform:translate(-50%, 12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
-  #toast.show { opacity:1; transform:translate(-50%, 0); } #toast { white-space:pre-line; }
+  /* 토스트: 화면 양옆 16px까지 넓게 쓰고(예전엔 가운데부터 시작해서 반쪽 폭에 갇혀 4줄로 꺾였음), 글은 읽기 좋은 줄 간격 */
+  #toast { position:fixed; left:0; right:0; margin:0 auto; width:max-content; max-width:min(calc(100vw - 32px), 460px); bottom:calc(84px + env(safe-area-inset-bottom)); z-index:10;
+    background:rgba(25,31,40,.94); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); color:#fff; padding:12px 18px; border-radius:16px;
+    font-size:0.882rem; font-weight:600; line-height:1.5; text-align:center; word-break:keep-all; overflow-wrap:anywhere; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    opacity:0; pointer-events:none; transform:translateY(12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
+  #toast.show { opacity:1; transform:none; } #toast { white-space:pre-line; }
+  #toast.act { text-align:left; }
+  /* 당겨서 새로고침 */
+  .ptr { position:fixed; top:calc(env(safe-area-inset-top) + 8px); left:0; right:0; margin:0 auto; width:40px; height:40px; border-radius:50%; z-index:9; display:grid; place-items:center;
+    background:var(--glass); box-shadow:0 4px 16px rgba(0,0,0,.12); color:var(--accent); opacity:0; transform:translateY(calc(var(--pull, 0px) - 56px)) rotate(calc(var(--pull, 0px) * 4)); pointer-events:none; }
+  .ptr svg.i { width:22px; height:22px; } .ptr.on { opacity:1; } .ptr.ready { color:#fff; background:var(--accent); }
+  .ptr.spin { opacity:1; transform:translateY(8px); transition:transform .3s var(--spring); } .ptr.spin svg { animation:spin .8s linear infinite; }
   #toast.act { display:flex; align-items:center; gap:12px; pointer-events:auto; } #toast.act:not(.show) { pointer-events:none; }
   #toast button { flex:none; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.18); color:#7db3ff; font-weight:700; font-size:0.824rem; }
   .lmove { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-radius:14px; background:var(--fill); }
@@ -1203,6 +1211,7 @@
   </div>
 </dialog>
 <div id="toast" role="alert"></div>
+<div id="ptr" class="ptr" aria-hidden="true"><svg class="i"><use href="#i-sync"/></svg></div>
 <div id="syncPop" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
