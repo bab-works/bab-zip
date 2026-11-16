@@ -26,7 +26,14 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button[data-list]').count(), 3); assert.equal(await p.locator('#lNav [data-search]').count(), 1); assert.equal(await p.isVisible('#lTabs'), false);
   assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
   assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
-  await p.click('#fAdd'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), '');
+  // ＋ → 책 검색 → 결과에서 바로 위시리스트·읽는 중에 추가
+  const n0 = posts.length; await p.click('#fAdd'); await p.waitForSelector('#bookFind[open]');
+  await p.fill('#findQ', '페스트'); await p.waitForSelector('#findList [data-to=buy]');
+  await p.click('#findList [data-to=buy]'); await p.waitForTimeout(400);
+  const add = posts.slice(n0).find(x => x.action === 'listSave');
+  assert.deepEqual([add.list, add.item.title, add.item.author, add.item.done, add.item.image], ['buy', '페스트', '알베르 카뮈', false, 'https://image.aladin.co.kr/x/cover500/p.jpg']);
+  assert.equal(await p.isDisabled('#findList [data-to=buy]'), true);
+  await p.click('#findManual'); await p.waitForSelector('#lItem[open]'); assert.equal(await p.inputValue('#lForm [name=title]'), '');
   await p.fill('#lForm [name=title]', '페스'); await p.click('#bookHits [data-hit="0"]');
   assert.equal(await p.inputValue('#lForm [name=author]'), '알베르 카뮈'); assert.equal(await p.inputValue('#lForm [name=image]'), 'https://image.aladin.co.kr/x/cover500/p.jpg');
   assert.equal(await p.inputValue('#lForm [name=title]'), '페스트'); assert.equal(await p.locator('#bookHits button').count(), 0); await p.click('#lCancel'); await p.waitForTimeout(300);

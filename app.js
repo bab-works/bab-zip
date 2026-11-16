@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v65'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v66'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -117,7 +117,7 @@ function openHelp(k) {
 }
 const retry = () => (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 // 저장 대기 목록: 무엇이 막혔는지 보고, 다시 보내거나 하나씩 버림
-const LIST_NAME = { book: '독서', buy: '구매 목록', wish: '추천·관심', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬', movieWant: '보고 싶은 영화', playWant: '보고 싶은 공연' };
+const LIST_NAME = { book: '독서', buy: '위시리스트', wish: '추천 목록', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬', movieWant: '보고 싶은 영화', playWant: '보고 싶은 공연' };
 function opText(o) {
   const i = o.item || {};
   if (o.action === 'save') return `거래 저장 · ${i.date || ''} ${i.content || i.minor || i.major || ''} ${won(i.amount || 0)}`;
@@ -679,7 +679,7 @@ $('#entryDelete').addEventListener('click', () => {
   queue({ action: 'delete', id }).then(ok => ok && setStatus('삭제됨'));
 });
 $('#entryCancel').addEventListener('click', () => $('#entry').close());
-$('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#v-cal').hidden ? '' : selDay) : openItem());
+$('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#v-cal').hidden ? '' : selDay) : sec === 'book' ? openFind() : openItem());
 ['#list', '#dayList', '#recent', '#catList'].forEach(s => $(s).addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
@@ -936,7 +936,7 @@ $('#homeEdit').addEventListener('click', () => {
 // ── BAB:ZIP 섹션: MONEY · 독서 · 방탈출 · 보드게임 ──
 const SECTIONS = {
   money: { title: 'MONEY', icon: '💰' },
-  book: { title: '독서', icon: '📚', tabs: [['book', '독서 기록'], ['buy', '구매 목록'], ['wish', '추천·관심']] },
+  book: { title: '독서', icon: '📚', tabs: [['book', '읽는 책'], ['buy', '위시리스트'], ['wish', '추천 목록']] },
   escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록']] },
   board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
   movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '보고 싶어요']] },
@@ -1115,7 +1115,50 @@ $('#fRate').addEventListener('click', e => {
   const key = LIST_FIELDS[curList][0][0]; // 시트가 줄을 찾는 제목 칸 (독서 title, 방탈출 theme)
   queue({ action: 'listSave', list: curList, item: { id: it.id, [key]: it[key], [rk]: it[rk] } });
 });
-$('#fAdd').addEventListener('click', () => openItem());
+$('#fAdd').addEventListener('click', () => sec === 'book' ? openFind() : openItem());
+// ── 독서: 책을 검색해서 읽는 책 · 위시리스트 · 추천 목록에 바로 추가 (알라딘) ──
+const FIND_TO = [['book', '읽는 중'], ['buy', '위시리스트'], ['wish', '추천']];
+let findHits = [], findT = 0;
+function openFind() {
+  $('#findQ').value = ''; $('#findList').innerHTML = '<li class="empty">책 제목이나 저자를 검색해요</li>';
+  $('#bookFind').showModal(); $('#findQ').focus();
+}
+const findRow = (b, k) => {
+  const has = FIND_TO.filter(([l]) => L(l).some(i => i.title === b.title)).map(([, n]) => n);
+  return `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.title)}</span><small>${esc(b.author)}${has.length ? ' · ' + has.join('·') + '에 있어요' : ''}</small>
+    <div class="find-to">${FIND_TO.map(([l, n]) => `<button type="button" class="small" data-k="${k}" data-to="${l}">＋ ${n}</button>`).join('')}</div></div></li>`;
+};
+$('#findQ').addEventListener('input', () => {
+  clearTimeout(findT);
+  const q = $('#findQ').value.trim();
+  if (q.length < 2) return;
+  $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
+  findT = setTimeout(async () => {
+    try {
+      const r = await api(null, '&what=book&q=' + encodeURIComponent(q));
+      if (q !== $('#findQ').value.trim()) return;
+      if (!r.books) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
+      findHits = r.books;
+      $('#findList').innerHTML = findHits.map(findRow).join('') || '<li class="empty">검색 결과가 없어요</li>';
+    } catch (e) { $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
+  }, 400);
+});
+$('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('#findList').addEventListener('click', e => {
+  const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
+  if (!b) return;
+  const to = btn.dataset.to, t = localISO(), arr = lists[to] = lists[to] || [];
+  const item = { id: crypto.randomUUID(), title: b.title, author: b.author, memo: '', ...(b.image ? { image: b.image } : {}),
+    ...{ book: { year: t.slice(0, 4) + '년', month: t.slice(5, 7) + '월', status: '읽는중' }, buy: { done: false }, wish: { kind: '추천받은 책' } }[to] };
+  if (to === 'book') item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;
+  arr.push(item); store.set('lists', lists);
+  btn.disabled = true; btn.textContent = '✓ 추가됨';
+  const name = FIND_TO.find(x => x[0] === to)[1];
+  queue({ action: 'listSave', list: to, item }).then(ok => ok && toast(`「${b.title}」 ${name}에 추가했어요`));
+  if (curList === to) renderLists();
+});
+$('#findManual').addEventListener('click', () => { $('#bookFind').close(); openItem(); });
+$('#findClose').addEventListener('click', () => $('#bookFind').close());
 // 밑줄 문장: 책마다 여러 개 (시트 「밑줄 문장」 칸에 빈 줄로 나눠 저장). 카드를 넘기듯 좌우로 넘겨봄
 const quotesOf = i => String(i.quotes || '').split(/\n\s*\n/).map(t => t.trim()).filter(Boolean);
 let qBook = null;

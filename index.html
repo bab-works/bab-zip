@@ -421,7 +421,11 @@
   .rc-list .em { font-size:1.6rem; } .rc-list div { display:flex; flex-direction:column; min-width:0; } .rc-list b { font-size:1.176rem; }
   .rc-list small { opacity:.8; font-size:0.765rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .recap button:not(.primary) { background:rgba(255,255,255,.18); color:#fff; } .recap .primary { background:#fff; color:#3182f6; }
-  #payChips { display:flex; gap:6px; flex-wrap:wrap; } .pay-list button { display:block; width:100%; text-align:left; padding:12px 14px; margin:4px 0; background:var(--fill); }
+  #findQ { width:100%; font-size:1rem; }
+  .find-list li { align-items:flex-start; } .find-list li > div { flex:1; min-width:0; } .find-list span { display:block; font-weight:700; }
+  .find-list small { display:block; color:var(--muted); } .find-to { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .find-to button:disabled { background:var(--accent-soft); color:var(--accent); opacity:1; }
+ display:flex; gap:6px; flex-wrap:wrap; } .pay-list button { display:block; width:100%; text-align:left; padding:12px 14px; margin:4px 0; background:var(--fill); }
   .pay-list button[aria-pressed="true"] { background:var(--accent); color:#fff; }
   .menu-list.editing button:nth-child(even) { animation-delay:-.15s; }
   .menu-list button.lift { animation:none; transition:none; z-index:1; position:relative; box-shadow:0 8px 24px rgba(0,0,0,.18); background:var(--glass); }
@@ -790,6 +794,13 @@
   <ul id="rcList" class="rc-list"></ul>
   <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" id="rcClose">닫기</button><button type="button" id="rcSave" class="primary">이미지로 저장</button></div>
 </dialog>
+<dialog id="bookFind" class="sheet" aria-labelledby="findTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="findTitle" style="text-align:center;margin:0 0 10px">책 검색해서 추가</h2>
+  <input id="findQ" type="search" placeholder="책 제목이나 저자" aria-label="책 검색" enterkeyhint="search" autocomplete="off">
+  <ul id="findList" class="tx find-list" aria-live="polite"></ul>
+  <div class="row" style="margin-top:10px"><button type="button" id="findManual" class="small">찾는 책이 없어요 · 직접 입력</button><button type="button" id="findClose">닫기</button></div>
+</dialog>
 <dialog id="paySheet" class="sheet">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <h2 style="text-align:center">결제수단</h2>
@@ -805,9 +816,9 @@
 </dialog>
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
-    <h2>내 시트 연결</h2>
-    <label class="f">비밀번호<input name="token" type="password" autocomplete="current-password"></label>
-    <label class="switch" style="margin:10px 0"><input type="checkbox" id="lockOn"><i aria-hidden="true"></i>앱을 열 때 Face ID로 잠금</label>
+    <h2>설정</h2>
+    <label class="switch" style="margin:4px 0 14px"><input type="checkbox" id="lockOn"><i aria-hidden="true"></i>Face ID 잠금 (앱을 열 때)</label>
+    <label class="f">시트 비밀번호<input name="token" type="password" autocomplete="current-password"></label>
     <details class="adv"><summary>고급 · 다른 시트에 연결</summary>
       <label class="f">설정 링크 붙여넣기<input name="link" type="url" placeholder="https://bab-works.github.io/bab-zip/#url=…&token=…"></label>
       <label class="f">시트 주소 (웹 앱 URL)<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
