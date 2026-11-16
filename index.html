@@ -495,6 +495,13 @@
     background:#191f28; color:#fff; padding:10px 16px; border-radius:14px; font-size:0.824rem; font-weight:600; opacity:0; pointer-events:none;
     transform:translate(-50%, 12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
   #toast.show { opacity:1; transform:translate(-50%, 0); }
+  .home-quick { display:flex; padding:0; gap:0; overflow:hidden; } .home-quick > button { background:none; color:inherit; padding:16px 18px; border-radius:0; box-shadow:none; }
+  #homeQuick { flex:1; min-width:0; display:flex; justify-content:space-between; align-items:center; text-align:left; } #homeQuick > span:first-child { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .photo-btn { display:flex; flex-direction:column; align-items:center; font-size:1.3rem; line-height:1.1; border-left:1px solid rgba(255,255,255,.35) !important; } .photo-btn small { font-size:0.647rem; margin:0 !important; }
+  .ph-list { list-style:none; padding:0; margin:8px 0 0; display:flex; flex-direction:column; gap:8px; }
+  .ph-list li { display:grid; grid-template-columns:auto 1fr auto; gap:6px 10px; align-items:center; padding:10px 12px; border-radius:14px; background:var(--fill); }
+  .ph-list li.dup { opacity:.55; } .ph-list li > small { grid-column:2 / -1; color:var(--out); font-size:0.706rem; }
+  .ph-list input[type=text] { min-width:0; padding:8px; } .ph-list input[type=number] { width:100px; padding:8px; text-align:right; } .ph-list input[type=date] { grid-column:2; padding:6px 8px; font-size:0.824rem; }
 </style>
 </head>
 <body>
@@ -546,6 +553,9 @@
 
 <main>
   <section id="v-home">
+    <div class="cal-cta home-quick"><button type="button" id="homeQuick"><span><b>오늘 지출 입력</b><small id="homeQuickSum"></small></span><span class="cal-plus" aria-hidden="true">＋</span></button>
+      <button type="button" id="photoBtn" class="photo-btn" aria-label="사진으로 입력">📷<small>사진</small></button></div>
+    <input type="file" id="photoIn" accept="image/*" hidden>
     <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 BAB:ZIP 결산이 나왔어요<span>보기 ›</span></button>
     <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
@@ -800,6 +810,14 @@
   <input id="findQ" type="search" placeholder="책 제목이나 저자" aria-label="책 검색" enterkeyhint="search" autocomplete="off">
   <ul id="findList" class="tx find-list" aria-live="polite"></ul>
   <div class="row" style="margin-top:10px"><button type="button" id="findManual" class="small">찾는 책이 없어요 · 직접 입력</button><button type="button" id="findClose">닫기</button></div>
+</dialog>
+<dialog id="photoSheet" class="sheet" aria-labelledby="phTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="phTitle" style="text-align:center;margin:0">사진에서 찾은 거래</h2>
+  <p id="phInfo" class="hint" style="text-align:center"></p>
+  <ul id="phList" class="ph-list"></ul>
+  <details class="raw"><summary>읽은 글자 보기</summary><pre id="phRaw" class="hint" style="white-space:pre-wrap"></pre></details>
+  <div class="row sheet-foot" style="margin-top:10px"><button type="button" id="phClose">닫기</button><button type="button" id="phSave" class="primary">선택한 거래 저장</button></div>
 </dialog>
 <dialog id="paySheet" class="sheet">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>

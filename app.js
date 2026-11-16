@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v66'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v67'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -342,6 +342,8 @@ function renderHome() {
     ? `<b>${mo}월 ${dailySel}일</b> ${won(per[dailySel - 1])} · <a href="#" id="dailyGo">그날 내역 보기</a>`
     : per[top] > 0 ? `가장 많이 쓴 날 <b>${mo}월 ${top + 1}일</b> ${won(per[top])} · 막대를 눌러 보세요` : '이번 달 지출이 없어요';
 
+  const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
+  $('#homeQuickSum').textContent = tdy.length ? ` 오늘 ${won(tds.exp)} · ${tdy.length}건` : ' 아직 입력이 없어요';
   renderToday(m, exp, total, today, list); renderReport(today); renderUpcoming(today);
   $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '')).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
@@ -640,8 +642,7 @@ $('#recManage').addEventListener('click', () => { $('#entry').close(); show('rec
 // 내용을 치면 「분류규칙」 탭의 키워드로 구분·대분류·소분류 자동 선택 (새 거래만)
 F.content.addEventListener('input', () => {
   if (F.tid.value) return;
-  const s = F.content.value.toLowerCase();
-  const r = s && data.meta.rules.find(r => r[0] && s.includes(r[0].toLowerCase()));
+  const r = ruleFor(F.content.value);
   if (!r) return;
   if (TYPES.includes(r[1])) F.type.value = r[1];
   entryCats(r[2], r[3]);
@@ -1700,6 +1701,99 @@ refresh();
 if (!cfg.token) $('#welcome').showModal(); // 연결 전이면 시작 화면
 else lockNow();
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
+$('#homeQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
+// ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 시트(구글 드라이브 OCR)가 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
+// 이미 시트에 있는 거래(같은 날 같은 금액)와 사진 안에서 겹치는 건 체크를 빼 둠
+const ruleFor = s => { s = (s || '').toLowerCase(); return s ? data.meta.rules.find(r => r[0] && s.includes(r[0].toLowerCase())) : null; };
+function parseOcr(text, today) {
+  const y0 = +today.slice(0, 4);
+  const lines = String(text).split(/\n+/).map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const dateOf = s => {
+    let m = s.match(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
+    if (m) return `${m[1]}-${pad2(+m[2])}-${pad2(+m[3])}`;
+    m = s.match(/(?:^|[^\d,])(\d{1,2})\s*[./월]\s*(\d{1,2})(?:일|(?![\d,]))/);
+    if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > 31) return '';
+    const d = `${y0}-${pad2(+m[1])}-${pad2(+m[2])}`;
+    return d > today ? `${y0 - 1}${d.slice(4)}` : d; // 연도 없는 날짜가 미래면 작년
+  };
+  const amtOf = s => { const m = s.match(/(-?\d{1,3}(?:,\d{3})+|-?\d{3,})\s*원/) || s.match(/(-?\d{1,3}(?:,\d{3})+)(?![\d.])/); return m ? Math.abs(+m[1].replace(/,/g, '')) : 0; };
+  const timeOf = s => (s.match(/(?:^|\D)([01]?\d|2[0-3]):([0-5]\d)(?!\d)/) || []).slice(1).map((v, k) => k ? v : pad2(+v)).join(':');
+  const NOISE = /\[?web발신\]?|승인|일시불|할부|\d+개월|누적|체크|신용|결제|사용|금액|카드|[-+]?\d[\d,]*\s*원|\d{1,2}:\d{2}|(?<![가-힣a-z\d])[\d,./\-:*()\[\]+]+(?![가-힣a-z\d])/gi; // 이름에 붙은 숫자(GS25)는 남김
+  const nameOf = s => s.replace(/\S*\*\S*|[가-힣a-z]*카드|[()[\]]/gi, ' ').replace(NOISE, ' ').replace(/\s+/g, ' ').trim();
+  const typeOf = s => /취소|환불/.test(s) ? '환불' : /입금|급여|이자/.test(s) ? '수입' : '지출';
+  const first = lines.map(dateOf).find(Boolean) || today;
+  // 영수증: 합계 줄 하나만
+  const total = lines.findIndex(l => /합\s*계|결제\s*금액|받을\s*금액|총\s*액|총\s*결제|판매\s*금액/.test(l) && amtOf(l));
+  if (total >= 0) return [{ date: first, time: lines.map(timeOf).find(Boolean) || '', content: nameOf(lines.find(l => nameOf(l).length >= 2) || ''), amount: amtOf(lines[total]), type: '지출' }];
+  // 목록·문자: 금액이 있는 줄마다 하나 (잔액·한도 줄은 빼고)
+  // 카드 문자처럼 금액 뒤에 날짜·가맹점이 오면, 다음 줄로 채움 (pending). 카드사·승인 줄과 가려진 이름(홍*동)은 가맹점이 아님
+  const out = []; let day = first, prevName = '', pending = null;
+  lines.forEach(l => {
+    const d = dateOf(l), a = amtOf(l), n = nameOf(l);
+    if (d) day = d;
+    if (!a || /잔액|한도|포인트|적립|누적/.test(l)) {
+      if (pending && d) { pending.date = d; pending.time = pending.time || timeOf(l); }
+      const ok = n.length >= 2 && !/\*/.test(l) && !/승인|카드|은행|web발신/i.test(l);
+      if (ok && pending) { pending.content = n; pending = null; } else if (ok && !d) prevName = n;
+      return;
+    }
+    const row = { date: day, time: timeOf(l), content: n.length >= 2 ? n : prevName, amount: a, type: typeOf(l + ' ' + (n.length >= 2 ? '' : prevName)) };
+    out.push(row); pending = row.content ? null : row; prevName = '';
+  });
+  return out;
+}
+let phRows = [];
+function renderPhoto(text) {
+  const today = localISO().slice(0, 10), seen = new Set();
+  phRows = parseOcr(text, today).map(r => {
+    const key = r.date + '|' + r.amount, dup = data.items.some(i => i.date === r.date && i.amount === r.amount) ? '이미 시트에 있는 거래예요' : seen.has(key) ? '사진 안에서 겹쳐요' : '';
+    seen.add(key);
+    return { ...r, dup };
+  });
+  $('#phRaw').textContent = text;
+  $('#phInfo').textContent = phRows.length ? `${phRows.length}건 찾음 · 겹치는 ${phRows.filter(r => r.dup).length}건은 빼 두었어요 · 고칠 곳은 바로 고쳐요` : '거래를 찾지 못했어요 · 「읽은 글자 보기」를 확인해 보세요';
+  $('#phList').innerHTML = phRows.map((r, k) => `<li class="${r.dup ? 'dup' : ''}" data-k="${k}"><input type="checkbox" aria-label="저장" ${r.dup ? '' : 'checked'}>
+    <input type="text" name="content" value="${esc(r.content)}" aria-label="내용" placeholder="내용"><input type="number" name="amount" inputmode="numeric" value="${r.amount}" aria-label="금액">
+    <input type="date" name="date" value="${r.date}" aria-label="날짜"><b class="${r.type === '지출' ? 'out' : r.type === '수입' ? 'in' : 'refund'}" style="font-size:0.765rem">${r.type}</b>${r.dup ? `<small>${r.dup}</small>` : ''}</li>`).join('');
+  $('#phSave').disabled = !phRows.length;
+}
+// 사진은 긴 변 1600px JPEG로 줄여서 보냄 (빠르고 OCR엔 충분)
+const shrink = file => new Promise((res, rej) => {
+  const img = new Image(); img.onerror = () => rej(new Error('사진을 열 수 없어요'));
+  img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', 0.85).split(',')[1]); };
+  img.src = URL.createObjectURL(file);
+});
+$('#photoBtn').addEventListener('click', () => $('#photoIn').click());
+$('#photoIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  busy(true); toast('사진을 읽는 중이에요…');
+  try {
+    const r = await call({ action: 'ocr', image: await shrink(f) });
+    if (r.text == null) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
+    renderPhoto(r.text); $('#photoSheet').showModal();
+  } catch (err) { toast(err.message); } finally { busy(false); }
+});
+$('#phClose').addEventListener('click', () => $('#photoSheet').close());
+$('#phSave').addEventListener('click', () => {
+  const majors = [...new Set(data.meta.cats.map(c => c[0]))], fallback = majors.includes('기타') ? '기타' : majors[0] || '기타';
+  let n = 0;
+  $('#phList').querySelectorAll('li').forEach(li => {
+    if (!li.querySelector('[type=checkbox]').checked) return;
+    const r = phRows[li.dataset.k], g = n => li.querySelector(`[name=${n}]`).value;
+    const content = g('content').trim(), amount = Math.round(+g('amount')), date = g('date'), rule = ruleFor(content);
+    if (!(amount > 0) || !date) return;
+    const type = r.type !== '지출' ? r.type : rule && TYPES.includes(rule[1]) ? rule[1] : '지출';
+    const it = { id: crypto.randomUUID(), date, time: r.time || '', type, major: rule ? rule[2] : type === '수입' ? '수입' : fallback, minor: rule ? rule[3] : '',
+      content, pay: '', amount, memo: '사진 입력', inst: '' };
+    data.items.push(it); queue({ action: 'save', item: it }); n++;
+  });
+  $('#photoSheet').close();
+  toast(n ? `${n}건을 저장했어요` : '저장할 거래를 고르지 않았어요');
+  render();
+});
 $('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // ── 올해의 BAB:ZIP: 12월~1월 중순 홈 위 배너 (?recap=1로 언제든) → 한 해 결산, 공유용 이미지 저장 ──
 const recapYear = () => { const t = localISO(); return t.slice(5, 7) === '01' ? String(+t.slice(0, 4) - 1) : t.slice(0, 4); };

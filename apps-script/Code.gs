@@ -77,6 +77,21 @@ function deleteTx_(id) {
   if (idx >= 0) sh.deleteRow(idx + 2);
 }
 
+// 사진 → 글자: 구글 드라이브에 문서로 올리면서 OCR(한국어) → 글만 꺼내고 파일은 바로 휴지통으로
+// 처음 한 번 함수 목록에서 allowPhoto를 실행해 드라이브 권한을 허용해야 해요
+function ocr_(b64) {
+  if (!b64 || b64.length > 8e6) throw new Error('사진이 없거나 너무 커요');
+  const img = Utilities.base64Decode(String(b64).replace(/^data:[^,]+,/, '')), bd = 'babzip' + Date.now(), auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  const head = Utilities.newBlob('--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'BABZIP 사진 인식 (자동 삭제)', mimeType: 'application/vnd.google-apps.document' }) + '\r\n--' + bd + '\r\nContent-Type: image/jpeg\r\n\r\n').getBytes();
+  const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ko', { method: 'post', headers: auth, muteHttpExceptions: true,
+    contentType: 'multipart/related; boundary=' + bd, payload: head.concat(img).concat(Utilities.newBlob('\r\n--' + bd + '--').getBytes()) });
+  if (r.getResponseCode() >= 300) throw new Error(r.getResponseCode() === 403 ? 'Apps Script에서 allowPhoto를 한 번 실행해 드라이브 권한을 허용해 주세요' : r.getContentText().slice(0, 120));
+  const id = JSON.parse(r.getContentText()).id;
+  try { return UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: auth }).getContentText(); }
+  finally { DriveApp.getFileById(id).setTrashed(true); }
+}
+function allowPhoto() { Logger.log('드라이브 권한 OK · 남은 용량 ' + Math.round(DriveApp.getStorageUsed() / 1e6) + 'MB 사용 중'); }
+
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
 function bookSearch_(q) {
@@ -453,6 +468,10 @@ function doGet(e) {
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
+  if (b.action === 'ocr') { // 사진 글자 읽기 (시트는 안 건드림)
+    if (!authOk_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
+    try { return out_({ ok: true, text: ocr_(b.image) }); } catch (err) { return out_({ ok: false, error: '사진 인식 실패: ' + err.message }); }
+  }
   return writeOp_(b);
 }
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
