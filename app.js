@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v81'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v82'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1714,13 +1714,13 @@ function flyPlane(from) {
 // 공유: 아이폰 공유 시트(카톡·메시지 등). 공유를 못 쓰거나 실패하면 링크 + 복사하기/취소 창
 async function shareInvite(name, inv, btn) {
   if (!inv) return toast('초대 링크를 만드는 중이에요 · 잠시 뒤 다시 눌러 주세요');
-  const url = friendLink(inv), text = `${name}님, 하트 : 하비 트래커에 초대해요! 링크를 누르면 바로 시작돼요`;
+  const url = friendLink(inv), text = `${name}님, 하트 : 하비 트래커에 초대해요!\n링크를 누르면 바로 시작돼요.\n홈 화면에 추가한 뒤엔 아이디: ${name} / 비밀번호: 1234 로 로그인하고, 설정에서 비밀번호를 바꿔 주세요.`;
   if (btn) flyPlane(btn);
   try { await navigator.clipboard.writeText(url); } catch (e) {} // 먼저 조용히 복사해 둠
   if (navigator.share) {
     try { await navigator.share({ title: '하트 : 하비 트래커', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
-  $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요`; $('#shareUrl').value = url; $('#shareSheet').showModal();
+  $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요 · 아이디 ${name} / 비밀번호 1234`; $('#shareUrl').value = url; $('#shareSheet').showModal();
 }
 $('#shareCopy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('#shareUrl').value); toast('복사했어요 · 친구에게 보내 주세요'); $('#shareSheet').close(); }
@@ -2138,7 +2138,11 @@ if (invite) {
   if (su && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(su)) cfg.url = su;
   history.replaceState(null, '', location.pathname + location.search);
   showLogin('초대 링크를 확인하는 중이에요…');
-  pub({ action: 'redeem', invite }).then(loggedIn).catch(err => showLogin(err.message));
+  pub({ action: 'redeem', invite }).then(async r => {
+    await loggedIn(r);
+    const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+    if (!standalone) ask(`환영해요! 공유 → 「홈 화면에 추가」로 하트를 설치하세요.\n\n홈 화면 앱에서는 처음 한 번 로그인이 필요해요.\n아이디: ${r.name}\n비밀번호: 1234 (설정에서 바꿀 수 있어요)`, { ok: '알겠어요' });
+  }).catch(err => showLogin(err.message));
 } else if (!cfg.token) showLogin(); // 로그인 전이면 로그인 화면
 else lockNow();
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로

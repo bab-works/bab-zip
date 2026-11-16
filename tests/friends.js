@@ -84,9 +84,10 @@ assert.equal(post(undefined, { action: 'login', name: '남', password: OWNER }).
 assert.match(post(undefined, { action: 'login', name: '나리', password: 'x' }).error, /맞지 않아요/);
 const mjInv = get(OWNER, 'me').friends.find(f => f.name === '민지').invite; assert.match(mjInv, /^i[0-9a-f]{9}$/);
 assert.notEqual(mjInv, MJ, 'invite id is not the access code');
-const red = post(undefined, { action: 'redeem', invite: mjInv }); assert.deepEqual([red.token, red.name, red.hasPassword], [MJ, '민지', false]);
+const red = post(undefined, { action: 'redeem', invite: mjInv }); assert.deepEqual([red.token, red.name, red.hasPassword], [MJ, '민지', true]);
 assert.equal(post(undefined, { action: 'redeem', invite: 'i000000000' }).ok, false);
 assert.equal(post(undefined, { action: 'login', name: '민지', password: MJ }).ok, false, 'access code alone is not a password');
+assert.equal(post(undefined, { action: 'login', name: '민지', password: '1234' }).token, MJ, 'first password is 1234');
 assert.equal(post(MJ, { action: 'setPassword', password: 'cat1' }).ok, true);
 assert.equal(post(undefined, { action: 'login', name: '민지', password: 'cat1' }).token, MJ);
 assert.equal(tabs['친구'].d.some(r => r.includes('cat1')), false, 'password stored hashed');

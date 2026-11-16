@@ -44,6 +44,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const f = await page('#i=i0123456789');
   await f.p.waitForSelector('#hello:not([hidden])'); assert.equal(await f.p.textContent('#helloText'), '민지님 반가워요');
   await f.p.waitForSelector('#hello', { state: 'hidden', timeout: 5000 }); await f.p.waitForTimeout(800);
+  // 브라우저(홈 화면 앱 아님)로 열면: 홈 화면에 추가 + 아이디/비밀번호 1234 안내
+  await f.p.waitForSelector('#ask[open]'); assert.match(await f.p.textContent('#askMsg'), /아이디: 민지[\s\S]*1234/); await f.p.click('#askOk'); await f.p.waitForTimeout(300);
   assert.equal(await f.p.textContent('#appTitle'), '오늘'); assert.equal(await f.p.evaluate(() => location.hash), '', 'invite id removed from address bar');
   assert.match(await f.p.textContent('#dashHi'), /민지님/); assert.match(await f.p.textContent('#dashBook'), /페스트/);
   assert.match(await f.p.textContent('#dashRecent'), /오시리스/); assert.match(await f.p.textContent('#dashHabit'), /물 마시기/);

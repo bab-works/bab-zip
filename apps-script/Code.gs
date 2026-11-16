@@ -171,11 +171,14 @@ const friends_ = () => body_(ss_().getSheetByName(FRIEND_TAB_)).filter(r => r[0]
 const pwHash_ = (salt, pw) => Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pw));
 const newId_ = (p, n) => p + Utilities.getUuid().replace(/-/g, '').slice(0, n);
 // 예전에 초대한 친구에게도 짧은 초대 ID를 만들어 줌 (주인이 설정을 열 때)
+// 게스트 첫 비밀번호는 모두 1234 (아이폰은 홈 화면 앱과 사파리·인스타 브라우저의 저장소가 따로라, 링크로 로그인해도 홈 화면 앱에선 다시 로그인해야 함)
+const FIRST_PW_ = '1234';
 function ensureInvites_() {
   const sh = ss_().getSheetByName(FRIEND_TAB_); if (!sh) return;
-  const rows = body_(sh), miss = rows.map((r, i) => r[0] && r[1] && !r[3] ? i : -1).filter(i => i >= 0);
+  const rows = body_(sh), miss = rows.map((r, i) => r[0] && r[1] && (!r[3] || !r[4]) ? i : -1).filter(i => i >= 0);
   if (!miss.length) return; // 대부분은 쓸 게 없음 → 잠금·쓰기 없이 바로 (예전엔 매번 써서 느렸음)
-  withLock_(() => { sh.getRange(1, 4, 1, 2).setValues([['초대ID', '비밀번호']]); miss.forEach(i => sh.getRange(i + 2, 4).setValue(newId_('i', 9))); });
+  withLock_(() => { sh.getRange(1, 4, 1, 2).setValues([['초대ID', '비밀번호']]);
+    miss.forEach(i => { const r = rows[i]; if (!r[3]) sh.getRange(i + 2, 4).setValue(newId_('i', 9)); if (!r[4]) sh.getRange(i + 2, 5).setValue(pwHash_(String(r[1]), FIRST_PW_)); }); });
 }
 // ── 빠르게: 목록·습관 응답을 CacheService에 잠깐 저장. 기록이 바뀌면 DATA_VER가 바뀌어 옛 캐시는 안 씀 ──
 // shortcut: 시트에서 손으로 고친 건 최대 10분 늦게 보임 (앱의 새로고침 단추는 캐시를 건너뜀)
@@ -284,7 +287,7 @@ function invite_(b) {
   if (people_().includes(name)) throw new Error('입력값 오류: 이미 있는 이름');
   const code = newId_('f', 11), invite = newId_('i', 9);
   sh.getRange(1, 1, 1, 5).setValues([['이름', '접속코드', '만든 날', '초대ID', '비밀번호']]);
-  sh.appendRow(["'" + name, code, new Date(), invite, '']);
+  sh.appendRow(["'" + name, code, new Date(), invite, pwHash_(code, FIRST_PW_)]);
   return { code, invite };
 }
 const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'setName', 'invite', 'uninvite'];
