@@ -119,7 +119,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(await p.locator('.alert').count(), 0);
 
   // 1) 분류규칙 자동분류 + 예산 경고 (식비 450k + 40k = 490k → 81%)
-  await p.click('#fab');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]');
   await p.fill('#entryForm [name=amount]', '40000');
   await p.fill('#entryForm [name=content]', '배달의민족 치킨');
   assert.equal(await p.inputValue('#entryForm [name=major]'), '식비');
@@ -134,7 +134,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(last[8], 40000); assert.equal(last[9], '=HYPERLINK("x")'); assert.ok(last[15]);
   assert.ok(T.maxR >= 4);
   // 2) 초과 (스타벅스 → 카페·간식 자동, 식비로 바꿔 200k)
-  await p.click('#fab'); await p.fill('#entryForm [name=amount]', '200000'); await p.fill('#entryForm [name=content]', '회식');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#entryForm [name=amount]', '200000'); await p.fill('#entryForm [name=content]', '회식');
   await p.click('#entryForm button.primary');
   await p.waitForFunction(() => /식비 예산 초과/.test(document.querySelector('#toast').textContent));
   await status(/저장됨/);
@@ -174,7 +174,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(sheets.카테고리.d[1][4], 700000);
 
   // 5) 반복: 2달 전부터 매월 1일 → 3건, 매월 31일 이번 달(오늘 이후면 미생성)
-  await p.click('#fab'); await p.waitForSelector('#entry', { state: 'visible' });
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#entry', { state: 'visible' });
   await p.evaluate(d => { const f = document.querySelector('#entryForm'); f.date.value = d; f.date.dispatchEvent(new Event('change', { bubbles: true })); }, ago(2) + '-01');
   await p.fill('#entryForm [name=content]', '휴대폰 요금');
   assert.equal(await p.inputValue('#entryForm [name=pay]'), 'C체크카드', 'new entry starts with the last payment method');
@@ -190,7 +190,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(sheets.반복.d[1][10], CUR);
   await p.click('#reload'); await status(/동기화됨/);
   assert.equal(recs().length, 3, 'no duplicates on re-run');
-  await p.click('#fab'); await p.click('#recManage');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.click('#recManage');
   assert.equal(await p.locator('#recList li button').count(), 1);
   await p.screenshot({ path: SHOTS + '/rec.png' });
   await p.click('#recList button'); await status(/저장됨/);
@@ -199,12 +199,12 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 6) 오프라인 → 대기 → 복구
   await p.click('nav button[data-view=home]');
   offline = true;
-  await p.click('#fab'); await p.fill('#entryForm [name=amount]', '4500'); await p.fill('#entryForm [name=content]', '스타벅스');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#entryForm [name=amount]', '4500'); await p.fill('#entryForm [name=content]', '스타벅스');
   assert.equal(await p.inputValue('#entryForm [name=major]'), '카페·간식');
   await p.click('#entryForm button.primary'); await status(/대기 1건/);
   // 빨간 줄을 누르면 못 보낸 목록: 진짜 오류와 항목이 보임 → 하나 더 쌓고 버리기 → 다시 보내기
   assert.match(await p.textContent('#status'), /닿지 못했어요/);
-  await p.click('#fab'); await p.fill('#entryForm [name=amount]', '999'); await p.fill('#entryForm [name=content]', '버릴 거래'); await p.click('#entryForm button.primary'); await status(/대기 2건/);
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#entryForm [name=amount]', '999'); await p.fill('#entryForm [name=content]', '버릴 거래'); await p.click('#entryForm button.primary'); await status(/대기 2건/);
   await p.click('#status'); await p.waitForSelector('#pend[open]');
   assert.match(await p.textContent('#pendErr'), /오류: 시트에 닿지 못했어요/);
   assert.equal(await p.locator('#pendList li').count(), 2); assert.match(await p.textContent('#pendList li >> nth=1'), /버릴 거래 999원/);
@@ -216,12 +216,12 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 아이폰처럼 저장(POST)만 끊기면 같은 작업을 GET(?op=)으로 보내 저장됨
   postBlocked = true;
   { const n0 = T.d.length;
-    await p.click('#fab'); await p.fill('#entryForm [name=amount]', '3300'); await p.fill('#entryForm [name=content]', 'GET으로 저장'); await p.click('#entryForm button.primary');
+    await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#entryForm [name=amount]', '3300'); await p.fill('#entryForm [name=content]', 'GET으로 저장'); await p.click('#entryForm button.primary');
     await status(/저장됨/); assert.equal(T.d.length, n0 + 1); assert.equal(T.d.at(-1)[5], 'GET으로 저장');
     assert.equal(await p.evaluate(() => localStorage.getItem('writeViaGet')), 'true', 'remembers GET for next time');
     // 예전 서버(배포 전)는 op를 무시하고 목록만 돌려주므로, 저장된 것으로 착각하지 않고 배포 안내
     oldServer = true;
-    await p.click('#fab'); await p.fill('#entryForm [name=amount]', '1100'); await p.fill('#entryForm [name=content]', '예전 서버'); await p.click('#entryForm button.primary');
+    await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#entryForm [name=amount]', '1100'); await p.fill('#entryForm [name=content]', '예전 서버'); await p.click('#entryForm button.primary');
     await p.waitForFunction(() => /예전 버전/.test(document.querySelector('#status').textContent)); assert.equal(T.d.length, n0 + 1, 'not lost: still pending');
     oldServer = false; postBlocked = false; await p.evaluate(() => localStorage.removeItem('writeViaGet'));
     await p.click('#reload'); await status(/동기화됨/); assert.equal(T.d.at(-1)[5], '예전 서버'); }
@@ -279,7 +279,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok(await p.isVisible('#v-cal')); assert.match(await p.textContent('#dayTitle'), new RegExp(`${cm}월 1일`));
   await p.click('nav button[data-view=home]');
   assert.equal(await p.locator('#recent li[data-id]').count(), 5);
-  await p.click('#fab');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]');
   await p.click('#quick [data-add="10000"]'); await p.click('#quick [data-add="5000"]');
   assert.equal(await p.inputValue('#entryForm [name=amount]'), '15000');
   await p.click('#majorChips [data-v="카페·간식"]');
@@ -344,7 +344,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
 
   // 11) 창 바깥을 누르면 닫힘, 안쪽은 안 닫힘
   await p.click('nav button[data-view=home]');
-  await p.click('#fab'); await p.waitForSelector('#entry', { state: 'visible' });
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#entry', { state: 'visible' });
   await p.click('#entryTitle'); assert.ok(await p.isVisible('#entry'));
   await p.mouse.click(195, 10); await p.waitForSelector('#entry', { state: 'hidden' });
   await p.click('#budgets [data-cat] >> nth=0'); await p.waitForSelector('#catSheet', { state: 'visible' });
@@ -437,7 +437,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 14) 날짜 휠
   await p.click('#menuBtn'); await p.click('#menuList button:has-text("MONEY")'); await p.waitForSelector('nav', { state: 'visible' });
   await p.click('nav button[data-view=home]');
-  await p.click('#fab'); await p.waitForSelector('#entry', { state: 'visible' });
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#entry', { state: 'visible' });
   // 날짜: 한 줄 버튼 → 캘린더 창에서 고르기
   await p.click('#entryForm .dbtn'); await p.waitForSelector('#calPick', { state: 'visible' });
   await p.click('#cpGrid [data-d="' + TODAY.slice(0, 8) + '05"]');
@@ -461,11 +461,10 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#mPrev'); await p.click('#monthLabel');
   await spin([CUR.slice(0, 4), '03']);
   assert.match(await p.textContent('#monthLabel'), /3월/);
-
-  // 15) 달력 상단 오늘 입력 + 바로가기 주소
+  // 15) 달력에서 ＋ → 직접 입력은 고른 날짜로 + 바로가기 주소
   await p.click('nav button[data-view=cal]');
-  await p.click('#calQuick'); await p.waitForSelector('#entry', { state: 'visible' });
-  assert.equal(await p.inputValue('#entryForm [name=date]'), TODAY);
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#entry', { state: 'visible' });
+  assert.equal(await p.inputValue('#entryForm [name=date]'), await p.evaluate(() => selDay), 'calendar ＋ uses the selected day');
   await p.click('#entryCancel'); await p.waitForSelector('#entry', { state: 'hidden' });
   await p.goto('http://localhost:8766/?add=1'); await p.waitForSelector('#entry', { state: 'visible' });
   assert.equal(await p.evaluate(() => location.search), '', 'query cleaned');

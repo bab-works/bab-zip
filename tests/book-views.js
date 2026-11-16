@@ -75,7 +75,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.click('#lViews [data-v=flow]');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
-  assert.equal(await p.isVisible('#lNav'), false, 'single-list sections have no bottom tab bar');
+  assert.equal(await p.isVisible('#lNav'), true, 'same tab bar everywhere'); assert.equal(await p.locator('#lNav [data-search]').count(), 1);
+  assert.equal(await p.locator('#lNav .tab-pill').count(), 1, 'liquid glass pill');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'movies too');
   assert.equal(await p.locator('#lNav [data-list=movieWant]').count(), 1, 'want-to-see tab');

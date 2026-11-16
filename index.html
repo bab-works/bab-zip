@@ -54,8 +54,10 @@
     transform:scale(.96); filter:brightness(.94); transition-duration:.08s; }
   .tx li[data-id], .cal button, .chips button, .menu-list button, nav button, .seg span { transition:transform .22s var(--ease), background-color .2s var(--ease), filter .2s var(--ease); }
   /* 탭 전환·월 넘김·처음 그리기 */
-  .enter { animation:pageIn .34s var(--ease-out); }
-  @keyframes pageIn { from { opacity:0; transform:translateY(10px); } }
+  /* iOS 27 느낌: 스프링(살짝 튀었다 멈춤) — Safari 17.2+ linear() */
+  :root { --spring:linear(0, .009, .035 2.1%, .141 4.4%, .281 6.7%, .723 12.9%, .938 16.7%, 1.017 19.4%, 1.077 22%, 1.104 24.6%, 1.112 27.4%, 1.09 32.3%, 1.04 38.6%, 1.012 44.7%, .995 51.8%, .993 61.6%, 1); }
+  .enter { animation:pageIn .5s var(--spring); }
+  @keyframes pageIn { from { opacity:0; transform:translateY(14px) scale(.985); filter:blur(4px); } }
   main.slide { animation:slideIn .34s var(--ease-out); }
   @keyframes slideIn { from { opacity:0; transform:translateX(var(--dx, 24px)); } }
   nav button[aria-current="page"] svg { animation:pop .38s var(--ease-out); }
@@ -511,6 +513,34 @@
   .ph-list li { display:grid; grid-template-columns:auto 1fr auto; gap:6px 10px; align-items:center; padding:10px 12px; border-radius:14px; background:var(--fill); }
   .ph-list li.dup { opacity:.55; } .ph-list li > small { grid-column:2 / -1; color:var(--out); font-size:0.706rem; }
   .ph-list input[type=text] { min-width:0; padding:8px; } .ph-list input[type=number] { width:100px; padding:8px; text-align:right; } .ph-list input[type=date] { grid-column:2; padding:6px 8px; font-size:0.824rem; }
+  /* 탭 바: 모든 섹션 같은 모양 + 선택된 탭 뒤로 미끄러지는 리퀴드 글래스 알약 */
+  nav { isolation:isolate; }
+  nav .tab-pill { position:absolute; z-index:-1; top:5px; bottom:5px; left:0; width:var(--pw, 0); transform:translateX(var(--px, 0)); border-radius:999px; pointer-events:none;
+    background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.18)), color-mix(in srgb, var(--accent) 12%, transparent);
+    -webkit-backdrop-filter:blur(10px) saturate(1.8); backdrop-filter:blur(10px) saturate(1.8);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(0,0,0,.05), 0 2px 10px rgba(49,130,246,.18);
+    transition:transform .55s var(--spring), width .55s var(--spring); }
+  nav .tab-pill.moving { animation:goo .55s var(--spring); }
+  @keyframes goo { 35% { scale:1.12 .88; } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) nav .tab-pill { background:linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.05)), color-mix(in srgb, var(--accent) 22%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 10px rgba(0,0,0,.3); } }
+  :root[data-theme="dark"] nav .tab-pill { background:linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.05)), color-mix(in srgb, var(--accent) 22%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 10px rgba(0,0,0,.3); }
+  nav button:active { transform:scale(.92); }
+  .sbtn { display:none !important; } /* 검색은 늘 탭 바 안 돋보기 */
+  /* ＋ 누르면 위로 두 가지 선택지가 스프링으로 */
+  .add-menu { position:fixed; right:calc(var(--edge) + 12px); bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + 76px); z-index:7; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+  .add-menu[hidden] { display:none; }
+  .add-menu button { display:flex; align-items:center; gap:10px; padding:14px 20px; border-radius:999px; font-weight:700; font-size:0.941rem; color:var(--fg);
+    background:var(--glass); -webkit-backdrop-filter:blur(20px) saturate(1.8); backdrop-filter:blur(20px) saturate(1.8); box-shadow:0 8px 28px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.6);
+    transform-origin:100% 100%; animation:menuIn .5s var(--spring) both; }
+  .add-menu button svg.i { color:var(--accent); }
+  .add-menu button:nth-child(1) { animation-delay:.05s; }
+  .add-menu.out button { animation:menuOut .2s var(--ease-in) both; }
+  @keyframes menuIn { from { opacity:0; transform:translateY(24px) scale(.6); } }
+  @keyframes menuOut { to { opacity:0; transform:translateY(12px) scale(.8); } }
+  #fab svg.i { transition:transform .45s var(--spring); } #fab[aria-expanded="true"] svg.i { transform:rotate(135deg); }
+  body.adding::after { content:''; position:fixed; inset:0; z-index:6; background:rgba(0,0,0,.12); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); animation:fadeIn .25s; }
+  body.adding #fab { z-index:7; }
+  @keyframes fadeIn { from { opacity:0; } }
 </style>
 </head>
 <body>
@@ -522,6 +552,8 @@
   <symbol id="i-rep" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12v-1a5 5 0 0 1 5-5h13M7 22l-4-4 4-4"/><path d="M21 12v1a5 5 0 0 1-5 5H3"/></symbol>
   <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/></symbol>
   <symbol id="i-l-find" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1v14c-3-2-6-2-9-1z"/><circle cx="17" cy="13" r="3.2"/><path d="M19.4 15.4L22 18M12 6c1.5-1 3-1.4 5-1.4"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
@@ -565,9 +597,7 @@
 
 <main>
   <section id="v-home">
-    <div class="cal-cta home-quick"><button type="button" id="homeQuick"><span><b>오늘 지출 입력</b><small id="homeQuickSum"></small></span><span class="cal-plus" aria-hidden="true">＋</span></button>
-      <button type="button" id="photoBtn" class="photo-btn" aria-label="사진으로 입력"><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg></button></div>
-    <input type="file" id="photoIn" accept="image/*" hidden>
+    <input type="file" id="photoIn" accept="image/png,image/jpeg,image/heic,image/webp" hidden>
     <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 BAB:ZIP 결산이 나왔어요<span>보기 ›</span></button>
     <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
@@ -623,10 +653,6 @@
   </div>
 
   <section id="v-cal" hidden>
-    <button id="calQuick" class="cal-cta" type="button">
-      <span><b>오늘 지출 입력</b><small id="calQuickSum"></small></span>
-      <span class="cal-plus" aria-hidden="true">＋</span>
-    </button>
     <div class="card">
       <div class="cal-head"><b id="calMonthTitle"></b><button id="calToday" class="small">오늘</button></div>
       <div id="calTabs" class="tabs" role="group" aria-label="결제 유형"></div>
@@ -690,7 +716,11 @@
   </section>
 </main>
 
-<button id="fab" aria-label="거래 추가"><svg class="i"><use href="#i-plus"/></svg></button>
+<div id="addMenu" class="add-menu" hidden>
+  <button type="button" data-add="photo"><svg class="i" aria-hidden="true"><use href="#i-photo"/></svg>사진으로 입력</button>
+  <button type="button" data-add="manual"><svg class="i" aria-hidden="true"><use href="#i-pen"/></svg>직접 입력</button>
+</div>
+<button id="fab" aria-label="거래 추가" aria-expanded="false"><svg class="i"><use href="#i-plus"/></svg></button>
 <nav aria-label="화면 이동">
   <button data-view="home" aria-current="page"><svg class="i"><use href="#i-home"/></svg>홈</button>
   <button data-view="cal"><svg class="i"><use href="#i-cal"/></svg>달력</button>

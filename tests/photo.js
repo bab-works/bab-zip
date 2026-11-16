@@ -23,7 +23,12 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.deepEqual(sms.map(r => [r.date, r.time, r.content, r.amount]), [['2026-11-15', '13:20', '스타벅스 강남', 12300]]);
   const sms1 = await parse('신한카드(1234)승인 홍*동 8,000원(일시불)11/14 09:05 파리바게뜨', '2026-11-16');
   assert.deepEqual(sms1.map(r => [r.date, r.time, r.content, r.amount]), [['2026-11-14', '09:05', '파리바게뜨', 8000]]);
-  // 화면: 📷 → 후보 4건, 시트에 있는 쿠팡이츠·사진 안 두 번째 스타벅스는 체크 해제
+  // ＋ → 두 가지 선택지, 바깥을 누르면 닫힘
+  await p.click('#fab'); await p.waitForSelector('#addMenu:not([hidden])');
+  assert.equal(await p.locator('#addMenu [data-add]').count(), 2);
+  await p.mouse.click(20, 300); await p.waitForTimeout(400); assert.equal(await p.isHidden('#addMenu'), true, 'tap outside closes');
+  const chooser = p.waitForEvent('filechooser'); await p.click('#fab'); await p.click('#addMenu [data-add=photo]'); await chooser; // 사진 고르기 창이 열림
+  // 화면: 사진 → 후보 4건, 시트에 있는 쿠팡이츠·사진 안 두 번째 스타벅스는 체크 해제
   await p.setInputFiles('#photoIn', { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
   await p.waitForSelector('#photoSheet[open]');
   assert.equal(await p.locator('#phList li').count(), 4);
@@ -32,7 +37,6 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#phSave'); await p.waitForTimeout(800);
   const saved = posts.filter(o => o.action === 'save').map(o => o.item);
   assert.deepEqual(saved.map(i => [i.content, i.amount, i.type, i.major, i.minor, i.date]), [['스타벅스 강남점', 4500, '지출', '카페·간식', '카페', today], ['급여 입금', 2500000, '수입', '수입', '', today]]);
-  assert.match(await p.textContent('#homeQuickSum'), /오늘/);
   // 자랑하기 모드: 금액 가림 → 새로고침해도 유지 → 배지로 끔
   await p.click('#menuBtn'); await p.waitForTimeout(500); await p.click('#bragBtn'); await p.waitForTimeout(700);
   assert.equal(await p.textContent('#exp'), '••,•••원'); assert.equal(await p.isVisible('#bragBadge'), true);

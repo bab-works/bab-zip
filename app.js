@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v68'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v69'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -344,8 +344,6 @@ function renderHome() {
     ? `<b>${mo}월 ${dailySel}일</b> ${won(per[dailySel - 1])} · <a href="#" id="dailyGo">그날 내역 보기</a>`
     : per[top] > 0 ? `가장 많이 쓴 날 <b>${mo}월 ${top + 1}일</b> ${won(per[top])} · 막대를 눌러 보세요` : '이번 달 지출이 없어요';
 
-  const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
-  $('#homeQuickSum').textContent = tdy.length ? ` 오늘 ${won(tds.exp)} · ${tdy.length}건` : ' 아직 입력이 없어요';
   renderToday(m, exp, total, today, list); renderReport(today); renderUpcoming(today);
   $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '')).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
@@ -517,8 +515,6 @@ function renderCal() {
   calGrid.innerHTML = html + tail;
   calF.week = Math.floor((first + +selDay.slice(8) - 1) / 7);
   calF.fit();
-  const tdy = data.items.filter(i => i.date === today), tds = daySums(tdy);
-  $('#calQuickSum').textContent = tdy.length ? `지출 ${won(tds.exp)} · ${tdy.length}건 · 눌러서 추가` : '아직 입력이 없어요 · 눌러서 추가';
   renderTrend(src, m, y, mo, days, today);
 
   const list = (byDay[selDay] || []).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || b.amount - a.amount);
@@ -682,7 +678,35 @@ $('#entryDelete').addEventListener('click', () => {
   queue({ action: 'delete', id }).then(ok => ok && setStatus('삭제됨'));
 });
 $('#entryCancel').addEventListener('click', () => $('#entry').close());
-$('#fab').addEventListener('click', () => sec === 'money' ? openEntry(null, $('#v-cal').hidden ? '' : selDay) : sec === 'book' ? openFind() : openItem());
+// 가계부 ＋: 「직접 입력」 「사진으로 입력」 두 가지가 위로 펼쳐짐 (바깥을 누르면 닫힘)
+const addMenu = open => {
+  const m = $('#addMenu');
+  document.body.classList.toggle('adding', open); $('#fab').setAttribute('aria-expanded', open);
+  if (open) { m.classList.remove('out'); m.hidden = false; return; }
+  if (m.hidden) return;
+  m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
+};
+$('#fab').addEventListener('click', () => sec === 'money' ? addMenu($('#addMenu').hidden) : sec === 'book' ? openFind() : openItem());
+$('#addMenu').addEventListener('click', e => {
+  const k = e.target.closest('[data-add]')?.dataset.add;
+  if (!k) return;
+  addMenu(false);
+  if (k === 'photo') $('#photoIn').click(); else openEntry(null, $('#v-cal').hidden ? '' : selDay);
+});
+document.addEventListener('pointerdown', e => { if (document.body.classList.contains('adding') && !e.target.closest('#addMenu, #fab')) addMenu(false); });
+// 리퀴드 글래스 알약: 선택된 탭 뒤로 스프링처럼 미끄러지며 살짝 늘어났다 돌아옴
+function movePill(nav) {
+  if (!nav) return;
+  let pill = nav.querySelector('.tab-pill');
+  if (!pill) { pill = document.createElement('span'); pill.className = 'tab-pill'; pill.setAttribute('aria-hidden', 'true'); nav.prepend(pill); }
+  const b = nav.querySelector('[aria-current="page"]');
+  pill.hidden = !b;
+  if (!b) return;
+  const moved = pill.style.getPropertyValue('--px') && pill.style.getPropertyValue('--px') !== b.offsetLeft + 'px';
+  pill.style.setProperty('--px', b.offsetLeft + 'px'); pill.style.setProperty('--pw', b.offsetWidth + 'px');
+  if (moved && !calm()) replay(pill, 'moving');
+}
+addEventListener('resize', () => document.querySelectorAll('nav').forEach(movePill));
 ['#list', '#dayList', '#recent', '#catList'].forEach(s => $(s).addEventListener('click', e => {
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
@@ -766,7 +790,8 @@ function show(v) {
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
   $('#filters').hidden = v !== 'list' && v !== 'cal';
   document.querySelectorAll('.list-only').forEach(el => { el.hidden = v !== 'list'; });
-  setFab(v === 'cal'); // 달력은 「이날 추가」 버튼을 씀
+  setFab(false); addMenu(false);
+  movePill(document.querySelector('nav'));
   if (v === 'cal') calF.fit();
   replay($('#v-' + v), 'enter');
   window.scrollTo(0, 0);
@@ -1031,11 +1056,12 @@ function renderLists() {
   const tabs = SECTIONS[sec].tabs;
   // 독서처럼 목록이 여러 개면 가계부처럼 아래 탭 바로 (위쪽 탭 줄은 쓰지 않음)
   $('#lTabs').hidden = true;
-  $('#lNav').hidden = tabs.length < 2;
-  $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-l-${k}"/></svg>${label}</button>`).join('')
+  $('#lNav').hidden = false; // 목록이 하나여도 같은 탭 바 (검색은 탭 바 안)
+  $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#${document.getElementById('i-l-' + k) ? 'i-l-' + k : 'i-s-' + sec}"/></svg>${label}</button>`).join('')
     + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>'
     + (sec === 'book' ? '<button type="button" data-find><svg class="i" aria-hidden="true"><use href="#i-l-find"/></svg>책 추가</button>' : '');
-  document.body.classList.toggle('tabbar', tabs.length >= 2);
+  document.body.classList.add('tabbar');
+  requestAnimationFrame(() => movePill($('#lNav')));
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
@@ -1235,6 +1261,7 @@ function setSection(k) {
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
   $('#lNav').hidden = true; // 목록 화면이면 renderLists가 다시 켬
+  requestAnimationFrame(() => movePill(document.querySelector('nav')));
   $('#v-lists').hidden = money || habit;
   $('#v-habit').hidden = !habit;
   if (!money) replay($('#v-' + (habit ? 'habit' : 'lists')), 'enter');
@@ -1698,6 +1725,7 @@ function pickerField(input, kind, title, opt = {}) {
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
 
 document.body.classList.add('money', 'tabbar');
+requestAnimationFrame(() => movePill(document.querySelector('nav')));
 if (brag) setTimeout(() => setBrag(true));
 const now = localISO();
 $('#month').value = now.slice(0, 7);
@@ -1714,7 +1742,6 @@ function setBrag(on) {
 }
 $('#bragBtn').addEventListener('click', () => { setBrag(!brag); $('#menu').close(); toast(brag ? '자랑하기 모드: 금액과 거래 내용을 가렸어요' : '자랑하기 모드를 껐어요'); });
 $('#bragBadge').addEventListener('click', () => { if (confirm('자랑하기 모드를 끌까요? 금액이 다시 보여요')) setBrag(false); });
-$('#homeQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 시트(구글 드라이브 OCR)가 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
 // 이미 시트에 있는 거래(같은 날 같은 금액)와 사진 안에서 겹치는 건 체크를 빼 둠
 const ruleFor = s => { s = (s || '').toLowerCase(); return s ? data.meta.rules.find(r => r[0] && s.includes(r[0].toLowerCase())) : null; };
@@ -1778,7 +1805,6 @@ const shrink = file => new Promise((res, rej) => {
     URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', 0.85).split(',')[1]); };
   img.src = URL.createObjectURL(file);
 });
-$('#photoBtn').addEventListener('click', () => $('#photoIn').click());
 $('#photoIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -1807,7 +1833,6 @@ $('#phSave').addEventListener('click', () => {
   toast(n ? `${n}건을 저장했어요` : '저장할 거래를 고르지 않았어요');
   render();
 });
-$('#calQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // ── 올해의 BAB:ZIP: 12월~1월 중순 홈 위 배너 (?recap=1로 언제든) → 한 해 결산, 공유용 이미지 저장 ──
 const recapYear = () => { const t = localISO(); return t.slice(5, 7) === '01' ? String(+t.slice(0, 4) - 1) : t.slice(0, 4); };
 function recapData() {
