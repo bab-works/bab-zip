@@ -232,8 +232,73 @@ function who_(t) {
   const f = t && String(t).length >= 8 && friends_().find(x => x.code === String(t));
   return f ? { role: 'friend', name: f.name, code: f.code } : null;
 }
-const people_ = () => [ownerName_(), ...friends_().map(f => f.name)].filter(Boolean);
+const people_ = () => [ownerName_(), ...friends_().map(f => f.name)].filter(Boolean); // 앱을 쓰는 모든 사람 (이름 겹침 확인용)
+// ── 친구 맺기: 「친구 관계」 탭 [보낸 사람, 받는 사람, 상태(요청/친구), 날짜]. 사람 열쇠는 주인 'owner', 게스트는 접속코드 ──
+// 주인이 초대한 게스트는 처음부터 주인과 친구. 게스트끼리는 이름으로 신청 → 받은 사람이 수락해야 친구 (그래야 태그·집 방문이 됨)
+const REL_TAB_ = '친구 관계', PUB_TAB_ = '공개', HOUSE_TAB_ = '집';
+const keyOf_ = me => me.code || 'owner';
+function rels_() { const sh = ss_().getSheetByName(REL_TAB_); return sh ? body_(sh).map((r, i) => ({ a: String(r[0]), b: String(r[1]), st: String(r[2]), row: i + 2 })) : []; }
+// 모든 사람 열쇠 ↔ 이름
+function folks_() { const o = { owner: ownerName_() }; friends_().forEach(f => { o[f.code] = f.name; }); return o; }
+function friendKeys_(k, rels, folks) {
+  const out = {};
+  if (k === 'owner') Object.keys(folks).forEach(x => { if (x !== 'owner') out[x] = 1; }); else if (folks.owner) out.owner = 1;
+  rels.filter(r => r.st === '친구' && (r.a === k || r.b === k)).forEach(r => { out[r.a === k ? r.b : r.a] = 1; });
+  delete out[k]; return Object.keys(out).filter(x => folks[x]);
+}
+// 나 + 내 친구 이름 (태그 칩에 나오는 사람)
+function myPeople_(me) { const folks = folks_(); return [me.name, ...friendKeys_(keyOf_(me), rels_(), folks).map(x => folks[x])].filter(Boolean); }
+function social_(me) {
+  const folks = folks_(), rels = rels_(), k = keyOf_(me), hs = houses_();
+  return { friends: friendKeys_(k, rels, folks).map(x => ({ name: folks[x], icon: (hs[x] || {}).icon || '', intro: (hs[x] || {}).intro || '' })),
+    incoming: rels.filter(r => r.st === '요청' && r.b === k && folks[r.a]).map(r => folks[r.a]), outgoing: rels.filter(r => r.st === '요청' && r.a === k && folks[r.b]).map(r => folks[r.b]),
+    house: hs[k] || {} };
+}
+// friendRequest(이름): 상대가 이미 나에게 신청했으면 바로 친구 / friendAccept / friendRemove(거절·취소·끊기 모두)
+function friendOp_(me, b) {
+  const folks = folks_(), k = keyOf_(me), n = String(b.name || '').trim(), t = Object.keys(folks).find(x => folks[x] === n);
+  if (!t || t === k) throw new Error('입력값 오류: 그런 이름의 친구가 없어요 · 앱에 쓰는 이름(아이디)을 정확히 넣어 주세요');
+  const sh = tab_(REL_TAB_, ['보낸 사람', '받는 사람', '상태', '날짜']), rels = rels_(), pair = rels.filter(r => (r.a === k && r.b === t) || (r.a === t && r.b === k));
+  if (b.action === 'friendRemove') { pair.sort((x, y) => y.row - x.row).forEach(r => sh.deleteRow(r.row)); return social_(me); }
+  if (friendKeys_(k, rels, folks).includes(t)) return social_(me);
+  const theirs = pair.find(r => r.a === t && r.st === '요청');
+  if (theirs) sh.getRange(theirs.row, 3, 1, 2).setValues([['친구', new Date()]]);
+  else if (b.action === 'friendAccept') throw new Error('입력값 오류: 받은 친구 신청이 없어요');
+  else if (!pair.length) sh.appendRow([k, t, '요청', new Date()]);
+  return social_(me);
+}
+// 내 집: 아이콘·한 줄 소개 [사람 열쇠, 아이콘, 소개]
+function houses_() { const sh = ss_().getSheetByName(HOUSE_TAB_), o = {}; if (sh) body_(sh).forEach(r => { o[String(r[0])] = { icon: String(r[1] || ''), intro: String(r[2] || '') }; }); return o; }
+function setHouse_(me, b) {
+  const sh = tab_(HOUSE_TAB_, ['사람', '아이콘', '소개']), k = keyOf_(me), i = body_(sh).findIndex(r => String(r[0]) === k);
+  const row = [k, String(b.icon || '').replace(/[^a-z0-9]/g, '').slice(0, 8), "'" + String(b.intro || '').slice(0, 60)];
+  if (i >= 0) sh.getRange(i + 2, 1, 1, 3).setValues([row]); else sh.appendRow(row);
+}
+// 공개한 작품: 「공개」 탭 [사람 열쇠, 목록, id]. 시트 원래 목록 탭은 건드리지 않음
+function pubs_() { const sh = ss_().getSheetByName(PUB_TAB_); return sh ? body_(sh).map((r, i) => ({ k: String(r[0]), list: String(r[1]), id: String(r[2]), row: i + 2 })) : []; }
+function setPub_(me, b) {
+  if (!LISTS[b.list] || !b.id || String(b.id).startsWith('s:')) throw new Error('입력값 오류');
+  const sh = tab_(PUB_TAB_, ['사람', '목록', 'id']), k = keyOf_(me), hit = pubs_().find(r => r.k === k && r.list === b.list && r.id === String(b.id));
+  if (b.on && !hit) sh.appendRow([k, b.list, String(b.id)]); else if (!b.on && hit) sh.deleteRow(hit.row);
+}
+// 친구 집 구경: 친구가 공개한 기록만 (함께한 사람·비용은 빼고)
+const HOUSE_LISTS_ = ['book', 'escape', 'board', 'movie', 'play'];
+function house_(me, name) {
+  const folks = folks_(), t = Object.keys(folks).find(x => folks[x] === String(name || ''));
+  if (!t || !friendKeys_(keyOf_(me), rels_(), folks).includes(t)) throw new Error('입력값 오류: 친구가 된 사람의 집만 놀러 갈 수 있어요');
+  const pub = {}, recs = t === 'owner' ? null : fRecs_();
+  pubs_().filter(r => r.k === t).forEach(r => { pub[r.list + ':' + r.id] = 1; });
+  const items = {};
+  HOUSE_LISTS_.forEach(k => {
+    const all = t === 'owner' ? listRead_(k) : recs.filter(r => r.code === t && r.list === k).map(r => r.item);
+    items[k] = all.filter(it => pub[k + ':' + it.id]).map(it => { const o = Object.assign({}, it); delete o.with; delete o.cost; delete o.quotes; return o; });
+  });
+  return { name: folks[t], ...(houses_()[t] || {}), items };
+}
 // 「함께한 사람」 칸에 이름이 있으면 태그된 것 (쉼표·가운뎃점·띄어쓰기로 나눔)
+// 같은 작품인지: 제목(띄어쓰기·대소문자 무시). 보드게임은 여러 번 하니 날짜도 같아야 (한쪽에 날짜가 없으면 같은 걸로)
+const sameWork_ = (k, a, b) => { const key = (LISTS[k] || {}).key, f = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+  return !!key && !!f(a[key]) && f(a[key]) === f(b[key]) && (k !== 'board' || !a.date || !b.date || String(a.date) === String(b.date)); };
 const tagged_ = (item, name) => !!name && String(item.with || '').split(/[,·、/&+\s]+/).map(x => x.trim()).includes(name);
 function fRecs_() { return body_(ss_().getSheetByName(FREC_TAB_)).map(r => { let o = {}; try { o = JSON.parse(r[3]); } catch (e) {} return { code: String(r[0]), list: String(r[1]), id: String(r[2]), item: o }; }); }
 function fListSave_(me, k, item) {
@@ -255,11 +320,19 @@ function fListDelete_(me, k, id) {
 function listsFor_(me) {
   const lists = {}, fr = friends_(), nameOf = c => (fr.find(f => f.code === c) || {}).name || '친구', recs = fRecs_();
   Object.keys(LISTS).forEach(k => { lists[k] = me.role === 'owner' ? listRead_(k) : recs.filter(r => r.code === me.code && r.list === k).map(r => r.item); });
-  const share = (k, it, by, from) => (lists[k] = lists[k] || []).push(Object.assign({}, it, { id: 's:' + from + ':' + it.id, shared: by }));
+  // 친구가 나를 태그한 기록: 내가 이미 같은 작품을 기록했으면 따로 안 띄우고 내 기록에 그 친구 평가만 붙임 (others)
+  const share = (k, it, by, from) => {
+    const mine = lists[k] = lists[k] || [], hit = mine.find(x => sameWork_(k, x, it));
+    if (hit) return (hit.others = hit.others || []).push({ name: by, rating: it.rating || it.stars || '', review: it.review || '' });
+    mine.push(Object.assign({}, it, { id: 's:' + from + ':' + it.id, shared: by }));
+  };
   if (me.name) {
-    if (me.role === 'friend' && ownerName_()) Object.keys(LISTS).forEach(k => listRead_(k).filter(it => tagged_(it, me.name)).forEach(it => share(k, it, ownerName_(), 'owner')));
-    recs.filter(r => r.code !== me.code && tagged_(r.item, me.name)).forEach(r => share(r.list, r.item, nameOf(r.code), r.code));
+    const folks = folks_(), fk = friendKeys_(keyOf_(me), rels_(), folks); // 친구가 된 사람의 태그만
+    if (me.role === 'friend' && ownerName_() && fk.includes('owner')) Object.keys(LISTS).forEach(k => listRead_(k).filter(it => tagged_(it, me.name)).forEach(it => share(k, it, ownerName_(), 'owner')));
+    recs.filter(r => r.code !== me.code && fk.includes(r.code) && tagged_(r.item, me.name)).forEach(r => share(r.list, r.item, nameOf(r.code), r.code));
   }
+  const pub = {}; pubs_().filter(r => r.k === keyOf_(me)).forEach(r => { pub[r.list + ':' + r.id] = 1; });
+  Object.keys(lists).forEach(k => lists[k].forEach(it => { if (pub[k + ':' + it.id]) it.pub = true; }));
   return lists;
 }
 // 친구 습관 (틱틱 없이): 앱이 틱틱 습관과 같은 모양으로 받음
@@ -690,18 +763,19 @@ function doGet(e) {
   try {
     if (e.parameter.what === 'me') {
       if (me.role === 'owner') ensureInvites_();
-      return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
+      return out_({ ok: true, role: me.role, name: me.name, people: myPeople_(me), social: social_(me), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
-    if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
+    if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists', 'house'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
+    if (e.parameter.what === 'house') return out_({ ok: true, house: cached_('HS:' + keyOf_(me) + ':' + String(e.parameter.name || '').slice(0, 20), 300, e.parameter.fresh === '1', () => house_(me, e.parameter.name)) }); // 친구 집 놀러 가기
     if (e.parameter.what === 'movie') return out_({ ok: true, movies: cached_('QM:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => movieSearch_(e.parameter.q)) }); // 키노라이츠 검색
     if (e.parameter.what === 'book') return out_({ ok: true, books: cached_('QB:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => bookSearch_(e.parameter.q)) }); // 알라딘 검색 (시트 안 건드림)
     const fresh = e.parameter.fresh === '1';
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트
     if (e.parameter.what === 'lists') {
-      return out_({ ok: true, ...cached_('L:' + (me.code || 'owner'), 600, fresh, () => withLock_(() => ({ lists: listsFor_(me), people: people_() }))) });
+      return out_({ ok: true, ...cached_('L:' + (me.code || 'owner'), 600, fresh, () => withLock_(() => ({ lists: listsFor_(me), people: myPeople_(me) }))) });
     }
     // since=날짜: 그날 이후 거래만 보내고, 그 이전 줄은 지문(old.h)만 보냄 → 앱은 지문이 같으면 가진 것을 그대로 씀
     // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
@@ -749,6 +823,9 @@ function writeOp_(b) {
   try {
     withLock_(() => {
       if (b.action === 'setName') res = setName_(me, b);
+      else if (/^friend(Request|Accept|Remove)$/.test(b.action)) res = { social: friendOp_(me, b) };
+      else if (b.action === 'setHouse') setHouse_(me, b);
+      else if (b.action === 'setPub') setPub_(me, b);
       else if (/^(invite|uninvite)$/.test(b.action)) res = invite_(b);
       else if (b.action === 'setPassword') res = setPassword_(me, b);
       else if (me.role === 'friend' && b.action === 'listSave') fListSave_(me, b.list, b.item);

@@ -37,7 +37,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.match(await p.textContent('#lList'), /오시리스.*나리 기록/);
   assert.equal(await p.locator('#lNav [data-list=escapeWant]').count(), 1, '방탈출 위시리스트 탭');
   await p.click('#lList li[data-id]'); await p.waitForTimeout(300);
-  assert.equal(await p.locator('#lItem[open]').count(), 0, 'shared record opens read-only (toast)'); assert.match(await p.textContent('#toast'), /나리님이 나를 태그/);
+  await p.waitForSelector('#ask[open]'); assert.match(await p.textContent('#askMsg'), /나리님이 남긴 기록[\s\S]*내 별점/, 'shared record → offer my own rating');
+  await p.click('#askNo'); await p.waitForTimeout(300); assert.equal(await p.locator('#lItem[open]').count(), 0);
   // 직접 입력 → 「함께한 사람」 아래 앱 친구 칩 (나는 빼고)
   await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#lItem[open]');
   assert.deepEqual(await p.$$eval('.tag-chips [data-tag]', b => b.map(x => x.dataset.tag)), ['나리', '준호']);

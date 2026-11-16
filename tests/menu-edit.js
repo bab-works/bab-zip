@@ -10,7 +10,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   const assert = require('assert');
   const order = () => p.$$eval('#menuList [data-sec]', bs => bs.map(b => b.dataset.sec).join());
   await p.click('#menuBtn'); await p.waitForTimeout(400);
-  const o0 = await order(); assert.equal(o0, 'home,money,book,escape,board,movie,play,habit');
+  const o0 = await order(); assert.equal(o0, 'home,money,book,escape,board,movie,play,habit,friends');
   const box = async k => (await p.locator(`#menuList [data-sec=${k}]`).boundingBox());
   // 짧게 누르면 이동 (편집 아님)는 마지막에 확인. 꾹 누르기 → 편집
   let bx = await box('habit'); await p.mouse.move(bx.x + 40, bx.y + bx.height / 2); await p.mouse.down(); await p.waitForTimeout(600); await p.mouse.up();
@@ -22,11 +22,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   for (let i = 1; i <= 20; i++) { await p.mouse.move(bx.x + 40, bx.y + bx.height / 2 - (bx.y - top.y) * i / 20); await p.waitForTimeout(16); }
   await p.screenshot({ path: S + '/menu-edit.png' });
   await p.mouse.up(); await p.waitForTimeout(100);
-  assert.equal(await order(), 'home,habit,money,book,escape,board,movie,play');
+  assert.equal(await order(), 'home,habit,money,book,escape,board,movie,play,friends');
   await p.click('#menuList [data-sec=book]', { force: true }); assert.equal(await p.locator('#menu[open]').count(), 1, 'tap in edit mode does not navigate');
   await p.click('#menuDone'); assert.equal(await p.locator('#menuList.editing').count(), 0);
   await p.evaluate(() => document.querySelector('#menu').close()); await p.waitForTimeout(400);
   await p.reload(); await p.waitForTimeout(800); await p.click('#menuBtn'); await p.waitForTimeout(400);
-  assert.equal(await order(), 'home,habit,money,book,escape,board,movie,play', 'order persisted');
+  assert.equal(await order(), 'home,habit,money,book,escape,board,movie,play,friends', 'order persisted');
   await p.click('#menuList [data-sec=book]'); await p.waitForTimeout(300); assert.equal(await p.textContent('#appTitle'), '독서', 'short tap navigates');
   console.log('MENU EDIT OK'); await b.close(); process.exit(0); });

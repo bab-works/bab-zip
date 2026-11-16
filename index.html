@@ -514,6 +514,37 @@
     opacity:0; pointer-events:none; transform:translateY(12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
   #toast.show { opacity:1; transform:none; } #toast { white-space:pre-line; }
   #toast.act { text-align:left; }
+  /* 친구 탭: 집 · 동네 · 놀러 가기 */
+  .my-house { display:flex; gap:14px; align-items:center; } .my-house svg.hs { width:84px; flex:none; } .my-house > div { flex:1; min-width:0; display:grid; gap:4px; }
+  .my-house small { color:var(--muted); font-size:.76rem; line-height:1.4; } .my-house input { margin-top:4px; }
+  .fr-add { display:flex; gap:8px; } .fr-add input { flex:1; min-width:0; }
+  .fr-list { list-style:none; margin:8px 0 0; padding:0; } .fr-list h2 { font-size:.9rem; margin:6px 0; }
+  .fr-list li { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line); } .fr-list small { color:var(--muted); }
+  .town-title { margin:18px 6px 8px; font-size:1rem; }
+  .town { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
+  .house { display:grid; justify-items:center; gap:2px; padding:14px 8px 12px; border-radius:20px; background:var(--glass); box-shadow:var(--shadow); border:0; color:var(--fg); font:inherit; cursor:pointer; transition:transform .3s var(--spring); }
+  .house:active { transform:scale(.95); } .house svg.hs { width:96px; } .house small { color:var(--muted); font-size:.72rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pub-mark { margin-left:4px; font-size:.8em; } li small.others { display:block; color:var(--accent); font-weight:600; }
+  .pub-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 2px; } .pub-row span { display:grid; } .pub-row small { color:var(--muted); font-size:.72rem; }
+  .pub-row input { width:46px; height:28px; appearance:none; -webkit-appearance:none; border-radius:99px; background:var(--fill); position:relative; flex:none; transition:background .2s; margin:0; }
+  .pub-row input::after { content:''; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:transform .25s var(--spring); }
+  .pub-row input:checked { background:var(--accent); } .pub-row input:checked::after { transform:translateX(18px); }
+  dialog#house { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:0; border:0; border-radius:0; background:linear-gradient(#fff8ef, #f6ead9); color:#3b2f25; overflow:auto; overflow-x:hidden; }
+  @media (prefers-color-scheme: dark) { dialog#house { background:linear-gradient(#2a221b, #1c1712); color:#f3e7d8; } }
+  .house-top { position:sticky; top:0; z-index:2; display:flex; gap:10px; align-items:center; padding:calc(env(safe-area-inset-top) + 10px) 16px 10px; background:inherit; }
+  .house-top h2 { margin:0; font-size:1.2rem; } .house-top small { opacity:.7; font-size:.8rem; }
+  .rooms { padding:4px 16px calc(env(safe-area-inset-bottom) + 24px); display:grid; gap:18px; }
+  .room h3 { margin:0 0 8px; font-size:.95rem; } .room h3 small { opacity:.6; font-weight:600; }
+  .shelf { display:flex; gap:12px; overflow-x:auto; padding:6px 4px 14px; scroll-snap-type:x mandatory; border-bottom:10px solid #b98a5e; border-radius:0 0 6px 6px; box-shadow:0 8px 10px -6px rgba(90,60,30,.4); }
+  .work { flex:none; width:92px; scroll-snap-align:start; display:grid; gap:4px; justify-items:center; background:none; border:0; padding:0; color:inherit; font:inherit; text-align:center; cursor:pointer; }
+  .work img, .work .em { width:84px; height:120px; object-fit:cover; border-radius:6px; box-shadow:0 4px 10px rgba(60,40,20,.25); display:grid; place-items:center; font-size:2rem; background:#fff; }
+  .work b { font-size:.74rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; } .work small { font-size:.9rem; min-height:1em; }
+  .door { position:fixed; top:0; bottom:0; width:50%; z-index:5; background:repeating-linear-gradient(90deg, #a8774c 0 18px, #9b6c43 18px 20px); pointer-events:none; transition:transform .9s var(--ease-out) .15s; }
+  .door.l { left:0; transform-origin:left; } .door.r { right:0; transform-origin:right; }
+  .door.l::after, .door.r::after { content:''; position:absolute; top:50%; width:10px; height:10px; border-radius:50%; background:#f3c86b; } .door.l::after { right:14px; } .door.r::after { left:14px; }
+  dialog#house.open .door.l { transform:perspective(900px) rotateY(80deg); } dialog#house.open .door.r { transform:perspective(900px) rotateY(-80deg); }
+  dialog#house.open .door { visibility:hidden; transition:transform .9s var(--ease-out) .15s, visibility 0s 1.1s; }
+  @media (prefers-reduced-motion: reduce) { .door { display:none; } }
   /* 당겨서 새로고침 */
   .ptr { position:fixed; top:calc(env(safe-area-inset-top) + 8px); left:0; right:0; margin:0 auto; width:40px; height:40px; border-radius:50%; z-index:9; display:grid; place-items:center;
     background:var(--glass); box-shadow:0 4px 16px rgba(0,0,0,.12); color:var(--accent); opacity:0; transform:translateY(calc(var(--pull, 0px) - 56px)) rotate(calc(var(--pull, 0px) * 4)); pointer-events:none; }
@@ -888,6 +919,15 @@
     <div class="card" id="dashShared" hidden><h2>함께한 기록</h2><ul id="dashSharedList" class="tx dash-list"></ul></div>
     <div class="card"><h2>위시리스트</h2><div id="dashWish" class="dash-wishes"></div></div>
   </section>
+  <section id="v-friends" hidden>
+    <div class="card my-house" id="myHouse"></div>
+    <div class="card"><h2>친구 맺기</h2>
+      <form id="frAdd" class="fr-add"><input id="frName" maxlength="20" placeholder="친구 이름(아이디)" autocomplete="off" aria-label="친구 이름"><button class="primary">신청</button></form>
+      <p class="hint">친구가 되면 서로 「함께한 사람」에 태그할 수 있고, 서로의 집에 놀러 갈 수 있어요. 친구 목록은 나만 봐요</p>
+      <ul id="frIn" class="fr-list"></ul><ul id="frOut" class="fr-list"></ul></div>
+    <h2 class="town-title">친구네 동네</h2>
+    <div id="town" class="town"></div>
+  </section>
   <section id="v-habit" hidden>
     <div class="card hcal">
       <div class="hmon"><button type="button" id="hPrev" class="icon-btn" aria-label="이전 달">‹</button><b id="hMonth"></b><button type="button" id="hNext" class="icon-btn" aria-label="다음 달">›</button></div>
@@ -1167,6 +1207,11 @@
   <div class="set-group set-pad"><div id="iconList" class="icon-list" role="radiogroup" aria-label="앱 아이콘"></div>
     <p class="hint">바꾼 아이콘은 홈 화면의 하트를 지우고 사파리에서 다시 「홈 화면에 추가」하면 적용돼요.</p></div>
   <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="themeClose">완료</button></div>
+</dialog>
+<dialog id="house" aria-labelledby="houseTitle">
+  <div class="door l" aria-hidden="true"></div><div class="door r" aria-hidden="true"></div>
+  <header class="house-top"><button type="button" id="houseClose" class="icon-btn" aria-label="나가기">‹</button><div><h2 id="houseTitle"></h2><small id="houseIntro2"></small></div></header>
+  <div id="houseRooms" class="rooms"></div>
 </dialog>
 <dialog id="shareSheet" class="sheet" aria-labelledby="shareTitle">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>

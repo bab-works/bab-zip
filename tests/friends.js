@@ -61,6 +61,15 @@ assert.equal(get(JH, 'lists').lists.book.length, 0, 'friends do not see each oth
 // 태그: 민지가 「나리, 준호」와 간 방탈출 → 나리(주인)·준호 앱에 읽기 전용으로
 const ownerEsc = get(OWNER, 'lists').lists.escape.find(i => i.shared);
 assert.deepEqual([ownerEsc.theme, ownerEsc.shared, ownerEsc.id], ['오시리스', '민지', 's:' + MJ + ':e1']);
+// 게스트끼리는 아직 친구가 아니라 준호 앱엔 안 보이고, 준호 태그 칩에도 민지가 없음
+assert.equal(get(JH, 'lists').lists.escape.length, 0, 'not friends → tag not shown');
+assert.deepEqual(get(JH, 'me').people, ['준호', '나리'], 'tag chips: me + friends only');
+// 친구 신청 → 받은 쪽 수락 → 친구
+assert.equal(post(MJ, { action: 'friendRequest', name: '없는사람' }).ok, false);
+assert.deepEqual(post(MJ, { action: 'friendRequest', name: '준호' }).social.outgoing, ['준호']);
+assert.deepEqual(get(JH, 'me').social.incoming, ['민지']);
+assert.deepEqual(post(JH, { action: 'friendAccept', name: '민지' }).social.friends.map(f => f.name).sort(), ['나리', '민지']);
+assert.deepEqual(get(MJ, 'me').social.incoming, []);
 assert.equal(get(JH, 'lists').lists.escape[0].shared, '민지');
 assert.equal(post(OWNER, { action: 'listSave', list: 'escape', item: { id: ownerEsc.id, theme: 'x' } }).ok, false, 'cannot edit someone else’s record');
 assert.equal(post(JH, { action: 'listSave', list: 'escape', item: { id: ownerEsc.id, theme: 'x' } }).ok, false);
@@ -92,6 +101,22 @@ assert.equal(post(MJ, { action: 'setPassword', password: 'cat1' }).ok, true);
 assert.equal(post(undefined, { action: 'login', name: '민지', password: 'cat1' }).token, MJ);
 assert.equal(tabs['친구'].d.some(r => r.includes('cat1')), false, 'password stored hashed');
 assert.equal(post(MJ, { action: 'setPassword', password: 'ab' }).ok, false, 'too short');
+// 중복 없애기: 주인이 혼자 먼저 기록해 둔 테마를 민지가 뒤늦게 태그 → 한 줄만, 민지 평가는 주인 기록에 붙음
+assert.equal(post(OWNER, { action: 'listSave', list: 'escape', item: { id: 'o1', theme: '사라진 목격자', rating: '🙂', date: '2026-11-01' } }).ok, true);
+assert.equal(post(MJ, { action: 'listSave', list: 'escape', item: { id: 'e2', theme: '사라진  목격자', rating: '😍', review: '최고', with: '나리' } }).ok, true);
+const twice = get(OWNER, 'lists').lists.escape.filter(i => i.theme.replace(/\s/g, '') === '사라진목격자');
+assert.equal(twice.length, 1, 'no duplicate'); assert.deepEqual([twice[0].rating, twice[0].others], ['🙂', [{ name: '민지', rating: '😍', review: '최고' }]]);
+// 친구 집: 공개한 것만, 친구만 / 함께한 사람은 안 보임
+assert.equal(post(MJ, { action: 'setPub', list: 'escape', id: 'e1', on: true }).ok, true);
+assert.equal(post(MJ, { action: 'setHouse', icon: 'c3', intro: '방탈출 좋아해요' }).ok, true);
+assert.equal(get(MJ, 'lists').lists.escape.find(i => i.id === 'e1').pub, true);
+const hs = get(JH, 'house', { name: '민지' }).house;
+assert.deepEqual([hs.name, hs.icon, hs.intro, hs.items.escape.map(i => i.theme), hs.items.escape[0].with], ['민지', 'c3', '방탈출 좋아해요', ['오시리스'], undefined]);
+assert.equal(get(OWNER, 'house', { name: '민지' }).house.items.escape.length, 1, 'owner is friends with invited guests');
+// 친구 끊기 → 집도 태그도 안 보임
+assert.equal(post(JH, { action: 'friendRemove', name: '민지' }).ok, true);
+assert.equal(get(JH, 'house', { name: '민지' }).ok, false); assert.equal(get(JH, 'lists').lists.escape.length, 0);
+post(MJ, { action: 'setPub', list: 'escape', id: 'e1', on: false }); assert.equal(get(OWNER, 'house', { name: '민지' }).house.items.escape.length, 0);
 // 주인 비밀번호 바꾸기 → 새 토큰으로만
 const np = post(OWNER, { action: 'setPassword', password: 'newpw1' }); assert.equal(np.token, 'newpw1');
 assert.equal(get(OWNER, 'me').ok, false); assert.equal(get('newpw1', 'me').role, 'owner');

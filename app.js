@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v85'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v86'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -720,7 +720,7 @@ const addMenu = open => {
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => sec === 'home' ? (setSection('book'), openFind()) : sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape', 'board', 'movie'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
+$('#fab').addEventListener('click', () => sec === 'friends' ? $('#frName').focus() : sec === 'home' ? (setSection('book'), openFind()) : sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape', 'board', 'movie'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
@@ -1043,7 +1043,7 @@ function renderIcons() {
   const cur = store.get('appIcon', 'main');
   $('#iconList').innerHTML = ICONS.map(([k, n, src]) => `<button type="button" role="radio" data-icon="${k}" aria-checked="${cur === k}"><img src="${src}" alt="">${n}</button>`).join('');
 }
-$('#iconList').addEventListener('click', e => { const k = e.target.closest('[data-icon]')?.dataset.icon; if (k) { setIcon(k); toast('아이콘을 바꿨어요 · 홈 화면에 다시 추가하면 적용돼요'); } });
+$('#iconList').addEventListener('click', e => { const k = e.target.closest('[data-icon]')?.dataset.icon; if (k) { setIcon(k); saveHouse(); toast('아이콘을 바꿨어요 · 홈 화면에 다시 추가하면 적용돼요'); } });
 setSkin(skin()); if (store.get('appIcon', 'main') !== 'main') setIcon(store.get('appIcon'));
 // 설정: 목록 시트(prefs) — 사용자명·비밀번호 변경·Face ID·테마·앱 아이콘·친구 초대 / 비밀번호(접속코드) 변경은 따로 창
 function openConn() {
@@ -1177,6 +1177,7 @@ const SECTIONS = {
   movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '위시리스트']] },
   play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '본 공연'], ['playWant', '위시리스트']] },
   habit: { title: '습관', icon: '🔥' },
+  friends: { title: '친구', icon: '🏡' }, // 친구 맺기 + 친구 집 놀러 가기
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
 let sec = 'money', curList = 'book';
@@ -1295,7 +1296,7 @@ function renderLists() {
     return;
   }
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
-    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}${i.shared ? `<span class="badge shared-badge">${esc(i.shared)} 기록</span>` : ''}</span><small>${esc(sub)}</small></div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}${i.shared ? `<span class="badge shared-badge">${esc(i.shared)} 기록</span>` : ''}${i.pub ? '<span class="pub-mark" title="친구 집에 공개" aria-label="친구 집에 공개">🏡</span>' : ''}</span><small>${esc(sub)}</small>${othersLine(i)}</div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
 }
 // ── 독서 보기: flow(아이팟 커버플로우, 기본) · grid(표지 카드 3열) · list(목록) ──
@@ -1331,6 +1332,7 @@ function flowPaint() {
   $('#fSub').textContent = { escape: () => joinDot([i.date, i.shop, i.result]), board: () => joinDot([i.date, i.place, i.with]), movie: () => joinDot([i.director, i.date, i.place]),
     play: () => joinDot([i.kind, i.date, i.place]) }[curList]?.() ?? joinDot([i.author, curList === 'book' ? i.status : i.memo]);
   if (i.shared) $('#fSub').textContent = joinDot([$('#fSub').textContent, `${i.shared}님 기록`]);
+  if (i.others?.length) $('#fSub').textContent = joinDot([$('#fSub').textContent, ...i.others.map(o => `${o.name} ${o.rating || '–'}`)]);
   const rk = RATE_KEY[curList];
   $('#fRate').hidden = $('#fReview').hidden = !rk; // 평가와 한 줄 리뷰를 한 화면에 함께
   const nq = quotesOf(i).length;
@@ -1352,7 +1354,7 @@ $('#lFlow').addEventListener('click', e => {
 $('#fRate').addEventListener('click', e => {
   const rk = RATE_KEY[curList], r = e.target.closest('[data-r]')?.dataset.r, it = r && rk && (lists[curList] || []).find(i => i.id === flowShown);
   if (!it) return;
-  if (it.shared) return toast(`${it.shared}님의 기록이라 평가는 ${it.shared}님만 바꿀 수 있어요`);
+  if (it.shared) return rateShared(it);
   it[rk] = it[rk] === r ? '' : r;
   store.set('lists', lists);
   flowShown = ''; flowPaint();
@@ -1479,7 +1481,7 @@ $('#fReview').addEventListener('submit', e => {
   e.preventDefault();
   const it = (lists[curList] || []).find(i => i.id === flowShown), v = $('#fReviewText').value.trim();
   if (!it) return;
-  if (it.shared) return toast(`${it.shared}님의 기록이라 리뷰는 ${it.shared}님만 쓸 수 있어요`);
+  if (it.shared) return rateShared(it);
   it.review = v; store.set('lists', lists);
   const key = LIST_FIELDS[curList][0][0];
   $('#fReviewText').blur();
@@ -1517,20 +1519,21 @@ function setSection(k) {
   if ($('#lq').value) $('#lq').value = '';
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
-  const money = k === 'money', habit = k === 'habit', home = k === 'home';
-  $('#v-dash').hidden = !home;
+  const money = k === 'money', habit = k === 'habit', home = k === 'home', fr = k === 'friends';
+  $('#v-dash').hidden = !home; $('#v-friends').hidden = !fr;
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
   $('#lNav').hidden = true; // 목록 화면이면 renderLists가 다시 켬
   requestAnimationFrame(() => movePill(document.querySelector('nav')));
-  $('#v-lists').hidden = money || habit || home;
+  $('#v-lists').hidden = money || habit || home || fr;
   $('#v-habit').hidden = !habit;
-  if (!money) replay($('#v-' + (home ? 'dash' : habit ? 'habit' : 'lists')), 'enter');
+  if (!money) replay($('#v-' + (home ? 'dash' : habit ? 'habit' : fr ? 'friends' : 'lists')), 'enter');
   if (money) show(curView);
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
-    setFab((habit && !isFriend()) || home); // 친구는 습관도 ＋로 직접 만듦
+    setFab((habit && !isFriend()) || home || fr); // 친구는 습관도 ＋로 직접 만듦
+    if (fr) { renderSocial(); if (stale('me')) loadMe().then(() => sec === 'friends' && renderSocial()); window.scrollTo(0, 0); return; }
     if (home) { renderDash(); Promise.all([stale('lists') && refreshLists(), stale('habits') && refreshHabits()]).then(() => sec === 'home' && renderDash()); window.scrollTo(0, 0); return; }
     if (habit) { renderHabits(); if (stale('habits')) refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
@@ -1737,7 +1740,7 @@ async function loadMe() {
     const r = await api(null, '&what=me');
     loadedAt.me = Date.now();
     if (!r.role) return; // 예전 Code.gs
-    me = { token: cfg.token, role: r.role, name: r.name || '', people: r.people || [], friends: r.friends || [] }; store.set('me', me);
+    me = { token: cfg.token, role: r.role, name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
   } catch (e) { return; }
   applyRole();
 }
@@ -1933,9 +1936,18 @@ document.addEventListener('error', e => {
 
 // 목록 항목 추가·수정 창 (필드 표로 자동 생성)
 // 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
-let lEditing = null;
+let lEditing = null, lFromShared = null;
+// 서로 느낀 게 다르니까: 친구가 태그한 기록에 내 별점·리뷰를 따로 남김 → 내 기록이 생기고 둘이 한 줄로 합쳐 보임
+const othersLine = i => i.others?.length ? `<small class="others">👥 ${i.others.map(o => `${esc(o.name)} ${esc(o.rating || '–')}`).join(' · ')}</small>` : '';
+async function rateShared(it) {
+  if (!RATE_KEY[curList] && !LIST_FIELDS[curList].some(f => f[0] === 'review')) return toast(`${it.shared}님의 기록이에요`);
+  if (!await ask(`${it.shared}님이 남긴 기록이에요.\n내 별점과 리뷰를 따로 남길까요?\n(둘의 평가가 한 줄에 함께 보여요)`, { ok: '내 평가 남기기' })) return;
+  const pre = {}; LIST_FIELDS[curList].forEach(([n]) => { if (it[n] != null && !['rating', 'stars', 'review', 'with'].includes(n)) pre[n] = it[n]; });
+  openItem(null, { ...pre, with: it.shared, __from: it });
+}
 function openItem(it, pre) {
-  if (it?.shared) return toast(`${it.shared}님이 나를 태그해서 남긴 기록이에요 · 고치는 건 ${it.shared}님만 할 수 있어요`);
+  if (it?.shared) return rateShared(it);
+  lFromShared = pre?.__from || null;
   const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
   lEditing = it || null;
   $('#lMove').hidden = !it || !BOOK_LISTS[curList];
@@ -1981,6 +1993,11 @@ function openItem(it, pre) {
     ym.value = y && m ? `${y}-${pad2(+m)}` : '';
     pickerField(ym, 'month', '읽은 달', { blank: true });
     ym.addEventListener('change', () => { const [yy, mm] = ym.value.split('-'); setSel(f.year, yy ? yy + '년' : ''); if (!yy) f.year.value = ''; setSel(f.month, mm ? mm + '월' : ''); if (!mm) f.month.value = ''; });
+  }
+  if (HOUSE_LISTS.includes(curList)) { // 친구가 내 집에 놀러 오면 보이는 작품
+    const sw = document.createElement('label'); sw.className = 'pub-row full';
+    sw.innerHTML = `<span>🏡 친구 집에 공개<small>친구가 내 집에 놀러 오면 보여요 · 함께한 사람은 안 보여요</small></span><input type="checkbox" name="__pub" role="switch">`;
+    $('#lFields').append(sw); sw.querySelector('input').checked = !!it?.pub;
   }
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
@@ -2034,10 +2051,19 @@ $('#lForm').addEventListener('submit', e => {
   const arr = lists[curList] = lists[curList] || [], idx = arr.findIndex(i => i.id === item.id);
   // 독서 기록의 순번 = 같은 연·월 안에서 몇 번째 책인지 (새로 추가할 때만 매김)
   if (curList === 'book' && idx < 0) item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;
+  if (lFromShared && idx < 0) { // 친구 기록을 내 기록으로 → 친구 것은 내 줄에 평가로만
+    const s = lFromShared, k = arr.indexOf(s);
+    if (k >= 0) arr.splice(k, 1);
+    item.others = [{ name: s.shared, rating: s[RATE_KEY[curList]] || '', review: s.review || '' }, ...(s.others || [])];
+  }
+  const pubBox = f.__pub, pubWas = !!(lEditing?.pub), pubNow = !!pubBox?.checked;
+  if (pubBox) item.pub = pubNow;
   if (idx >= 0) arr[idx] = { ...arr[idx], ...item }; else arr.push(item);
   store.set('lists', lists);
   $('#lItem').close();
-  queue({ action: 'listSave', list: curList, item });
+  const send = { ...item }; delete send.others; delete send.pub;
+  queue({ action: 'listSave', list: curList, item: send });
+  if (pubBox && pubNow !== pubWas) queue({ action: 'setPub', list: curList, id: item.id, on: pubNow });
 });
 // 읽는 책 · 위시리스트 · 추천 목록 사이 옮기기 (새 목록에 저장 → 원래 목록에서 지움), 토스트로 되돌리기
 const BOOK_LISTS = { book: '읽는 책', buy: '위시리스트', wish: '추천 목록' };
@@ -2201,6 +2227,84 @@ if (invite) {
 } else if (!cfg.token) showLogin(); // 로그인 전이면 로그인 화면
 else lockNow();
 // 앱을 켜면 처음엔 「오늘」 (설정 → 시작 화면에서 가계부·마지막 화면으로 바꿀 수 있음). ?sec= 바로가기는 그대로
+// ── 친구 탭: 친구 신청·수락, 친구 집 놀러 가기 (친구가 공개한 작품이 방마다 선반에) ──
+const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play'];
+const ROOMS = [['book', '📚 책장', 'title', 'buy'], ['escape', '🔐 방탈출 포스터 벽', 'theme', 'escapeWant'], ['board', '🎲 보드게임 선반', 'name', 'boardWant'], ['movie', '🎬 영화관', 'title', 'movieWant'], ['play', '🎭 공연 티켓함', 'title', 'playWant']];
+const iconImg = k => (ICONS.find(x => x[0] === k) || ICONS[0])[2];
+const social = () => me.social || { friends: [], incoming: [], outgoing: [], house: {} };
+const roofColor = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360} 62% 62%)`;
+const houseSvg = (n, icon) => `<svg class="hs" viewBox="0 0 120 104" aria-hidden="true"><path d="M8 50 60 8l52 42" fill="${roofColor(n)}" stroke="${roofColor(n)}" stroke-width="10" stroke-linejoin="round"/>
+  <rect x="20" y="46" width="80" height="54" rx="6" fill="var(--glass)" stroke="var(--line)" stroke-width="2"/><rect x="50" y="68" width="20" height="32" rx="3" fill="${roofColor(n)}" opacity=".85"/>
+  <clipPath id="w-${esc(n)}"><circle cx="60" cy="40" r="13"/></clipPath><circle cx="60" cy="40" r="15" fill="#fff"/><image href="${iconImg(icon)}" x="47" y="27" width="26" height="26" clip-path="url(#w-${esc(n)})"/></svg>`;
+function saveHouse() { if (cfg.token) queue({ action: 'setHouse', icon: store.get('appIcon', 'main'), intro: social().house?.intro || '' }); }
+function renderSocial() {
+  const s = social(), mine = HOUSE_LISTS.reduce((a, k) => a + L(k).filter(i => i.pub && !i.shared).length, 0);
+  $('#myHouse').innerHTML = `${houseSvg(me.name || '나', store.get('appIcon', 'main'))}<div><b>${esc(me.name || '나')}네 집</b><small>공개한 작품 ${mine}개 · 기록을 고칠 때 「🏡 친구 집에 공개」를 켜면 여기 놓여요</small>
+    <input id="houseIntro" maxlength="60" placeholder="문패에 쓸 한 줄 소개" value="${esc(s.house?.intro || '')}" aria-label="내 집 한 줄 소개"></div>`;
+  $('#frIn').innerHTML = s.incoming.length ? '<h2>받은 친구 신청</h2>' + s.incoming.map(n => `<li><span>${esc(n)}</span><div class="row"><button type="button" class="small" data-fr="friendRemove" data-n="${esc(n)}">거절</button><button type="button" class="small primary" data-fr="friendAccept" data-n="${esc(n)}">수락</button></div></li>`).join('') : '';
+  $('#frOut').innerHTML = s.outgoing.map(n => `<li><span>${esc(n)} <small>수락 기다리는 중</small></span><button type="button" class="small" data-fr="friendRemove" data-n="${esc(n)}">취소</button></li>`).join('');
+  $('#town').innerHTML = s.friends.length ? s.friends.map(f => `<button type="button" class="house" data-house="${esc(f.name)}">${houseSvg(f.name, f.icon)}<b>${esc(f.name)}네 집</b><small>${esc(f.intro || '놀러 가기')}</small></button>`).join('')
+    : '<p class="hint" style="grid-column:1/-1;text-align:center">아직 친구가 없어요 · 위에 친구 이름(아이디)을 넣어 신청해 보세요</p>';
+}
+async function socialOp(action, name) {
+  try {
+    const r = await api({ action, name });
+    if (!r.ok) throw new Error(r.error || '안 됐어요');
+    me.social = r.social; store.set('me', me); renderSocial();
+    if (action !== 'friendRemove') loadMe(); // 태그 칩(친구 목록)도 새로
+    return r.social;
+  } catch (e) { toast(String(e.message).replace(/^입력값 오류: /, '')); }
+}
+$('#frAdd').addEventListener('submit', async e => {
+  e.preventDefault(); const n = $('#frName').value.trim(); if (!n) return;
+  if (n === me.name) return toast('나 자신과는 이미 친구예요 🙂');
+  const s = await socialOp('friendRequest', n);
+  if (s) { $('#frName').value = ''; toast(s.friends.some(f => f.name === n) ? `${n}님과 친구가 됐어요 🎉` : `${n}님에게 친구 신청을 보냈어요 · 수락하면 서로 태그하고 집에 놀러 갈 수 있어요`); }
+});
+$('#v-friends').addEventListener('click', async e => {
+  const b = e.target.closest('[data-fr]');
+  if (b) {
+    if (b.dataset.fr === 'friendRemove' && !await ask(`${b.dataset.n}님 신청을 ${b.closest('#frIn') ? '거절' : '취소'}할까요?`, { ok: '네', danger: true })) return;
+    const s = await socialOp(b.dataset.fr, b.dataset.n);
+    if (s && b.dataset.fr === 'friendAccept') toast(`${b.dataset.n}님과 친구가 됐어요 🎉`);
+    return;
+  }
+  const h = e.target.closest('[data-house]'); if (h) visitHouse(h.dataset.house);
+});
+$('#v-friends').addEventListener('change', e => {
+  if (e.target.id !== 'houseIntro') return;
+  me.social = { ...social(), house: { ...social().house, intro: e.target.value.trim() } }; store.set('me', me); saveHouse(); toast('문패를 바꿨어요');
+});
+// 놀러 가기: 문이 열리고 → 방마다 선반에 친구가 공개한 작품
+let visiting = null;
+async function visitHouse(name) {
+  const d = $('#house'); visiting = null;
+  $('#houseTitle').textContent = `${name}네 집`; $('#houseIntro2').textContent = ''; $('#houseRooms').innerHTML = '<p class="hint" style="text-align:center">문 두드리는 중… 🚪</p>';
+  d.classList.remove('open'); d.showModal();
+  try {
+    const r = await api(null, '&what=house&name=' + encodeURIComponent(name));
+    if (!r.house) throw new Error(r.error || '시트의 Code.gs를 새 버전으로 배포해 주세요');
+    visiting = r.house;
+    $('#houseIntro2').textContent = visiting.intro || '';
+    const rooms = ROOMS.filter(([k]) => visiting.items[k]?.length);
+    $('#houseRooms').innerHTML = rooms.length ? rooms.map(([k, t, key]) => `<section class="room"><h3>${t} <small>${visiting.items[k].length}</small></h3><div class="shelf">${visiting.items[k].map((i, n) =>
+      `<button type="button" class="work" data-k="${k}" data-n="${n}">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'em',textContent:'${LIST_ICON[k]}'}))">` : `<span class="em">${LIST_ICON[k]}</span>`}<b>${esc(i[key])}</b><small>${esc(i.rating || i.stars || '')}</small></button>`).join('')}</div></section>`).join('')
+      : `<p class="hint" style="text-align:center">아직 ${esc(name)}님이 공개한 작품이 없어요 · 텅 빈 집이에요 🕸️</p>`;
+  } catch (e) { $('#houseRooms').innerHTML = `<p class="hint" style="text-align:center">문이 안 열려요 · ${esc(String(e.message).replace(/^입력값 오류: /, ''))}</p>`; }
+  requestAnimationFrame(() => d.classList.add('open'));
+}
+$('#houseClose').addEventListener('click', () => $('#house').close());
+$('#houseRooms').addEventListener('click', async e => {
+  const w = e.target.closest('.work'); if (!w || !visiting) return;
+  const [k, t, key, want] = ROOMS.find(r => r[0] === w.dataset.k), i = visiting.items[k][w.dataset.n];
+  const info = [i[key], joinDot([i.author, i.shop, i.director, i.kind, i.date]), [i.rating || i.stars, i.review].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+  if (!await ask(info, { ok: '나도 위시리스트에 담기' })) return;
+  if (L(want).some(x => x[key] === i[key])) return toast('이미 위시리스트에 있어요');
+  const item = { id: crypto.randomUUID(), [key]: i[key], memo: `${visiting.name}님 집에서`, ...(i.author ? { author: i.author } : {}), ...(i.shop ? { shop: i.shop } : {}), ...(i.image ? { image: i.image } : {}) };
+  (lists[want] = lists[want] || []).push(item); store.set('lists', lists);
+  queue({ action: 'listSave', list: want, item }).then(ok => ok && toast(`「${i[key]}」 위시리스트에 담았어요`));
+});
+
 { const st = store.get('startSec', 'home'), want = st === 'last' ? store.get('sec', 'home') : st;
   if (!new URLSearchParams(location.search).get('sec')) setSection(SECTIONS[want] && !(want === 'money' && isFriend()) ? want : 'home'); }
 applyRole(); loadMe(); // 친구 코드면 가계부 대신 독서로 (시트에 다시 물어 확인)
@@ -2393,3 +2497,4 @@ if ('serviceWorker' in navigator) {
   const reloadWhenIdle = () => (document.querySelector('dialog[open]') ? setTimeout(reloadWhenIdle, 1500) : location.reload());
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW) reloadWhenIdle(); });
 }
+
