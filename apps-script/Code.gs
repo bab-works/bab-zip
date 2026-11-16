@@ -109,8 +109,8 @@ function escParse_(url, html) {
   const id = (url.match(/themeId=(\d+)/) || [])[1] || '';
   const un = x => x.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   const meta = p => { const m = html.match(new RegExp('<meta property="' + p + '" content="([^"]*)"')); return m ? un(m[1]) : ''; };
-  const t = meta('og:title').replace(/ 방탈출 테마 후기 - 전국방탈출$/, ''), cut = t.lastIndexOf(' - ');
-  if (!id || cut < 0) return [id, '', '', '', '', url, '-'];
+  const raw = meta('og:title'), t = raw.replace(/ 방탈출 테마 후기 - 전국방탈출$/, ''), cut = t.lastIndexOf(' - ');
+  if (!id || t === raw || cut < 0) return [id, '', '', '', '', url, '-']; // 없는 번호는 사이트 기본 제목만 나옴 → 빈 줄로 남겨 다시 안 읽음
   const genre = (meta('og:description').split(' · ')[1] || '').trim();
   const addr = un((html.match(/주소:\s*([^<"]+)/) || [])[1] || '').trim(); // 「서울 강남구 강남대로…」 → 지역 「서울 강남구」
   return [id, t.slice(0, cut), t.slice(cut + 3), /분$|평점/.test(genre) ? '' : genre, meta('og:image'), url, addr.split(/\s+/).slice(0, 2).join(' ') || '-'];
@@ -125,8 +125,16 @@ function escapeIndex() {
   const locs = x => (x.match(/<loc>[^<]*<\/loc>/g) || []).map(s => s.replace(/<\/?loc>/g, '').replace(/&amp;/g, '&'));
   const maps = locs(UrlFetchApp.fetch('https://www.roomescape.co.kr/sitemap.xml').getContentText()).filter(u => /sitemap-theme/.test(u));
   const idOf = u => (u.match(/themeId=(\d+)/) || [])[1];
-  // 할 일: 아직 없는 테마 + 예전에 지역 없이 모은 테마 (한 번만 다시 읽어 지역 채움)
-  const todo = [].concat(...maps.map(m => locs(UrlFetchApp.fetch(m).getContentText()))).filter(u => { const r = rowOf[idOf(u)]; return !r || (old[r - 2][1] && !old[r - 2][6]); });
+  // 사이트맵엔 테마 절반쯤만 있어서, 사이트맵 + 1번부터 (아는 가장 큰 번호 + 300)번까지 모든 번호의 공개 테마 페이지를 읽음
+  // 할 일: 아직 없는 번호 + 예전에 지역 없이 모은 테마 (한 번만 다시 읽어 지역 채움). 사이트맵 것 먼저, 나머지는 최근 번호부터
+  const sm = [].concat(...maps.map(m => locs(UrlFetchApp.fetch(m).getContentText())));
+  // 빈 번호(빈 줄)는 기준에서 빼야 매주 300씩 끝없이 늘지 않음 → 진짜 테마의 가장 큰 번호 + 300
+  const top = Math.max(0, ...sm.map(idOf).map(Number), ...old.filter(r => r[1]).map(r => Number(r[0]) || 0)) + 300;
+  const known = new Set(sm.map(idOf)), url = n => 'https://www.roomescape.co.kr/theme/detail?themeId=' + n;
+  const all = sm.concat(Array.from({ length: top }, (_, k) => top - k).filter(n => !known.has(String(n))).map(url));
+  // 빈 번호도 사이트맵에 새로 올라왔거나 가장 최근 번호 뒤쪽이면 다시 확인 (그 사이 새 테마가 생겼을 수 있음)
+  const maxReal = top - 300;
+  const todo = all.filter(u => { const id = idOf(u), r = rowOf[id], o = r && old[r - 2]; return !r || (o[1] ? !o[6] : known.has(id) || Number(id) > maxReal); });
   if (todo.length) props.setProperty('ESC_DONE', '');
   const t0 = Date.now(); let i = 0;
   for (; i < todo.length && Date.now() - t0 < 4 * 60e3; i += 10) { // 10쪽씩, 쉬어 가며 (사이트에 부담 안 주게)

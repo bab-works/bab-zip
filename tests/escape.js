@@ -6,6 +6,9 @@ const page = (id, theme, shop, genre) => `<meta property="og:title" content="${t
 <p style="margin:0 0 8px">${shop} 방탈출 테마 · ${genre} · 60분 · 평점 3.5 · 리뷰 10개. 주소: 서울 강남구 강남대로152길 40 4층</p>`;
 const PAGES = { 82: page(82, '젠틀맨 뱅크', '시그널헌터 가로수길점', '범죄'), 83: page(83, '오시리스', '서울이스케이프룸 홍대점', '공포'),
   84: page(84, 'Tom &amp; Jerry', '키이스케이프 강남점', '코믹'), 85: '<html>없는 테마</html>' };
+const NOTHEME = '<meta property="og:title" content="전국방탈출 - 방탈출 카페의 모든 것">'; // 없는 번호
+const HIDDEN = { 3: page(3, '숨은 명작', '비밀상점 성수점', '추리') }; // 사이트맵에 없는 번호의 테마
+const SM = ['82', '83', '84', '85'];
 const url = id => `https://www.roomescape.co.kr/theme/detail?themeId=${id}`;
 // 시트 흉내
 const rows = []; let sheet = null;
@@ -18,8 +21,8 @@ const ctx = {
   SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => n === '방탈출 테마 목록' ? sheet : null, insertSheet: () => (sheet = mkSheet()) }) },
   UrlFetchApp: {
     fetch: u => ({ getContentText: () => /sitemap\.xml$/.test(u) ? '<sitemapindex><sitemap><loc>https://www.roomescape.co.kr/sitemap-cafe-1.xml</loc></sitemap><sitemap><loc>https://www.roomescape.co.kr/sitemap-theme-1.xml</loc></sitemap></sitemapindex>'
-      : /sitemap-theme/.test(u) ? Object.keys(PAGES).map(id => `<url><loc>${url(id)}</loc></url>`).join('') : '' }),
-    fetchAll: reqs => reqs.map(q => { fetched.push(q.url); return { getContentText: () => PAGES[q.url.match(/\d+$/)[0]] }; }) },
+      : /sitemap-theme/.test(u) ? SM.map(id => `<url><loc>${url(id)}</loc></url>`).join('') : '' }),
+    fetchAll: reqs => reqs.map(q => { fetched.push(q.url); const id = q.url.match(/\d+$/)[0]; return { getContentText: () => PAGES[id] || HIDDEN[id] || NOTHEME }; }) },
   ScriptApp: { getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn, t })), deleteTrigger: x => triggers.splice(triggers.indexOf(x.t), 1), newTrigger: trig, WeekDay: { MONDAY: 1 } },
   Utilities: { sleep: () => {} }, Logger: { log: () => {} },
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
@@ -32,17 +35,22 @@ assert.deepEqual(rows[0], ['themeId', '테마', '매장', '장르', '포스터',
 assert.deepEqual(rows[1], ['82', '젠틀맨 뱅크', '시그널헌터 가로수길점', '범죄', 'https://image.roomsescape.org/theme/82.jpg', url(82), '서울 강남구']);
 assert.equal(props.ESC_DONE, '1', 'marked done');
 assert.equal(rows[3][1], 'Tom & Jerry'); assert.equal(rows[4][1], '', 'unreadable page kept as blank so it is not refetched');
+assert.deepEqual(fetched.slice(0, 4), SM.map(url), 'sitemap first');
+assert.equal(fetched.length, 4 + 381, 'then every other number 1..max+300 (newest first)'); assert.equal(fetched[4], url(385));
+assert.ok(rows.some(r => r[1] === '숨은 명작' && r[2] === '비밀상점 성수점'), 'theme missing from sitemap still found');
+assert.ok(!rows.some(r => r[1] === '전국방탈출'), 'empty number is not a theme');
 assert.equal(triggers.length, 1); assert.equal(triggers[0].weekly, true, 'all read → weekly refresh');
 // 다시 돌리면 새 테마만 읽음
-const n = fetched.length; PAGES[86] = page(86, '고백', '비트포비아 강남점', '감성'); run('escapeIndex()');
-assert.deepEqual(fetched.slice(n), [url(86)]); assert.equal(triggers.length, 1, 'old trigger replaced');
+const n = fetched.length; PAGES[86] = page(86, '고백', '비트포비아 강남점', '감성'); SM.push('86'); run('escapeIndex()');
+assert.ok(fetched.slice(n).includes(url(86)), 'blank number that later appeared is re-read'); assert.ok(!fetched.slice(n).includes(url(50)), 'old empty numbers are not re-read');
+assert.equal(rows.find(r => r[0] === '86')[1], '고백'); assert.equal(rows.filter(r => r[0] === '86').length, 1); assert.equal(triggers.length, 1, 'old trigger replaced');
 // 검색: 공백·대소문자 무시, 테마 이름 앞부분이 먼저, 매장으로도
 const s = q => JSON.parse(JSON.stringify(run(`escapeSearch_(${JSON.stringify(q)})`)));
 assert.deepEqual(s('오시 리스'), [{ theme: '오시리스', shop: '서울이스케이프룸 홍대점', genre: '공포', image: 'https://image.roomsescape.org/theme/83.jpg', url: url(83), area: '서울 강남구' }]);
-assert.deepEqual(JSON.parse(JSON.stringify(run('escapeStatus_()'))), { count: 5, building: false });
+assert.equal(JSON.parse(JSON.stringify(run('escapeStatus_()'))).building, false);
 // 예전(지역 칸 없이) 모은 줄은 한 번 다시 읽어 그 자리에 지역을 채움
 rows[2] = rows[2].slice(0, 6); const n2 = fetched.length; run('escapeIndex()');
-assert.deepEqual(fetched.slice(n2), [url(83)]); assert.equal(rows[2][6], '서울 강남구'); assert.equal(rows.length, 6, 'no duplicate row');
+const len = rows.length; assert.ok(fetched.slice(n2).includes(url(83))); assert.ok(!fetched.slice(n2).includes(url(82)), 'rows with 지역 not re-read'); assert.equal(rows[2][6], '서울 강남구'); run('escapeIndex()'); assert.equal(rows.length, len, 'no duplicate row');
 assert.deepEqual(s('강남').map(x => x.theme), ['Tom & Jerry', '고백']);
 assert.deepEqual(s('tom').map(x => x.theme), ['Tom & Jerry']);
 assert.deepEqual(s('없는말'), []);
