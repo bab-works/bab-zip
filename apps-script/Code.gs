@@ -81,7 +81,15 @@ function deleteTx_(id) {
 // 처음 한 번 함수 목록에서 allowPhoto를 실행해 드라이브 권한을 허용해야 해요
 function ocr_(b64) {
   if (!b64 || b64.length > 8e6) throw new Error('사진이 없거나 너무 커요');
-  const img = Utilities.base64Decode(String(b64).replace(/^data:[^,]+,/, '')), bd = 'babzip' + Date.now(), auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  const img = Utilities.base64Decode(String(b64).replace(/^data:[^,]+,/, ''));
+  // 「서비스 ＋ Drive API」를 추가했으면 그걸로 (권한을 알아서 챙김). 직접 토큰을 쓰는 방식은 권한 부족으로 막히는 경우가 있었음
+  if (typeof Drive !== 'undefined' && Drive.Files) {
+    const blob = Utilities.newBlob(img, 'image/jpeg', 'haet-ocr.jpg'), name = '하트 사진 인식 (자동 삭제)', doc = 'application/vnd.google-apps.document';
+    const f = Drive.Files.create ? Drive.Files.create({ name, mimeType: doc }, blob, { ocrLanguage: 'ko' }) // Drive API v3
+      : Drive.Files.insert({ title: name, mimeType: doc }, blob, { ocr: true, ocrLanguage: 'ko' }); // v2
+    try { return DocumentApp.openById(f.id).getBody().getText(); } finally { DriveApp.getFileById(f.id).setTrashed(true); }
+  }
+  const bd = 'babzip' + Date.now(), auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
   const head = Utilities.newBlob('--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'BABZIP 사진 인식 (자동 삭제)', mimeType: 'application/vnd.google-apps.document' }) + '\r\n--' + bd + '\r\nContent-Type: image/jpeg\r\n\r\n').getBytes();
   const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ko', { method: 'post', headers: auth, muteHttpExceptions: true,
     contentType: 'multipart/related; boundary=' + bd, payload: head.concat(img).concat(Utilities.newBlob('\r\n--' + bd + '--').getBytes()) });
@@ -278,8 +286,16 @@ function fHabit_(me, b) {
   sh.getRange(i + 2, 6).setValue(JSON.stringify(done));
 }
 // 주인만: 내 이름 정하기, 친구 초대(접속코드 발급), 초대 취소
+// 이름(아이디) 바꾸기: 주인·게스트 모두. 띄어쓰기 없이, 다른 사람과 겹치지 않게
+function setName_(me, b) {
+  const n = String(b.name || '').trim().slice(0, 20);
+  if (!n || /[,·、/&+\s]/.test(n)) throw new Error('입력값 오류: 이름은 띄어쓰기 없이');
+  if (n !== me.name && people_().includes(n)) throw new Error('입력값 오류: 이미 있는 이름이에요');
+  if (me.role === 'owner') { PropertiesService.getScriptProperties().setProperty('OWNER_NAME', n); return { name: n }; }
+  const sh = ss_().getSheetByName(FRIEND_TAB_), i = body_(sh).findIndex(r => String(r[1]) === me.code);
+  sh.getRange(i + 2, 1).setValue("'" + n); return { name: n };
+}
 function invite_(b) {
-  if (b.action === 'setName') { const n = String(b.name || '').trim().slice(0, 20); if (!n) throw new Error('입력값 오류'); PropertiesService.getScriptProperties().setProperty('OWNER_NAME', n); return {}; }
   const sh = tab_(FRIEND_TAB_, ['이름', '접속코드', '만든 날']);
   if (b.action === 'uninvite') { const i = body_(sh).findIndex(r => String(r[1]) === String(b.code)); if (i >= 0) sh.deleteRow(i + 2); return {}; }
   const name = String(b.name || '').trim().slice(0, 20);
@@ -290,7 +306,29 @@ function invite_(b) {
   sh.appendRow(["'" + name, code, new Date(), invite, pwHash_(code, FIRST_PW_)]);
   return { code, invite };
 }
-const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'setName', 'invite', 'uninvite'];
+const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'invite', 'uninvite'];
+
+// 보드게임 이름으로 코리아보드게임즈 검색 → 앞의 6개 [이름, 이미지, 가격]. 검색 화면 안의 상품 목록(searchPrdList)을 읽음
+// shortcut: 사이트 화면 구조가 바뀌면 빈 목록이 됨
+function boardSearch_(q) {
+  q = String(q || '').trim().slice(0, 40);
+  if (q.length < 1) return [];
+  const html = UrlFetchApp.fetch('https://www.koreaboardgames.com/main/mainSearch?keyword=' + encodeURIComponent(q), { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }).getContentText();
+  const at = html.indexOf('var searchPrdList = ');
+  if (at < 0) return [];
+  // 대괄호 짝을 세어 배열 끝을 찾음 (문자열 안의 괄호는 건너뜀)
+  let i = html.indexOf('[', at), depth = 0, inStr = false, end = -1;
+  for (let k = i; k < html.length; k++) {
+    const ch = html[k];
+    if (inStr) { if (ch === '\\') k++; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true; else if (ch === '[') depth++; else if (ch === ']' && --depth === 0) { end = k; break; }
+  }
+  let arr = []; try { arr = JSON.parse(html.slice(i, end + 1)); } catch (e) { return []; }
+  const flat = t => String(t).replace(/\s+/g, '').toLowerCase(), k = flat(q);
+  return arr.filter(p => p.prdNm && !/슬리브|굿즈|부품|카드\s*케이스/.test(p.prdNm)).map(p => ({
+    name: String(p.prdNm).replace(/^\[[^\]]*\]\s*/, ''), image: p.prdMainImg ? 'https://cdnfile.koreaboardgames.com/' + encodeURI(String(p.prdMainImg).replace(/^\//, '')) : '', price: Number(p.unitPrice) || 0 }))
+    .sort((a, b) => (flat(b.name) === k) - (flat(a.name) === k) || flat(b.name).startsWith(k) - flat(a.name).startsWith(k)).slice(0, 6); // 이름이 딱 맞는 것 먼저
+}
 
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
@@ -643,9 +681,10 @@ function doGet(e) {
       if (me.role === 'owner') ensureInvites_();
       return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
-    if (me.role === 'friend' && !['escape', 'book', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
+    if (me.role === 'friend' && !['escape', 'book', 'board', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
+    if (e.parameter.what === 'board') return out_({ ok: true, games: boardSearch_(e.parameter.q) }); // 코리아보드게임즈 검색
     if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
     const fresh = e.parameter.fresh === '1';
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트
@@ -697,7 +736,8 @@ function writeOp_(b) {
   let res = {};
   try {
     withLock_(() => {
-      if (/^(setName|invite|uninvite)$/.test(b.action)) res = invite_(b);
+      if (b.action === 'setName') res = setName_(me, b);
+      else if (/^(invite|uninvite)$/.test(b.action)) res = invite_(b);
       else if (b.action === 'setPassword') res = setPassword_(me, b);
       else if (me.role === 'friend' && b.action === 'listSave') fListSave_(me, b.list, b.item);
       else if (me.role === 'friend' && b.action === 'listDelete') fListDelete_(me, b.list, b.id);

@@ -3,7 +3,7 @@ const ROOT = require('path').join(__dirname, '..'), S = process.argv[2] || requi
 http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]);
   fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.woff2') ? 'font/woff2' : f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8784, async () => {
   const b = await chromium.launch(); const ctx = await b.newContext({ ...devices['iPhone 15 Pro'] });
-  await ctx.addInitScript(() => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/x', token: 't' })));
+  await ctx.addInitScript(() => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/x', token: 't' })));
   const p = await ctx.newPage(); p.on('pageerror', e => console.error('ERR', e.message));
   await p.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body }));
   await p.goto('http://localhost:8784/'); await p.waitForFunction(() => /동기화됨/.test(document.querySelector('#syncPop').textContent + document.querySelector('#status').textContent));

@@ -10,7 +10,7 @@ const books = ['종의 기원', '추리소설가의 살인사건', '더럽혀진
 const empty = JSON.stringify({ ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
 http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.woff2') ? 'font/woff2' : f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8791, async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 15 Pro'] });
-  await ctx.addInitScript(() => { localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })); localStorage.setItem('sec', '"book"'); });
+  await ctx.addInitScript(() => { void localStorage.setItem('startSec', '"last"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })); localStorage.setItem('sec', '"book"'); });
   const p = await ctx.newPage(); p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
   const posts = [];
   await p.route('https://script.google.com/**', rt => {

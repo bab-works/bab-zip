@@ -2,7 +2,7 @@
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path'), assert = require('assert');
 http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8786, async () => {
   const b = await chromium.launch(), ctx = await b.newContext(), p = await ctx.newPage(); p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  await ctx.addInitScript(() => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })));
+  await ctx.addInitScript(() => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })));
   const today = await p.evaluate(() => 0) || new Date(Date.now() + 9 * 36e5).toISOString().slice(0, 10);
   const meta = { cats: [['식비', '배달'], ['카페·간식', '카페'], ['기타', ''], ['수입', '급여']], budgets: {}, payments: [], rules: [['스타벅스', '지출', '카페·간식', '카페'], ['쿠팡이츠', '지출', '식비', '배달']], recurring: [] };
   const items = [{ id: 'old', date: today, time: '', type: '지출', major: '식비', minor: '배달', content: '쿠팡이츠', pay: '', amount: 18900, memo: '' }];

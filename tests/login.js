@@ -32,7 +32,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.waitForSelector('#hello:not([hidden])'); assert.equal(await p.textContent('#helloText'), '서현님 반가워요');
   assert.equal(await p.locator('#helloSvg text.write').count(), 1);
   await p.waitForSelector('#hello.turn'); await p.waitForSelector('#hello', { state: 'hidden', timeout: 5000 });
-  assert.equal(await p.locator('#login[open]').count(), 0); assert.equal(await p.textContent('#appTitle'), '가계부');
+  assert.equal(await p.locator('#login[open]').count(), 0); assert.equal(await p.textContent('#appTitle'), '오늘', 'first launch after login opens 오늘');
   assert.deepEqual(JSON.parse(await p.evaluate(() => localStorage.getItem('cfg'))).token, 'pw1');
   assert.deepEqual(posts[0], { action: 'login', name: '서현', password: 'nope' }, 'login sends no token');
   // 3) 로그아웃 (사이드바 위) → 로그인 화면, 저장된 사본 지움

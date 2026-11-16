@@ -4,13 +4,13 @@ const S = process.argv[2] || require('os').tmpdir();
 http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : f.endsWith('.png') ? 'image/png' : 'text/html' }); r.end(b); }); }).listen(8789, async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' }), p = await ctx.newPage();
   p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  await ctx.addInitScript(() => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'owner-pw' })));
+  await ctx.addInitScript(() => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'owner-pw' })));
   await p.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: JSON.stringify(/what=me/.test(rt.request().url())
     ? { ok: true, role: 'owner', name: '서현', people: ['서현'], friends: [] } : { ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } }) }));
   await p.goto('http://localhost:8789/'); await p.waitForTimeout(1000);
   // 사이드바: 위에 사용자명, 아래 설정
   await p.click('#menuBtn'); await p.waitForTimeout(500);
-  assert.equal(await p.textContent('#menuName'), '서현'); assert.equal(await p.textContent('#menuAvatar'), '서');
+  assert.equal(await p.textContent('#menuName'), '서현'); assert.match(await p.getAttribute('#menuAvatar', 'style'), /icon-180\.png/, 'app icon in the circle');
   const [top, foot] = await p.$$eval('#menuUser, #menuSettings', els => els.map(e => e.getBoundingClientRect().top));
   assert.ok(foot > 500 && top < 120, `name at top, settings at bottom (${top}, ${foot})`);
   await p.click('#menuSettings'); await p.waitForSelector('#prefs[open]');

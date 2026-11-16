@@ -5,7 +5,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const page = async (token, role) => {
     const ctx = await b.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' }), p = await ctx.newPage(), posts = [], gets = [];
     p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-    await ctx.addInitScript(t => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: t })), token);
+    await ctx.addInitScript(t => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: t })), token);
     let friends = [{ name: '민지', code: 'f0123456789a', invite: 'i0123456789' }];
     await p.route('https://script.google.com/**', rt => {
       const q = rt.request(), u = q.url();

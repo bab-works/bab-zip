@@ -85,6 +85,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   p.on('pageerror', e => { console.error('PAGE ERROR', e); process.exit(1); });
   let promptAnswer = '';
+  await p.addInitScript(() => { if (!localStorage.getItem('startSec')) localStorage.setItem('startSec', '"money"'); }); // 이 테스트는 가계부부터
   await p.exposeFunction('__askAuto', (m, isPrompt) => isPrompt ? promptAnswer : true); // 앱 안 확인·입력 창에 자동으로 대답
   await p.route('https://script.google.com/**', async rt => {
     if (offline || (postBlocked && rt.request().method() === 'POST')) return rt.abort();
@@ -416,10 +417,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(E.d[1][1], '2 개', '요약 줄 보존');
   // 보드게임 → 취미 기록 탭에 종류=보드게임
   await go('보드게임'); await p.click('#lViews [data-v=list]');
-  await p.click('#fab'); await p.fill('#lForm [name=name]', '스플렌더'); await p.fill('#lForm [name=place]', '보드카페');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#lForm [name=name]', '스플렌더'); await p.fill('#lForm [name=place]', '보드카페');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   const H = extraTabs['보드게임 기록'];
   assert.equal(H.d[1][2], '보드게임'); assert.equal(H.d[1][3], '스플렌더'); assert.ok(H.d[1][0], '기록 ID 채움');
+  await p.evaluate(() => localStorage.setItem('startSec', '"last"')); // 설정 → 시작 화면: 마지막에 보던 화면
   await p.reload(); await status(/동기화됨/);
   assert.equal(await p.textContent('#appTitle'), '보드게임', '마지막 섹션 기억');
   assert.equal(await p.locator('#lList li[data-id]').count(), 1);

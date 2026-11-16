@@ -2,7 +2,7 @@ const { chromium, devices } = require('playwright'), fs = require('fs'), http = 
 const ROOT = require('path').join(__dirname, '..'), S = process.argv[2] || require('os').tmpdir(), body = JSON.stringify({ ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } }); // 시트 응답은 빈 가짜 데이터, S = 스크린샷 폴더
 http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.woff2') ? 'font/woff2' : f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8783, async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 15 Pro'], reducedMotion: 'reduce' });
-  await ctx.addInitScript(() => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })));
+  await ctx.addInitScript(() => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })));
   const p = await ctx.newPage(); p.on('pageerror', e => console.error('ERR', e.message));
   const t = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4), st = k => +new Date(t - k * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
   const H = (id, name, icon, color, rule, done, total, enc = '') => ({ id: id.repeat(24), name, icon, color, rule, done, total, enc });

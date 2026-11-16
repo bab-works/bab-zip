@@ -25,4 +25,20 @@ assert.deepEqual(vm.runInContext('bookSearch_("페스트")', ctx), [{ title: '�
   assert.match(Buffer.from(calls[0][1].payload).toString(), /application\/vnd.google-apps.document[\s\S]*hello/);
   assert.match(calls[1][0], /files\/F1\/export\?mimeType=text\/plain/); assert.equal(trashed, 'F1', 'temp doc trashed');
   assert.throws(() => vm.runInContext('ocr_("")', ctx), /사진/); }
+// Drive API 서비스가 있으면 그걸로: 문서로 만들고 → 글자 읽고 → 휴지통
+{ let made = null, trashed = '';
+  Object.assign(ctx, { Drive: { Files: { create: (meta, blob, opt) => { made = { meta, opt }; return { id: 'D1' }; } } },
+    DocumentApp: { openById: id => ({ getBody: () => ({ getText: () => id === 'D1' ? '쿠팡이츠 18,900원' : '' }) }) },
+    DriveApp: { getFileById: id => ({ setTrashed: v => { trashed = v && id; } }) } });
+  ctx.Utilities.newBlob = (b, t, n) => ({ bytes: b, type: t, name: n, getBytes: () => b });
+  assert.equal(vm.runInContext('ocr_("aGVsbG8=")', ctx), '쿠팡이츠 18,900원');
+  assert.equal(made.meta.mimeType, 'application/vnd.google-apps.document'); assert.equal(made.opt.ocrLanguage, 'ko'); assert.equal(trashed, 'D1');
+  delete ctx.Drive; }
+// 보드게임: 코리아보드게임즈 검색 화면 안의 상품 목록 → 이름 정확히 맞는 것 먼저, 굿즈 빼기, 이미지 주소
+{ const item = (n, img, p) => ({ prdNm: n, prdMainImg: img, unitPrice: p, note: '괄호 ] [ 와 "따옴표\\" 섞인 글' });
+  const page = 'x var searchPrdList = ' + JSON.stringify([item('[세트] 스플렌더 + 확장', 'upload/a.jpg', 143000), item('스플렌더 아트 슬리브', 'upload/s.jpg', 25000), item('스플렌더', 'upload/thumb/스플렌더.jpg', 65000)]) + ';\n var other = [1];';
+  ctx.UrlFetchApp.fetch = u => ({ getContentText: () => page });
+  const g = JSON.parse(JSON.stringify(vm.runInContext('boardSearch_("스플렌더")', ctx)));
+  assert.deepEqual(g.map(x => x.name), ['스플렌더', '스플렌더 + 확장']);
+  assert.equal(g[0].image, 'https://cdnfile.koreaboardgames.com/upload/thumb/%EC%8A%A4%ED%94%8C%EB%A0%8C%EB%8D%94.jpg'); assert.equal(g[0].price, 65000); }
 console.log('ALADIN OK');

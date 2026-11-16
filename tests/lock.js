@@ -5,7 +5,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const cdp = await ctx.newCDPSession(p);
   await cdp.send('WebAuthn.enable');
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
-  await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'pw1' })); });
+  await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'pw1' })); });
   await p.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } }) }));
   await p.goto('http://localhost:8784/'); await p.waitForTimeout(500);
   assert.equal(await p.locator('#lock[open]').count(), 0, 'no lock until enabled');

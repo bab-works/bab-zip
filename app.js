@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v82'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v83'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -714,13 +714,13 @@ const addMenu = open => {
   document.body.classList.toggle('adding', open); $('#fab').setAttribute('aria-expanded', open);
   if (open) { // 가계부: 사진·직접 / 독서: 책 검색·직접
     const opt = (k, icon, t) => `<button type="button" data-add="${k}"><svg class="i" aria-hidden="true"><use href="#${icon}"/></svg>${t}</button>`;
-    m.innerHTML = (sec === 'book' ? opt('find', 'i-search', '책 검색해서 추가') : sec === 'escape' ? opt('find', 'i-search', '테마 검색해서 추가') : opt('photo', 'i-photo', '사진으로 입력')) + opt('manual', 'i-pen', '직접 입력');
+    m.innerHTML = (sec === 'book' ? opt('find', 'i-search', '책 검색해서 추가') : sec === 'escape' ? opt('find', 'i-search', '테마 검색해서 추가') : sec === 'board' ? opt('find', 'i-search', '보드게임 검색해서 추가') : opt('photo', 'i-photo', '사진으로 입력')) + opt('manual', 'i-pen', '직접 입력');
     m.classList.remove('out'); m.hidden = false; return;
   }
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => sec === 'home' ? (setSection('book'), openFind()) : sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
+$('#fab').addEventListener('click', () => sec === 'home' ? (setSection('book'), openFind()) : sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape', 'board'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
@@ -942,7 +942,7 @@ async function loggedIn(r) {
   const ready = Promise.all([loadMe(), isFriend() ? Promise.all([refreshLists(), refreshHabits()]) : refresh()]).catch(() => {});
   await hello(r.name, ready);
   applyRole();
-  if (isFriend()) setSection('home'); else { setSection('money'); render(); }
+  setSection('home'); render(); // 처음 로그인하면 「오늘」부터
 }
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1016,6 +1016,9 @@ function setIcon(k) {
   $('link[rel=manifest]').href = c[0] === 'main' ? 'manifest.webmanifest' : `manifest-${c[0]}.webmanifest`;
   renderIcons();
 }
+// 이름 앞 동그라미에 고른 앱 아이콘 그림
+const paintAvatar = el => { const c = ICONS.find(x => x[0] === store.get('appIcon', 'main')) || ICONS[0]; el.textContent = ''; el.classList.add('icon'); el.style.backgroundImage = `url("${c[2]}")`; };
+$('#startSec').addEventListener('change', e => { store.set('startSec', e.target.value); toast('다음에 앱을 켤 때부터 적용돼요'); });
 function renderIcons() {
   const cur = store.get('appIcon', 'main');
   $('#iconList').innerHTML = ICONS.map(([k, n, src]) => `<button type="button" role="radio" data-icon="${k}" aria-checked="${cur === k}"><img src="${src}" alt="">${n}</button>`).join('');
@@ -1033,9 +1036,12 @@ function openPrefs() {
   const nm = me.token === cfg.token && me.name ? me.name : '';
   $('#prefName').textContent = nm || (isFriend() ? '친구' : '이름(아이디)을 정해 주세요');
   $('#prefRole').textContent = isFriend() ? '친구 계정' : '내 시트 주인 · 가계부까지';
-  $('#prefAvatar').textContent = (nm || '♥').slice(0, 1);
+  paintAvatar($('#prefAvatar'));
+  $('#startSec').value = store.get('startSec', 'home'); $('#startSec').querySelector('.owner-opt').hidden = isFriend();
   $('#prefThemeVal').textContent = SKINS.find(x => x[0] === skin())[1];
+  if (document.activeElement !== $('#myName')) $('#myName').value = nm;
   document.querySelectorAll('#prefs .owner-only').forEach(el => { el.hidden = isFriend() || !cfg.token; });
+  $('#prefs .name-edit').hidden = !cfg.token; // 게스트도 이름(아이디)을 바꿀 수 있음
   renderFriends(); if (stale('me')) loadMe();
   if (!$('#prefs').open) $('#prefs').showModal();
 }
@@ -1250,7 +1256,7 @@ function renderLists() {
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
   renderStats(curList, all);
-  $('#lNotice').hidden = !['board', 'movie', 'play'].includes(sec);
+  $('#lNotice').hidden = !['movie', 'play'].includes(sec);
   $('#lNotice').textContent = '🔎 이 목록은 아직 인터넷 자동 검색이 없어요 · 제목·포스터는 직접 입력해 주세요';
   // 독서는 보기 3가지 (나머지 목록은 늘 목록 보기)
   const view = VIEWS[sec] ? lView() : 'list';
@@ -1340,16 +1346,19 @@ let findHits = [], findT = 0;
 // 방탈출은 전국방탈출(roomescape.co.kr) 공개 테마 페이지로 시트가 만든 목록에서 검색 → 고르면 테마·매장·포스터가 채워진 입력 창
 const escMode = () => sec === 'escape';
 function openFind() {
-  $('#findTitle').textContent = escMode() ? '테마 검색해서 추가' : '책 검색해서 추가';
-  $('#findManual').textContent = escMode() ? '찾는 테마가 없어요 · 직접 입력' : '찾는 책이 없어요 · 직접 입력';
-  $('#findQ').placeholder = escMode() ? '테마나 매장 이름' : '책 제목이나 저자';
-  $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${escMode() ? '테마나 매장 이름을 검색해요 · 전국방탈출 정보' : '책 제목이나 저자를 검색해요'}</li>`;
+  const t = { escape: ['테마', '테마나 매장 이름', '테마나 매장 이름을 검색해요 · 전국방탈출 정보'], board: ['보드게임', '보드게임 이름', '보드게임 이름을 검색해요 · 코리아보드게임즈 정보'] }[sec] || ['책', '책 제목이나 저자', '책 제목이나 저자를 검색해요'];
+  $('#findTitle').textContent = `${t[0]} 검색해서 추가`;
+  $('#findManual').textContent = `찾는 ${t[0]}${t[0] === '책' ? '이' : '가'} 없어요 · 직접 입력`;
+  $('#findQ').placeholder = t[1];
+  $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${t[2]}</li>`;
   $('#bookFind').showModal(); $('#findQ').focus();
 }
 const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.area, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
     <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="escape">＋ 기록하기</button><button type="button" class="small" data-k="${k}" data-to="escapeWant">＋ 위시리스트</button></div></div></li>`;
 const findRow = (b, k) => {
   if (escMode()) return escRow(b, k);
+  if (sec === 'board') return `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.name)}</span><small>${b.price ? b.price.toLocaleString('ko-KR') + '원' : ''}${L('board').some(i => i.name === b.name) ? ' · 이미 기록에 있어요' : ''}</small>
+    <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="board">＋ 기록하기</button><button type="button" class="small" data-k="${k}" data-to="boardWant">＋ 위시리스트</button></div></div></li>`;
   const has = FIND_TO.filter(([l]) => L(l).some(i => i.title === b.title)).map(([, n]) => n);
   return `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.title)}</span><small>${esc(b.author)}${has.length ? ' · ' + has.join('·') + '에 있어요' : ''}</small>
     <div class="find-to">${FIND_TO.map(([l, n]) => `<button type="button" class="small" data-k="${k}" data-to="${l}">＋ ${n}</button>`).join('')}</div></div></li>`;
@@ -1361,9 +1370,9 @@ $('#findQ').addEventListener('input', () => {
   $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
   findT = setTimeout(async () => {
     try {
-      const r = await api(null, `&what=${escMode() ? 'escape' : 'book'}&q=` + encodeURIComponent(q));
+      const r = await api(null, `&what=${escMode() ? 'escape' : sec === 'board' ? 'board' : 'book'}&q=` + encodeURIComponent(q));
       if (q !== $('#findQ').value.trim()) return;
-      const hits = escMode() ? r.themes : r.books;
+      const hits = escMode() ? r.themes : sec === 'board' ? r.games : r.books;
       if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
       findHits = hits;
       $('#findList').innerHTML = findHits.map(findRow).join('') || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
@@ -1374,6 +1383,14 @@ $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.b
 $('#findList').addEventListener('click', e => {
   const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
   if (!b) return;
+  if (btn.dataset.to === 'board') { $('#bookFind').close(); return openItem(null, { name: b.name, ...(b.image ? { image: b.image } : {}) }); } // 날짜·장소·함께한 사람은 직접
+  if (btn.dataset.to === 'boardWant') {
+    const item = { id: crypto.randomUUID(), name: b.name, memo: b.price ? `${b.price.toLocaleString('ko-KR')}원` : '', ...(b.image ? { image: b.image } : {}) };
+    (lists.boardWant = lists.boardWant || []).push(item); store.set('lists', lists);
+    btn.disabled = true; btn.textContent = '✓ 담음';
+    queue({ action: 'listSave', list: 'boardWant', item }).then(ok => ok && toast(`「${b.name}」 위시리스트에 담았어요`));
+    return curList === 'boardWant' && renderLists();
+  }
   if (btn.dataset.to === 'escapeWant') { // 가고 싶은 방탈출은 바로 저장
     const item = { id: crypto.randomUUID(), theme: b.theme, shop: b.shop, area: b.area || '', memo: '', ...(b.image ? { image: b.image } : {}) };
     (lists.escapeWant = lists.escapeWant || []).push(item); store.set('lists', lists);
@@ -1698,7 +1715,6 @@ function renderFriends() {
   $('#friendBox').hidden = !owner; $('#friendMe').hidden = !isFriend();
   if (isFriend()) $('#friendMe').textContent = `친구로 로그인했어요 · 가계부 없이 취미 기록과 습관을 써요`;
   if (!owner) return;
-  if (document.activeElement !== $('#myName')) $('#myName').value = me.name || '';
   $('#friendList').innerHTML = (me.friends || []).map(f => `<li><span><b>${esc(f.name)}</b></span><button type="button" class="small plane-btn" data-share="${esc(f.invite || '')}" data-name="${esc(f.name)}"><svg class="i" aria-hidden="true"><use href="#i-plane"/></svg>공유</button><button type="button" class="small danger" data-uninvite="${esc(f.code)}">삭제</button></li>`).join('')
     || '<li class="hint">아직 초대한 친구가 없어요</li>';
 }
@@ -1714,23 +1730,28 @@ function flyPlane(from) {
 // 공유: 아이폰 공유 시트(카톡·메시지 등). 공유를 못 쓰거나 실패하면 링크 + 복사하기/취소 창
 async function shareInvite(name, inv, btn) {
   if (!inv) return toast('초대 링크를 만드는 중이에요 · 잠시 뒤 다시 눌러 주세요');
-  const url = friendLink(inv), text = `${name}님, 하트 : 하비 트래커에 초대해요!\n링크를 누르면 바로 시작돼요.\n홈 화면에 추가한 뒤엔 아이디: ${name} / 비밀번호: 1234 로 로그인하고, 설정에서 비밀번호를 바꿔 주세요.`;
+  const url = friendLink(inv);
+  const text = [`💌 ${name}님, 하트에 초대해요!`, '하트 : 하비 트래커 · 습관과 취미 기록을 함께 남겨요', '',
+    '📲 시작하는 법', '① 아래 링크를 사파리로 열어요', '② 공유 → 「홈 화면에 추가」', '③ 홈 화면 앱에서 로그인', '',
+    `🔑 아이디  ${name}`, '🔑 비밀번호  1234', '(로그인한 뒤 설정에서 꼭 바꿔 주세요)', '', `👉 ${url}`].join('\n');
   if (btn) flyPlane(btn);
-  try { await navigator.clipboard.writeText(url); } catch (e) {} // 먼저 조용히 복사해 둠
+  try { await navigator.clipboard.writeText(text); } catch (e) {} // 먼저 조용히 복사해 둠 (초대 글 전체)
+  shareText = text;
   if (navigator.share) {
-    try { await navigator.share({ title: '하트 : 하비 트래커', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ title: '하트 : 하비 트래커', text }); return; } catch (e) { if (e.name === 'AbortError') return; } // 링크는 글 맨 끝에 (따로 넘기면 앱마다 위치가 달라짐)
   }
   $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요 · 아이디 ${name} / 비밀번호 1234`; $('#shareUrl').value = url; $('#shareSheet').showModal();
 }
+let shareText = '';
 $('#shareCopy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('#shareUrl').value); toast('복사했어요 · 친구에게 보내 주세요'); $('#shareSheet').close(); }
+  try { await navigator.clipboard.writeText(shareText || $('#shareUrl').value); toast('복사했어요 · 친구에게 보내 주세요'); $('#shareSheet').close(); }
   catch (e) { $('#shareUrl').select(); toast('링크를 길게 눌러 복사해 주세요'); }
 });
 $('#shareCancel').addEventListener('click', () => $('#shareSheet').close());
 async function friendOp(body, done) {
   try { const r = await api(body); await loadMe(); done && done(r); } catch (e) { toast(e.message.replace(/^입력값 오류:?\s*/, '')); }
 }
-$('#myNameSave').addEventListener('click', () => { const n = $('#myName').value.trim(); if (n) friendOp({ action: 'setName', name: n }, () => { toast('이름을 저장했어요 · 이제 이 이름이 아이디예요'); openPrefs(); }); });
+$('#myNameSave').addEventListener('click', () => { const n = $('#myName').value.trim(); if (n) friendOp({ action: 'setName', name: n }, () => { toast('이름을 바꿨어요 · 다음 로그인부터 이 이름이 아이디예요'); openPrefs(); }); });
 $('#inviteBtn').addEventListener('click', () => {
   const n = $('#inviteName').value.trim(); if (!n) return $('#inviteName').focus();
   const btn = $('#inviteBtn');
@@ -1763,7 +1784,7 @@ function openMenu(dragging) {
   const nm = me.token === cfg.token && me.name ? me.name : '';
   $('#menuName').textContent = nm || (isFriend() ? '친구' : '이름을 정해 주세요');
   $('#menuRole').textContent = isFriend() ? '친구 접속코드' : cfg.token ? '내 시트 · 눌러서 설정' : '아직 연결 전';
-  $('#menuAvatar').textContent = (nm || 'B').slice(0, 1);
+  paintAvatar($('#menuAvatar'));
   menuP(0, true); root.classList.add('menu-open');
   $('#menu').showModal();
   if (dragging) return;
@@ -2145,7 +2166,9 @@ if (invite) {
   }).catch(err => showLogin(err.message));
 } else if (!cfg.token) showLogin(); // 로그인 전이면 로그인 화면
 else lockNow();
-if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
+// 앱을 켜면 처음엔 「오늘」 (설정 → 시작 화면에서 가계부·마지막 화면으로 바꿀 수 있음). ?sec= 바로가기는 그대로
+{ const st = store.get('startSec', 'home'), want = st === 'last' ? store.get('sec', 'home') : st;
+  if (!new URLSearchParams(location.search).get('sec')) setSection(SECTIONS[want] && !(want === 'money' && isFriend()) ? want : 'home'); }
 applyRole(); loadMe(); // 친구 코드면 가계부 대신 독서로 (시트에 다시 물어 확인)
 function setBrag(on) {
   brag = on; store.set('brag', on);
