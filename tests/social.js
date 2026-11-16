@@ -35,11 +35,13 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.deepEqual(posts.at(-1), { action: 'friendRemove', name: '준호', token: 'f0123456789a' }); assert.doesNotMatch(await p.textContent('#town'), /준호/);
   // 2) 서현네 집: 문이 열리고 방마다 작품 → 눌러서 위시리스트
   await p.click('[data-house="서현"]'); await p.waitForSelector('#house.open'); await p.waitForSelector('#houseRooms .work');
-  assert.equal(await p.textContent('#houseTitle'), '서현네 집'); assert.match(await p.textContent('#houseRooms'), /책장[\s\S]*페스트[\s\S]*영화관[\s\S]*파묘/);
+  assert.equal(await p.textContent('#houseTitle'), '서현네 집'); assert.match(await p.textContent('#houseRooms'), /책장[\s\S]*페스트[\s\S]*영화[\s\S]*파묘/);
   assert.doesNotMatch(await p.textContent('#houseRooms'), /방탈출/, 'empty rooms hidden');
   await p.click('#houseRooms .work[data-k=book]'); await p.waitForTimeout(400);
   assert.deepEqual([posts.at(-1).list, posts.at(-1).item.title, posts.at(-1).item.memo], ['buy', '페스트', '서현님 집에서']);
   await p.waitForTimeout(1300); await p.screenshot({ path: require('os').tmpdir() + '/house.png' });
+  for (const k of ['clay', 'ios', 'linear']) { await p.evaluate(k => document.documentElement.dataset.skin = k, k); await p.waitForTimeout(200); await p.screenshot({ path: require('os').tmpdir() + `/house-${k}.png` }); }
+  await p.evaluate(() => setSkin(skin()));
   await p.click('#houseClose');
   // 3) 방탈출: 친구 평가가 내 줄에 함께 / 친구 기록 → 내 평가 남기기 → 한 줄로 합쳐짐 + 공개 켜기
   await p.evaluate(() => setSection('escape')); await p.waitForTimeout(500);

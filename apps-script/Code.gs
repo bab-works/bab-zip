@@ -267,6 +267,12 @@ function friendOp_(me, b) {
   else if (!pair.length) sh.appendRow([k, t, '요청', new Date()]);
   return social_(me);
 }
+// 제보하기: 「제보」 탭 [날짜, 이름, 내용, 앱 버전, 기기] (주인이 시트에서 확인)
+function report_(me, b) {
+  const t = String(b.text || '').trim().slice(0, 1000);
+  if (!t) throw new Error('입력값 오류: 내용을 적어 주세요');
+  tab_('제보', ['날짜', '이름', '내용', '앱 버전', '기기']).appendRow([new Date(), "'" + (me.name || ''), "'" + t, String(b.ver || '').slice(0, 20), String(b.ua || '').slice(0, 120)]);
+}
 // 내 집: 아이콘·한 줄 소개 [사람 열쇠, 아이콘, 소개]
 function houses_() { const sh = ss_().getSheetByName(HOUSE_TAB_), o = {}; if (sh) body_(sh).forEach(r => { o[String(r[0])] = { icon: String(r[1] || ''), intro: String(r[2] || '') }; }); return o; }
 function setHouse_(me, b) {
@@ -835,6 +841,7 @@ function writeOp_(b) {
       if (b.action === 'setName') res = setName_(me, b);
       else if (/^friend(Request|Accept|Remove)$/.test(b.action)) res = { social: friendOp_(me, b) };
       else if (b.action === 'setHouse') setHouse_(me, b);
+      else if (b.action === 'report') report_(me, b);
       else if (b.action === 'setPub') setPub_(me, b);
       else if (b.action === 'bulk') (Array.isArray(b.ops) ? b.ops : []).slice(0, 300).forEach(o => listOp_(me, o));
       else if (/^(invite|uninvite)$/.test(b.action)) res = invite_(b);

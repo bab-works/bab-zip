@@ -514,6 +514,25 @@
     opacity:0; pointer-events:none; transform:translateY(12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
   #toast.show { opacity:1; transform:none; } #toast { white-space:pre-line; }
   #toast.act { text-align:left; }
+  /* 공지사항 */
+  .ntabs { display:flex; margin:0 0 12px; } .ntabs button { flex:1; }
+  .notice { display:grid; gap:6px; } .notice h3 { margin:0; font-size:1rem; line-height:1.4; word-break:keep-all; }
+  .notice .meta { display:flex; gap:6px; align-items:center; font-size:.74rem; color:var(--muted); }
+  .ntag { padding:2px 8px; border-radius:99px; background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:.7rem; } .ntag.pin { background:var(--accent); color:#fff; }
+  .notice ul { margin:2px 0 0; padding-left:18px; display:grid; gap:6px; } .notice li { line-height:1.55; word-break:keep-all; font-size:.88rem; }
+  .notice.new h3::after { content:'NEW'; margin-left:6px; font-size:.62rem; font-weight:800; color:#fff; background:var(--out); padding:1px 6px; border-radius:99px; vertical-align:2px; }
+  .gsteps { display:grid; gap:14px; } .gstep { display:grid; gap:8px; } .gstep img { width:100%; max-width:340px; justify-self:center; border-radius:18px; box-shadow:var(--shadow); border:1px solid var(--line); }
+  .gstep p { margin:0; line-height:1.55; word-break:keep-all; font-size:.9rem; } .gstep p b { color:var(--accent); margin-right:4px; }
+  .gnote { background:var(--accent-soft); border-radius:14px; padding:12px 14px; font-size:.84rem; line-height:1.55; word-break:keep-all; }
+  details.faq { border-top:1px solid var(--line); } details.faq:first-of-type { border-top:0; }
+  details.faq summary { list-style:none; cursor:pointer; padding:14px 2px; font-weight:700; display:flex; gap:8px; line-height:1.45; word-break:keep-all; } details.faq summary::-webkit-details-marker { display:none; }
+  details.faq summary::before { content:'Q'; color:var(--accent); font-weight:800; } details.faq summary::after { content:'›'; margin-left:auto; color:var(--muted); transition:transform .25s var(--ease); } details.faq[open] summary::after { transform:rotate(90deg); }
+  details.faq p { margin:0 0 14px; padding-left:20px; line-height:1.6; color:var(--fg); word-break:keep-all; font-size:.9rem; }
+  .road { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--line); } .road:first-of-type { border-top:0; } .road > span { font-size:1.4rem; } .road b { display:block; margin-bottom:3px; } .road p { margin:0; font-size:.86rem; line-height:1.55; color:var(--muted); word-break:keep-all; }
+  .report textarea { width:100%; margin:8px 0 10px; } .report h2 { margin:0 0 4px; }
+  #menuList [data-sec].dot::after { content:''; width:8px; height:8px; border-radius:50%; background:var(--out); margin-left:6px; display:inline-block; vertical-align:middle; }
+  .upd-hero { font-size:2.4rem; text-align:center; animation:pop .6s var(--spring); } @keyframes pop { from { transform:scale(.3); opacity:0; } }
+  .upd-list { display:grid; gap:10px; max-height:46vh; overflow:auto; } .upd-list .notice { background:var(--fill); border-radius:14px; padding:12px 14px; }
   /* 친구 탭: 집 · 동네 · 놀러 가기 */
   .my-house { display:flex; gap:14px; align-items:center; } .my-house svg.hs { width:84px; flex:none; } .my-house > div { flex:1; min-width:0; display:grid; gap:4px; }
   .my-house small { color:var(--muted); font-size:.76rem; line-height:1.4; } .my-house input { margin-top:4px; }
@@ -549,22 +568,29 @@
   .pub-row input { width:46px; height:28px; appearance:none; -webkit-appearance:none; border-radius:99px; background:var(--fill); position:relative; flex:none; transition:background .2s; margin:0; }
   .pub-row input::after { content:''; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:transform .25s var(--spring); }
   .pub-row input:checked { background:var(--accent); } .pub-row input:checked::after { transform:translateX(18px); }
-  dialog#house { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:0; border:0; border-radius:0; background:linear-gradient(#fff8ef, #f6ead9); color:#3b2f25; overflow:auto; overflow-x:hidden; }
-  @media (prefers-color-scheme: dark) { dialog#house { background:linear-gradient(#2a221b, #1c1712); color:#f3e7d8; } }
-  .house-top { position:sticky; top:0; z-index:2; display:flex; gap:10px; align-items:center; padding:calc(env(safe-area-inset-top) + 10px) 16px 10px; background:inherit; }
-  .house-top h2 { margin:0; font-size:1.2rem; } .house-top small { opacity:.7; font-size:.8rem; }
-  .rooms { padding:4px 16px calc(env(safe-area-inset-bottom) + 24px); display:grid; gap:18px; }
-  .room h3 { margin:0 0 8px; font-size:.95rem; } .room h3 small { opacity:.6; font-weight:600; }
-  .shelf { display:flex; gap:12px; overflow-x:auto; padding:6px 4px 14px; scroll-snap-type:x mandatory; border-bottom:10px solid #b98a5e; border-radius:0 0 6px 6px; box-shadow:0 8px 10px -6px rgba(90,60,30,.4); }
-  .work { flex:none; width:92px; scroll-snap-align:start; display:grid; gap:4px; justify-items:center; background:none; border:0; padding:0; color:inherit; font:inherit; text-align:center; cursor:pointer; }
-  .work img, .work .em { width:84px; height:120px; object-fit:cover; border-radius:6px; box-shadow:0 4px 10px rgba(60,40,20,.25); display:grid; place-items:center; font-size:2rem; background:#fff; }
-  .work b { font-size:.74rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; } .work small { font-size:.9rem; min-height:1em; }
-  .door { position:fixed; top:0; bottom:0; width:50%; z-index:5; background:repeating-linear-gradient(90deg, #a8774c 0 18px, #9b6c43 18px 20px); pointer-events:none; transition:transform .9s var(--ease-out) .15s; }
-  .door.l { left:0; transform-origin:left; } .door.r { right:0; transform-origin:right; }
-  .door.l::after, .door.r::after { content:''; position:absolute; top:50%; width:10px; height:10px; border-radius:50%; background:#f3c86b; } .door.l::after { right:14px; } .door.r::after { left:14px; }
-  dialog#house.open .door.l { transform:perspective(900px) rotateY(80deg); } dialog#house.open .door.r { transform:perspective(900px) rotateY(-80deg); }
-  dialog#house.open .door { visibility:hidden; transition:transform .9s var(--ease-out) .15s, visibility 0s 1.1s; }
-  @media (prefers-reduced-motion: reduce) { .door { display:none; } }
+  /* 친구 집: 내가 고른 테마(배경·카드·강조색·그림자) 그대로. 들어갈 때는 동네의 그 집이 커지며 문으로 들어가는 느낌 */
+  dialog#house { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:0; border:0; border-radius:0; background:var(--bg); color:var(--fg); overflow:auto; overflow-x:hidden; box-shadow:none; }
+  dialog#house::backdrop { background:var(--bg); }
+  .house-top { position:sticky; top:0; z-index:2; display:flex; gap:6px; align-items:center; padding:calc(env(safe-area-inset-top) + 10px) 12px 8px; background:var(--bg); }
+  .house-top h2 { margin:0; font-size:1.35rem; font-weight:800; letter-spacing:-.02em; }
+  .house-body { padding:4px 16px calc(env(safe-area-inset-bottom) + 28px); display:grid; gap:14px; }
+  .house-hero { display:flex; gap:14px; align-items:center; } .house-hero svg.hs { width:76px; flex:none; }
+  .house-hero b { font-size:1.05rem; } .house-hero p { margin:3px 0 8px; color:var(--muted); font-size:.85rem; line-height:1.45; word-break:keep-all; }
+  .house-stats { display:flex; flex-wrap:wrap; gap:6px; } .house-stats span { padding:4px 10px; border-radius:99px; background:var(--accent-soft); color:var(--accent); font-size:.74rem; font-weight:700; }
+  .room h2 { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:1rem; } .room h2 svg.i { width:20px; height:20px; color:var(--accent); } .room h2 small { color:var(--muted); font-weight:600; }
+  .shelf { display:flex; gap:12px; overflow-x:auto; margin:0 -16px; padding:2px 16px 6px; scroll-snap-type:x mandatory; scroll-padding:0 16px; }
+  .work { flex:none; width:96px; scroll-snap-align:start; display:grid; gap:6px; justify-items:start; background:none; border:0; padding:0; color:inherit; font:inherit; text-align:left; cursor:pointer; transition:transform .3s var(--spring); }
+  .work:active { transform:scale(.95); }
+  html[data-skin] .work { box-shadow:none !important; background:none !important; border-radius:0 !important; } /* 테마의 단추 모양(입체 그림자 등)은 표지에만 */
+  .work img, .work .em { width:96px; height:136px; object-fit:cover; border-radius:12px; box-shadow:var(--shadow); display:grid; place-items:center; font-size:2rem; background:var(--fill); }
+  .work b { font-size:.78rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all; } .work small { font-size:.85rem; min-height:1em; }
+  .house-empty { text-align:center; padding:28px 12px; color:var(--muted); line-height:1.6; }
+  .enter { position:fixed; inset:0; z-index:5; display:grid; place-items:center; background:var(--bg); pointer-events:none; }
+  .enter svg.hs { width:120px; }
+  dialog#house.open .enter { animation:enterFade .7s var(--ease-out) .25s forwards; } dialog#house.open .enter svg { animation:enterZoom .8s var(--ease-out) .15s forwards; transform-origin:50% 80%; }
+  @keyframes enterZoom { to { transform:scale(9); } } @keyframes enterFade { to { opacity:0; visibility:hidden; } }
+  dialog#house.open .house-body { animation:houseIn .6s var(--ease-out) .45s both; } @keyframes houseIn { from { opacity:0; transform:translateY(14px); } }
+  @media (prefers-reduced-motion: reduce) { .enter { display:none; } dialog#house.open .house-body { animation:none; } }
   /* 당겨서 새로고침 */
   .ptr { position:fixed; top:calc(env(safe-area-inset-top) + 8px); left:0; right:0; margin:0 auto; width:40px; height:40px; border-radius:50%; z-index:9; display:grid; place-items:center;
     background:var(--glass); box-shadow:0 4px 16px rgba(0,0,0,.12); color:var(--accent); opacity:0; transform:translateY(calc(var(--pull, 0px) - 56px)) rotate(calc(var(--pull, 0px) * 4)); pointer-events:none; }
@@ -824,6 +850,7 @@
   <symbol id="i-s-movie" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6l2 4M12 6l2 4M17 6l2 4"/></symbol>
   <symbol id="i-s-play" viewBox="0 0 24 24"><path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10"/></symbol>
   <symbol id="i-s-friends" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.6-.3 4.6 1.2 5 4.3"/></symbol>
+  <symbol id="i-s-notice" viewBox="0 0 24 24"><path d="M4 10v4a1 1 0 0 0 1 1h2l6 4V5L7 9H5a1 1 0 0 0-1 1z"/><path d="M16.5 9a4 4 0 0 1 0 6M8 15l1 5"/></symbol>
   <symbol id="i-s-habit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
   <symbol id="i-l-book" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z"/><path d="M12 6v14"/></symbol>
   <symbol id="i-l-buy" viewBox="0 0 24 24"><path d="M3 4h2l2.5 11h11L21 7H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></symbol>
@@ -948,6 +975,17 @@
       <ul id="frIn" class="fr-list"></ul><ul id="frOut" class="fr-list"></ul><ul id="frMine" class="fr-list"></ul></div>
     <h2 class="town-title">친구네 동네</h2>
     <div id="town" class="town"></div>
+  </section>
+  <section id="v-notice" hidden>
+    <div class="seg ntabs" role="tablist" aria-label="공지사항 보기"><button type="button" data-nt="news" aria-pressed="true">공지</button><button type="button" data-nt="guide">설치 방법</button><button type="button" data-nt="faq">Q&amp;A</button><button type="button" data-nt="road">개선 중</button></div>
+    <div id="nBody"></div>
+    <form id="reportForm" class="card report">
+      <h2>🙌 제보하기</h2>
+      <p class="hint">안 되는 것, 헷갈리는 것, 있었으면 하는 기능 무엇이든 좋아요. 어떤 화면에서 그랬는지 같이 적어 주시면 더 빨리 고칠 수 있어요.</p>
+      <textarea id="reportText" rows="3" maxlength="1000" placeholder="예) 방탈출 검색에서 ○○ 테마가 안 나와요" aria-label="제보 내용"></textarea>
+      <button class="primary" style="width:100%">보내기</button>
+    </form>
+    <p class="hint" id="nVer" style="text-align:center"></p>
   </section>
   <section id="v-habit" hidden>
     <div class="card hcal">
@@ -1235,9 +1273,17 @@
   <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="themeClose">완료</button></div>
 </dialog>
 <dialog id="house" aria-labelledby="houseTitle">
-  <div class="door l" aria-hidden="true"></div><div class="door r" aria-hidden="true"></div>
-  <header class="house-top"><button type="button" id="houseClose" class="icon-btn" aria-label="나가기">‹</button><div><h2 id="houseTitle"></h2><small id="houseIntro2"></small></div></header>
-  <div id="houseRooms" class="rooms"></div>
+  <div class="enter" id="houseEnter" aria-hidden="true"></div>
+  <header class="house-top"><button type="button" id="houseClose" class="icon-btn" aria-label="나가기">‹</button><h2 id="houseTitle"></h2></header>
+  <div class="house-body"><div class="card house-hero" id="houseHero"></div><div id="houseRooms" class="rooms"></div></div>
+</dialog>
+<dialog id="updSheet" class="sheet" aria-labelledby="updTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <div class="upd-hero" aria-hidden="true">✨</div>
+  <h2 id="updTitle" style="text-align:center;margin:0">새 버전으로 업데이트됐어요</h2>
+  <p class="hint" id="updVer" style="text-align:center;margin:4px 0 12px"></p>
+  <div id="updList" class="upd-list"></div>
+  <div class="row sheet-foot" style="margin-top:12px"><button type="button" id="updMore">공지사항 보기</button><button type="button" id="updOk" class="primary">확인</button></div>
 </dialog>
 <dialog id="pickSheet" class="sheet" aria-labelledby="pickTitle">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
@@ -1290,6 +1336,7 @@
 <div id="toast" role="alert"></div>
 <div id="ptr" class="ptr" aria-hidden="true"><svg class="i"><use href="#i-sync"/></svg></div>
 <div id="syncPop" role="status" aria-live="polite"></div>
+<script src="notices.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

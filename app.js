@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v87'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v88'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1179,7 +1179,8 @@ const SECTIONS = {
   movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '위시리스트']] },
   play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '본 공연'], ['playWant', '위시리스트']] },
   habit: { title: '습관', icon: '🔥' },
-  friends: { title: '친구', icon: '🏡' }, // 친구 맺기 + 친구 집 놀러 가기
+  friends: { title: '친구', icon: '🏡' },
+  notice: { title: '공지사항', icon: '📢' }, // 공지 · 홈 화면 추가 방법 · Q&A · 개선 중 · 제보 // 친구 맺기 + 친구 집 놀러 가기
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
 let sec = 'money', curList = 'book';
@@ -1524,20 +1525,21 @@ function setSection(k) {
   if ($('#lq').value) $('#lq').value = '';
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
-  const money = k === 'money', habit = k === 'habit', home = k === 'home', fr = k === 'friends';
-  $('#v-dash').hidden = !home; $('#v-friends').hidden = !fr;
+  const money = k === 'money', habit = k === 'habit', home = k === 'home', fr = k === 'friends', nt = k === 'notice';
+  $('#v-dash').hidden = !home; $('#v-friends').hidden = !fr; $('#v-notice').hidden = !nt;
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
   $('#lNav').hidden = true; // 목록 화면이면 renderLists가 다시 켬
   requestAnimationFrame(() => movePill(document.querySelector('nav')));
-  $('#v-lists').hidden = money || habit || home || fr;
+  $('#v-lists').hidden = money || habit || home || fr || nt;
   $('#v-habit').hidden = !habit;
-  if (!money) replay($('#v-' + (home ? 'dash' : habit ? 'habit' : fr ? 'friends' : 'lists')), 'enter');
+  if (!money) replay($('#v-' + (home ? 'dash' : habit ? 'habit' : fr ? 'friends' : nt ? 'notice' : 'lists')), 'enter');
   if (money) show(curView);
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
     setFab((habit && !isFriend()) || home || fr); // 친구는 습관도 ＋로 직접 만듦
+    if (nt) { setFab(true); renderNotice(); window.scrollTo(0, 0); return; }
     if (fr) { renderSocial(); if (stale('me')) loadMe().then(() => sec === 'friends' && renderSocial()); window.scrollTo(0, 0); return; }
     if (home) { renderDash(); Promise.all([stale('lists') && refreshLists(), stale('habits') && refreshHabits()]).then(() => sec === 'home' && renderDash()); window.scrollTo(0, 0); return; }
     if (habit) { renderHabits(); if (stale('habits')) refreshHabits(); window.scrollTo(0, 0); return; }
@@ -1823,6 +1825,7 @@ $('#menu').addEventListener('transitionend', e => { if (e.target === e.currentTa
 function openMenu(dragging) {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" data-hidden="${store.get('menuHidden', []).includes(k) && k !== sec ? 1 : 0}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}${k === 'money' ? '' : '<span class="eye" data-eye role="button" aria-label="메뉴에서 숨기기·보이기">👁</span>'}</button>`).join('');
+  paintNoticeDot();
   const nm = me.token === cfg.token && me.name ? me.name : '';
   $('#menuName').textContent = nm || (isFriend() ? '친구' : '이름을 정해 주세요');
   $('#menuRole').textContent = isFriend() ? '친구 접속코드' : cfg.token ? '내 시트 · 눌러서 설정' : '아직 연결 전';
@@ -2302,7 +2305,7 @@ else lockNow();
 // 앱을 켜면 처음엔 「오늘」 (설정 → 시작 화면에서 가계부·마지막 화면으로 바꿀 수 있음). ?sec= 바로가기는 그대로
 // ── 친구 탭: 친구 신청·수락, 친구 집 놀러 가기 (친구가 공개한 작품이 방마다 선반에) ──
 const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play'];
-const ROOMS = [['book', '📚 책장', 'title', 'buy'], ['escape', '🔐 방탈출 포스터 벽', 'theme', 'escapeWant'], ['board', '🎲 보드게임 선반', 'name', 'boardWant'], ['movie', '🎬 영화관', 'title', 'movieWant'], ['play', '🎭 공연 티켓함', 'title', 'playWant']];
+const ROOMS = [['book', '📚 책장', 'title', 'buy'], ['escape', '🔐 방탈출', 'theme', 'escapeWant'], ['board', '🎲 보드게임', 'name', 'boardWant'], ['movie', '🎬 영화', 'title', 'movieWant'], ['play', '🎭 공연', 'title', 'playWant']];
 const iconImg = k => (ICONS.find(x => x[0] === k) || ICONS[0])[2];
 const social = () => me.social || { friends: [], incoming: [], outgoing: [], house: {} };
 const roofColor = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360} 62% 62%)`;
@@ -2353,20 +2356,22 @@ $('#v-friends').addEventListener('change', e => {
 // 놀러 가기: 문이 열리고 → 방마다 선반에 친구가 공개한 작품
 let visiting = null;
 async function visitHouse(name) {
-  const d = $('#house'); visiting = null;
-  $('#houseTitle').textContent = `${name}네 집`; $('#houseIntro2').textContent = ''; $('#houseRooms').innerHTML = '<p class="hint" style="text-align:center">문 두드리는 중… 🚪</p>';
-  d.classList.remove('open'); d.showModal();
+  const d = $('#house'), f = social().friends.find(x => x.name === name) || {}; visiting = null;
+  $('#houseTitle').textContent = `${name}네 집`;
+  $('#houseEnter').innerHTML = houseSvg(name, f.icon);
+  const hero = h => `${houseSvg(name, h.icon)}<div><b>${esc(name)}</b><p>${esc(h.intro || '문패에 아직 소개가 없어요')}</p><div class="house-stats">${h.items ? ROOMS.filter(([k]) => h.items[k]?.length).map(([k, t]) => `<span>${t.split(' ')[1]} ${h.items[k].length}</span>`).join('') : ''}</div></div>`;
+  $('#houseHero').innerHTML = hero(f); $('#houseRooms').innerHTML = '<p class="house-empty">문 두드리는 중…</p>';
+  d.classList.remove('open'); d.showModal(); d.scrollTop = 0;
+  requestAnimationFrame(() => d.classList.add('open'));
   try {
     const r = await api(null, '&what=house&name=' + encodeURIComponent(name));
     if (!r.house) throw new Error(r.error || '시트의 Code.gs를 새 버전으로 배포해 주세요');
-    visiting = r.house;
-    $('#houseIntro2').textContent = visiting.intro || '';
+    visiting = r.house; $('#houseHero').innerHTML = hero(visiting);
     const rooms = ROOMS.filter(([k]) => visiting.items[k]?.length);
-    $('#houseRooms').innerHTML = rooms.length ? rooms.map(([k, t, key]) => `<section class="room"><h3>${t} <small>${visiting.items[k].length}</small></h3><div class="shelf">${visiting.items[k].map((i, n) =>
+    $('#houseRooms').innerHTML = rooms.length ? rooms.map(([k, t, key]) => `<section class="card room"><h2><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${t.split(' ').slice(1).join(' ')} <small>${visiting.items[k].length}</small></h2><div class="shelf">${visiting.items[k].map((i, n) =>
       `<button type="button" class="work" data-k="${k}" data-n="${n}">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'em',textContent:'${LIST_ICON[k]}'}))">` : `<span class="em">${LIST_ICON[k]}</span>`}<b>${esc(i[key])}</b><small>${esc(i.rating || i.stars || '')}</small></button>`).join('')}</div></section>`).join('')
-      : `<p class="hint" style="text-align:center">아직 ${esc(name)}님이 공개한 작품이 없어요 · 텅 빈 집이에요 🕸️</p>`;
-  } catch (e) { $('#houseRooms').innerHTML = `<p class="hint" style="text-align:center">문이 안 열려요 · ${esc(String(e.message).replace(/^입력값 오류: /, ''))}</p>`; }
-  requestAnimationFrame(() => d.classList.add('open'));
+      : `<div class="card house-empty">아직 ${esc(name)}님이 공개한 작품이 없어요<br>조금 뒤에 다시 놀러 와요 🙂</div>`;
+  } catch (e) { $('#houseRooms').innerHTML = `<div class="card house-empty">문이 안 열려요 · ${esc(String(e.message).replace(/^입력값 오류: /, ''))}</div>`; }
 }
 $('#houseClose').addEventListener('click', () => $('#house').close());
 $('#houseRooms').addEventListener('click', async e => {
@@ -2380,9 +2385,53 @@ $('#houseRooms').addEventListener('click', async e => {
   queue({ action: 'listSave', list: want, item }).then(ok => ok && toast(`「${i[key]}」 위시리스트에 담았어요`));
 });
 
+// ── 공지사항 (notices.js): 공지 · 홈 화면 추가 방법 · Q&A · 개선 중 · 제보하기 ──
+const verNum = v => +(String(v).match(/v(\d+)/)?.[1] || 0);
+const noticeHTML = (n, isNew) => `<article class="notice${isNew ? ' new' : ''}"><div class="meta"><span class="ntag${n.pin ? ' pin' : ''}">${esc(n.tag)}</span>${esc(n.date)}</div><h3>${esc(n.title)}</h3><ul>${n.body.map(x => `<li>${esc(x)}</li>`).join('')}</ul></article>`;
+let nTab = 'news';
+function renderNotice() {
+  const seen = store.get('noticeSeen', ''), list = [...NOTICES].sort((a, b) => (b.pin || 0) - (a.pin || 0));
+  $('#v-notice').querySelectorAll('[data-nt]').forEach(b => b.setAttribute('aria-pressed', b.dataset.nt === nTab));
+  const g = k => `<div class="card"><h2>${GUIDE[k].title}</h2><div class="gsteps">${GUIDE[k].steps.map(([img, t], i) => `<div class="gstep"><p><b>${i + 1}</b>${esc(t)}</p><img src="${img}" alt="${i + 1}단계: ${esc(t)}" loading="lazy"></div>`).join('')}<p class="gnote">💡 ${esc(GUIDE[k].note)}</p></div></div>`;
+  $('#nBody').innerHTML = nTab === 'news' ? list.map(n => `<div class="card">${noticeHTML(n, !seen || NOTICES.findIndex(x => x.id === seen) > NOTICES.indexOf(n) || !NOTICES.some(x => x.id === seen))}</div>`).join('')
+    : nTab === 'guide' ? g(/android/i.test(navigator.userAgent) ? 'android' : 'ios') + g(/android/i.test(navigator.userAgent) ? 'ios' : 'android')
+    : nTab === 'faq' ? `<div class="card">${FAQ.map(([q, a]) => `<details class="faq"><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div>`
+    : `<div class="card"><h2>지금 고치고 있어요 🛠️</h2><p class="hint">시간이 조금 걸리는 것들이에요. 끝나면 공지로 알려드릴게요.</p>${ROADMAP.map(([ic, t, d]) => `<div class="road"><span>${ic}</span><div><b>${esc(t)}</b><p>${esc(d)}</p></div></div>`).join('')}</div>`;
+  $('#nVer').textContent = '앱 버전 ' + APP_VERSION.replace('gagyebu-', '');
+  store.set('noticeSeen', NOTICES[0].id); paintNoticeDot();
+}
+const paintNoticeDot = () => document.querySelector('#menuList [data-sec=notice]')?.classList.toggle('dot', store.get('noticeSeen', '') !== NOTICES[0].id);
+$('#v-notice').addEventListener('click', e => { const t = e.target.closest('[data-nt]')?.dataset.nt; if (t) { nTab = t; renderNotice(); } });
+$('#reportForm').addEventListener('submit', async e => {
+  e.preventDefault(); const t = $('#reportText').value.trim();
+  if (!t) return $('#reportText').focus();
+  if (!cfg.token) return toast('로그인한 뒤에 보낼 수 있어요');
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  try { const r = await api({ action: 'report', text: t, ver: APP_VERSION, ua: navigator.userAgent }); if (!r.ok) throw new Error(r.error); $('#reportText').value = ''; toast('제보 고마워요! 꼼꼼히 보고 고칠게요 🙏'); }
+  catch (err) { toast('못 보냈어요 · ' + String(err.message).replace(/^입력값 오류: /, '')); }
+  finally { btn.disabled = false; }
+});
+// 새 버전으로 바뀌었으면 한 번: 「업데이트됐어요」 창 + (알림 허용했으면) 휴대폰 알림
+function showUpdate() {
+  const seen = store.get('seenVer', '') || (cfg.token ? 'gagyebu-v87' : ''), now = APP_VERSION; // 이 기능 전부터 쓰던 사람은 v87에서 올라온 걸로
+  store.set('seenVer', now);
+  if (!seen || seen === now || !cfg.token) return; // 처음 설치한 사람에겐 안 띄움
+  if (navigator.webdriver && !store.get('testUpd')) return; // 자동 테스트 화면에선 안 띄움 (tests/notice.js는 testUpd로 켬)
+  const fresh = NOTICES.filter(n => n.ver > verNum(seen) && !n.pin);
+  if (!fresh.length) return;
+  $('#updVer').textContent = `${seen.replace('gagyebu-', '')} → ${now.replace('gagyebu-', '')}`;
+  $('#updList').innerHTML = fresh.map(n => `<div class="notice">${noticeHTML(n)}</div>`).join('');
+  const open = () => document.querySelector('dialog[open]') ? setTimeout(open, 1200) : $('#updSheet').showModal();
+  setTimeout(open, 900);
+  if ('Notification' in window && Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification('하트가 업데이트됐어요 ✨', { body: fresh[0].title, icon: 'icon-192.png', tag: 'update-' + now })).catch(() => {});
+}
+$('#updOk').addEventListener('click', () => $('#updSheet').close());
+$('#updMore').addEventListener('click', () => { $('#updSheet').close(); nTab = 'news'; setSection('notice'); });
+
 { const st = store.get('startSec', 'home'), want = st === 'last' ? store.get('sec', 'home') : st;
   if (!new URLSearchParams(location.search).get('sec')) setSection(SECTIONS[want] && !(want === 'money' && isFriend()) ? want : 'home'); }
 applyRole(); loadMe(); // 친구 코드면 가계부 대신 독서로 (시트에 다시 물어 확인)
+showUpdate();
 function setBrag(on) {
   brag = on; store.set('brag', on);
   document.body.classList.toggle('brag', on); $('#bragBadge').hidden = !on;
