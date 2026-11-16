@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v79'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v80'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -70,6 +70,21 @@ HTMLDialogElement.prototype.close = function (rv) {
 // 로그인·잠금 화면은 ESC로도 안 닫힘
 document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogElement) { e.preventDefault(); if (!['login', 'lock'].includes(e.target.id)) e.target.close(); } }, true);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+// 앱 안 확인·입력 창 (아이폰 기본 알림창 대신, 앱 디자인 그대로). 확인 → true / 입력값, 취소 → false / null
+// window.__askAuto는 자동 테스트가 대답할 때만 씀
+function ask(msg, { ok = '확인', danger = false, input = null, type = 'text' } = {}) {
+  if (window.__askAuto) return Promise.resolve(window.__askAuto(msg, input != null)).then(v => input != null ? (v === true ? input : v) : !!v);
+  return new Promise(done => {
+    const d = document.querySelector('#ask'), f = d.querySelector('form'), i = f.querySelector('input');
+    d.querySelector('#askMsg').textContent = msg; i.hidden = input == null; i.type = type; i.value = input ?? '';
+    const yes = f.querySelector('#askOk'); yes.textContent = ok; yes.classList.toggle('danger-fill', danger);
+    let answered = false; const finish = v => { if (answered) return; answered = true; d.close(); done(v); };
+    f.onsubmit = e => { e.preventDefault(); finish(input != null ? i.value : true); };
+    d.querySelector('#askNo').onclick = () => finish(input != null ? null : false);
+    d.onclose = () => finish(input != null ? null : false);
+    d.showModal(); if (input != null) setTimeout(() => { i.focus(); i.select(); }, 50);
+  });
+}
 const localISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString(); };
 const persist = () => { store.set('data2', data); store.set('pending', pending); };
 // 동기화·저장·삭제 완료는 잠깐 뜨는 팝업으로만, 연결 문제 같은 건 상단에 남김
@@ -102,6 +117,11 @@ let lastErr = '';
 function showError(e, where) {
   lastErr = String(e?.message || e || '');
   const [text, act] = explain(e);
+  // 시트가 느리거나 잠깐 안 닿는 건 일시적: 저장 대기가 없으면 상단에 계속 띄우지 않고 한 번만 알림
+  if (/45초|닿지 못했어요|Load failed|Failed to fetch/.test(lastErr) && !pending.length) {
+    $('#status').textContent = ''; $('#status').classList.remove('err');
+    return toast('시트가 느려서 지금은 저장된 내용을 보여 줘요 · 잠시 뒤 새로고침해 주세요');
+  }
   $('#status').textContent = (where ? where + ' · ' : '') + text;
   $('#status').classList.add('err'); statusAct = act;
 }
@@ -143,9 +163,9 @@ function renderPending() {
   $('#pendList').innerHTML = pending.map((o, k) => `<li><span>${esc(opText(o))}</span><button type="button" class="small danger" data-k="${k}">버리기</button></li>`).join('');
   $('#pendRetry').disabled = !pending.length;
 }
-$('#pendList').addEventListener('click', e => {
+$('#pendList').addEventListener('click', async e => {
   const k = e.target.closest('[data-k]')?.dataset.k;
-  if (k == null || !confirm('이 항목을 시트에 보내지 않고 버릴까요?')) return;
+  if (k == null || !(await ask('이 항목을 시트에 보내지 않고 버릴까요?', { ok: '버리기', danger: true }))) return;
   pending.splice(+k, 1); persist(); renderPending();
   if (!pending.length) setStatus('');
 });
@@ -680,8 +700,8 @@ $('#entryForm').addEventListener('submit', e => {
   queue({ action: 'save', item: it });
   checkBudget(m, it.major, before);
 });
-$('#entryDelete').addEventListener('click', () => {
-  if (!confirm('이 거래를 시트에서 삭제할까요?')) return;
+$('#entryDelete').addEventListener('click', async () => {
+  if (!(await ask('이 거래를 시트에서 삭제할까요?', { ok: '삭제', danger: true }))) return;
   const id = F.tid.value;
   data.items = data.items.filter(i => i.id !== id);
   $('#entry').close();
@@ -764,13 +784,13 @@ $('#calGrid').addEventListener('touchend', e => {
 });
 
 // ── 예산 ──
-$('#budgets').addEventListener('click', e => {
+$('#budgets').addEventListener('click', async e => {
   const cat = e.target.closest('[data-cat]')?.dataset.cat;
   if (cat) { catOpen = cat; renderCatSheet(); return $('#catSheet').showModal(); }
   const mj = e.target.closest('[data-major]')?.dataset.major;
   if (!mj) return;
   if (!majorsAll().includes(mj)) return toast('「카테고리」 탭에 없는 대분류예요');
-  const v = prompt(`${mj} 월 예산 (원)`, data.meta.budgets[mj] || '');
+  const v = await ask(`${mj} 월 예산 (원)`, { input: String(data.meta.budgets[mj] || ''), type: 'number', ok: '저장' });
   if (v === null) return;
   const n = Math.round(+String(v).replace(/[^\d]/g, ''));
   if (!(n >= 0)) return;
@@ -798,9 +818,9 @@ async function pushSubscribe() {
 }
 
 // ── 반복 ──
-$('#recList').addEventListener('click', e => {
+$('#recList').addEventListener('click', async e => {
   const id = e.target.dataset.rid;
-  if (!id || !confirm('반복을 삭제할까요? (이미 기록된 거래는 남아요)')) return;
+  if (!id || !(await ask('반복을 삭제할까요? (이미 기록된 거래는 남아요)', { ok: '삭제', danger: true }))) return;
   data.meta.recurring = data.meta.recurring.filter(r => r.id !== id);
   queue({ action: 'recDelete', id });
 });
@@ -918,9 +938,11 @@ async function loggedIn(r) {
   me = { token: r.token, role: r.role, name: r.name, people: [], friends: [] }; store.set('me', me);
   ss.set('unlockedAt', Date.now()); // 방금 로그인했으면 Face ID 다시 안 물음
   $('#login').close();
-  await hello(r.name);
-  applyRole(); loadMe();
-  if (isFriend()) setSection('home'); else { setSection('money'); refresh(); }
+  // 웰컴 스크린이 시트 불러오기를 가려 줌: 다 불러올 때까지(최대 15초) 기다렸다가 넘김
+  const ready = Promise.all([loadMe(), isFriend() ? Promise.all([refreshLists(), refreshHabits()]) : refresh()]).catch(() => {});
+  await hello(r.name, ready);
+  applyRole();
+  if (isFriend()) setSection('home'); else { setSection('money'); render(); }
 }
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -933,23 +955,27 @@ $('#loginForm').addEventListener('submit', async e => {
 });
 $('#loginAdv').addEventListener('click', () => { openConn(); }); // 다른 사람 시트 주소·예전 방식 링크
 // 「○○님 반가워요」를 펜으로 쓰듯 그린 뒤, 종이 한 장이 넘어가며 앱이 보임
-function hello(name) {
+function hello(name, ready = Promise.resolve()) {
+  const wait = Promise.race([ready, new Promise(r => setTimeout(r, 15000))]);
   return new Promise(done => {
     const t = `${name || ''}님 반가워요`, el = $('#hello'), svg = $('#helloSvg'), d = Math.min(3, .5 + t.length * .12);
     $('#helloText').textContent = t;
-    if (calm()) { el.hidden = false; setTimeout(() => { el.hidden = true; done(); }, 700); return; }
+    if (calm()) { el.hidden = false; Promise.all([wait, new Promise(r => setTimeout(r, 700))]).then(() => { el.hidden = true; done(); }); return; }
     svg.innerHTML = `<text x="50%" y="62" text-anchor="middle" class="write" style="--d:${d}s">${esc(t)}</text><circle class="nib" r="5" cx="0" cy="66"/>`;
     const w = svg.querySelector('text').getComputedTextLength?.() || 300;
     svg.querySelector('.nib').style.cssText = `--d:${d}s;--x0:${180 - w / 2}px;--x1:${180 + w / 2}px`;
-    el.classList.remove('turn'); el.hidden = false;
-    setTimeout(() => el.classList.add('turn'), d * 1000 + 350);
-    setTimeout(() => { el.hidden = true; el.classList.remove('turn'); done(); }, d * 1000 + 1250);
+    el.classList.remove('turn', 'waiting'); el.hidden = false;
+    let wrote = false; setTimeout(() => { wrote = true; el.classList.add('waiting'); }, d * 1000 + 350); // 다 썼는데 아직 불러오는 중이면 「불러오는 중」 점
+    Promise.all([wait, new Promise(r => setTimeout(r, d * 1000 + 350))]).then(() => {
+      el.classList.remove('waiting'); el.classList.add('turn');
+      setTimeout(() => { el.hidden = true; el.classList.remove('turn'); done(); }, 900);
+    });
   });
 }
 // 로그아웃: 이 기기에 저장된 연결·기록 사본을 지우고 로그인 화면으로 (시트의 기록은 그대로)
-function logout() {
+async function logout() {
   const left = pending.length ? `\n아직 시트에 못 보낸 ${pending.length}건은 사라져요.` : '';
-  if (!confirm('로그아웃할까요?' + left)) return;
+  if (!(await ask('로그아웃할까요?' + left, { ok: '로그아웃', danger: true }))) return;
   ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
   cfg = { url: cfg.url, token: '' }; store.set('cfg', cfg); me = {};
   document.querySelectorAll('dialog[open]').forEach(d => d.id !== 'login' && d.close());
@@ -958,7 +984,10 @@ function logout() {
 $('#menuLogout').addEventListener('click', logout);
 $('#prefLogout').addEventListener('click', logout);
 document.addEventListener('click', e => { const k = e.target.closest('[data-help]')?.dataset.help; if (k && HELP[k]) openHelp(k); });
-$('#reload').addEventListener('click', () => sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
+$('#reload').addEventListener('click', async () => {
+  forceFresh = true;
+  try { await (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : sec === 'home' ? Promise.all([refreshLists(), refreshHabits()]).then(renderDash) : refreshLists()); } finally { forceFresh = false; }
+});
 // ── 테마 5가지: 기능은 같고 모양만 완전히 다름. html[data-skin]으로 index.html의 테마 CSS가 켜짐 (첫 화면 깜빡임 없게 head에서도 미리 적용) ──
 const SKINS = [['main', '메인 테마', '#f2f4f6', '#ffffff', '#3182f6', '10px', '0 1px 2px rgba(0,0,0,.06)'],
   ['clay', '클레이모피즘', '#fbefe5', '#fff7f0', '#ff7a3d', '12px', '3px 3px 6px rgba(214,160,125,.35), inset 1px 1px 2px #fff'],
@@ -1007,7 +1036,7 @@ function openPrefs() {
   $('#prefAvatar').textContent = (nm || '♥').slice(0, 1);
   $('#prefThemeVal').textContent = SKINS.find(x => x[0] === skin())[1];
   document.querySelectorAll('#prefs .owner-only').forEach(el => { el.hidden = isFriend() || !cfg.token; });
-  renderFriends(); loadMe();
+  renderFriends(); if (stale('me')) loadMe();
   if (!$('#prefs').open) $('#prefs').showModal();
 }
 $('#openSettings').addEventListener('click', openPrefs);
@@ -1115,7 +1144,7 @@ $('#homeEdit').addEventListener('click', () => {
 // ── BAB:ZIP 섹션: MONEY · 독서 · 방탈출 · 보드게임 ──
 const SECTIONS = {
   home: { title: '오늘', icon: '🏠' }, // 친구(게스트)의 첫 화면 대시보드. 주인도 메뉴에서 볼 수 있음
-  money: { title: 'MONEY', icon: '💰' },
+  money: { title: '가계부', icon: '💰' },
   book: { title: '독서', icon: '📚', tabs: [['book', '읽는 책'], ['buy', '위시리스트'], ['wish', '추천 목록']] },
   escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록'], ['escapeWant', '위시리스트']] },
   board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록'], ['boardWant', '위시리스트']] },
@@ -1201,9 +1230,9 @@ function renderStats(k, a) {
   }
   el.hidden = !h; el.innerHTML = h;
 }
-$('#lStats').addEventListener('click', e => {
+$('#lStats').addEventListener('click', async e => {
   if (!e.target.closest('#goalSet')) return;
-  const y = localISO().slice(0, 4), g = store.get('bookGoal', {}), v = prompt(`${y}년에 몇 권 읽을까요?`, g[y] || 24);
+  const y = localISO().slice(0, 4), g = store.get('bookGoal', {}), v = await ask(`${y}년에 몇 권 읽을까요?`, { input: String(g[y] || 24), type: 'number', ok: '정하기' });
   if (v == null) return;
   g[y] = Math.max(0, Math.round(+v) || 0); store.set('bookGoal', g); renderLists();
 });
@@ -1221,6 +1250,8 @@ function renderLists() {
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
   $('#lInfo').textContent = listInfo(curList, all) + (q ? ` · 검색 ${a.length}건` : '');
   renderStats(curList, all);
+  $('#lNotice').hidden = !['board', 'movie', 'play'].includes(sec);
+  $('#lNotice').textContent = '🔎 이 목록은 아직 인터넷 자동 검색이 없어요 · 제목·포스터는 직접 입력해 주세요';
   // 독서는 보기 3가지 (나머지 목록은 늘 목록 보기)
   const view = VIEWS[sec] ? lView() : 'list';
   $('#lViews').hidden = !VIEWS[sec];
@@ -1387,9 +1418,9 @@ $('#qForm').addEventListener('submit', e => {
   saveQuotes([...quotesOf(qBook), t]).then(ok => ok && toast('밑줄 문장을 저장했어요'));
   requestAnimationFrame(() => $('#qCards').scrollTo({ left: 1e6, behavior: 'smooth' }));
 });
-$('#qCards').addEventListener('click', e => {
+$('#qCards').addEventListener('click', async e => {
   const k = e.target.closest('[data-qdel]')?.dataset.qdel;
-  if (k != null && confirm('이 문장을 지울까요?')) saveQuotes(quotesOf(qBook).filter((_, n) => n !== +k));
+  if (k != null && await ask('이 문장을 지울까요?', { ok: '지우기', danger: true })) saveQuotes(quotesOf(qBook).filter((_, n) => n !== +k));
 });
 $('#qClose').addEventListener('click', () => $('#quotes').close());
 // 한 줄 리뷰: 가운데 항목의 리뷰를 바로 쓰고 저장 (독서 「한 줄 리뷰」, 나머지는 「후기」 칸)
@@ -1407,6 +1438,9 @@ $('#lViews').addEventListener('click', e => {
   const v = e.target.closest('[data-v]')?.dataset.v;
   if (v) { store.set(VIEWS[sec], v); renderLists(); }
 });
+const loadedAt = {}, FRESH_MS = 180e3;
+const stale = k => Date.now() - (loadedAt[k] || 0) > FRESH_MS;
+let forceFresh = false; // 새로고침 단추를 누른 뒤 한 번은 시트 캐시도 건너뜀
 async function refreshLists() {
   if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {
@@ -1414,9 +1448,9 @@ async function refreshLists() {
     document.body.classList.toggle('loading', !(lists[curList] || []).length);
     if (await sync()) {
       try {
-        const r = await api(null, '&what=lists');
+        const r = await api(null, '&what=lists' + (forceFresh ? '&fresh=1' : ''));
         if (!r.lists) setStatus('시트의 Code.gs를 새 버전으로 배포해야 목록을 볼 수 있어요');
-        else { lists = r.lists; store.set('lists', lists); if (r.people && me.token === cfg.token) { me.people = r.people; store.set('me', me); } setStatus('시트와 동기화됨'); }
+        else { loadedAt.lists = Date.now(); lists = r.lists; store.set('lists', lists); if (r.people && me.token === cfg.token) { me.people = r.people; store.set('me', me); } setStatus('시트와 동기화됨'); }
       } catch (e) { showError(e); }
     }
     renderLists();
@@ -1446,12 +1480,12 @@ function setSection(k) {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
     setFab((habit && !isFriend()) || home); // 친구는 습관도 ＋로 직접 만듦
-    if (home) { renderDash(); Promise.all([refreshLists(), refreshHabits()]).then(() => sec === 'home' && renderDash()); window.scrollTo(0, 0); return; }
-    if (habit) { renderHabits(); refreshHabits(); window.scrollTo(0, 0); return; }
+    if (home) { renderDash(); Promise.all([stale('lists') && refreshLists(), stale('habits') && refreshHabits()]).then(() => sec === 'home' && renderDash()); window.scrollTo(0, 0); return; }
+    if (habit) { renderHabits(); if (stale('habits')) refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
     $('#lq').value = '';
     renderLists();
-    refreshLists();
+    if (stale('lists')) refreshLists(); // 이미 불러온 목록은 그대로 (3분 지나면 다시)
     window.scrollTo(0, 0);
   }
 }
@@ -1497,7 +1531,7 @@ function renderHabits(month = hF.open) {
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
       <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${due.length && ds <= today ? `<span class="hdots" aria-hidden="true">${due.map(h =>
-        `<i class="${h.done.includes(stampOf(ds)) ? 'on' : ''}" style="--c:${esc(h.color)}"></i>`).join('')}</span>` : ''}</button>`;
+        `<i class="${h.done.includes(stampOf(ds)) ? 'on' : ''}" style="--c:${esc(hColor(h))}"></i>`).join('')}</span>` : ''}</button>`;
   }
   $('#hGrid').innerHTML = html + (month ? tail : '');
   hF.week = month && hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
@@ -1506,7 +1540,7 @@ function renderHabits(month = hF.open) {
   $('#hInfo').textContent = habits.length ? `${hDay === today ? '오늘' : `${+hDay.slice(5, 7)}월 ${+hDay.slice(8)}일`} ${n}/${due.length} 완료` : '';
   $('#hList').innerHTML = due.map(h => {
     const on = h.done.includes(st), s = streak(h);
-    return `<li style="--c:${esc(h.color)}" class="${on ? 'done' : ''}" data-hd="${esc(h.id)}"><span class="hic" aria-hidden="true">${esc(hIcon(h))}</span>
+    return `<li style="--c:${esc(hColor(h))}" class="${on ? 'done' : ''}" data-hd="${esc(h.id)}"><span class="hic" aria-hidden="true">${esc(hIcon(h))}</span>
       <div><span>${esc(h.name)}</span><small>${s ? `🔥 ${s}일 연속 · ` : ''}총 ${h.total}일${h.enc ? ' · ' + esc(h.enc) : ''}</small></div>
       <button type="button" class="hcheck" data-h="${esc(h.id)}" aria-pressed="${on}" aria-label="${esc(h.name)} ${on ? '체크 해제' : '체크'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></li>`;
   }).join('') || (isFriend() ? `<li class="empty hoff"><b>${habits.length ? '이날은 할 습관이 없어요' : '나만의 습관을 만들어 보세요'}</b><span>＋를 눌러 물 마시기, 운동처럼 매일 체크할 습관을 추가해요.</span></li>`
@@ -1521,7 +1555,8 @@ async function refreshHabits() {
     busy(true);
     if (await sync()) {
       try {
-        const r = await api(null, '&what=habits');
+        const r = await api(null, '&what=habits' + (forceFresh ? '&fresh=1' : ''));
+        if (r.habits) loadedAt.habits = Date.now();
         if (!r.habits) setStatus('시트의 Code.gs를 새 버전으로 배포해야 습관을 볼 수 있어요');
         else { habits = myHabits(r.habits); hOff = false; store.set('habits', habits); setStatus(isFriend() ? '시트와 동기화됨' : '틱틱과 동기화됨'); }
       } catch (e) { if (!habits.length && /틱틱/.test(e.message)) hOff = true; else showError(e); } // 한 번도 연결한 적 없으면 오류 대신 안내
@@ -1559,7 +1594,10 @@ function openHabit(h) {
   $('#hdTitle').textContent = `${hIcon(h)} ${h.name}`;
   $('#hdDelete').hidden = !h.local; $('#hdDelete').dataset.id = h.id;
   $('#hdStats').innerHTML = `<span><b>${streak(h)}일</b><small>지금 연속</small></span><span><b>${best}일</b><small>최장 연속</small></span><span><b>${yearN}일</b><small>올해 완료</small></span><span><b>${h.total}일</b><small>전체</small></span>`;
-  const g = $('#hdGrid'); g.style.setProperty('--c', h.color || 'var(--accent)'); g.innerHTML = cells;
+  const g = $('#hdGrid'); g.style.setProperty('--c', hColor(h) || 'var(--accent)'); g.innerHTML = cells;
+  $('#hdColors').dataset.id = h.id;
+  $('#hdColors').innerHTML = H_COLOR.concat(['#5ac8fa', '#ff9f0a', '#8e8e93']).filter((c, i, a) => a.indexOf(c) === i).map(c => `<button type="button" data-c="${c}" style="--c:${c}" aria-pressed="${hColor(h).toLowerCase() === c}" aria-label="이 색으로"></button>`).join('')
+    + `<label class="hd-custom" aria-label="직접 고르기"><input type="color" value="${esc(hColor(h))}"><span>＋</span></label>`;
   $('#hDetail').showModal();
   g.parentElement.scrollLeft = 1e6; // 이번 주가 보이게
 }
@@ -1575,16 +1613,18 @@ function renderDash() {
   // 오늘 습관 고리
   const due = habits.filter(x => dueOn(x, today)), done = due.filter(x => x.done.includes(st)).length, pct = due.length ? done / due.length : 0, C = 2 * Math.PI * 34;
   $('#dashHabit').innerHTML = `<button type="button" class="dash-ring" data-go="habit" aria-label="오늘 습관 ${done}/${due.length}"><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34" class="tr"/><circle cx="40" cy="40" r="34" class="pg" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/></svg><b>${done}<small>/${due.length}</small></b></button>
-    <div><h2>오늘 습관</h2><div class="dash-chips">${due.map(x => `<button type="button" class="small" data-hab="${esc(x.id)}" aria-pressed="${x.done.includes(st)}" style="--c:${esc(x.color)}">${esc(hIcon(x))} ${esc(x.name)}</button>`).join('') || '<span class="hint">＋ 습관에서 오늘 할 습관을 만들어요</span>'}</div></div>`;
+    <div><h2>오늘 습관</h2><div class="dash-chips">${due.map(x => `<button type="button" class="small" data-hab="${esc(x.id)}" aria-pressed="${x.done.includes(st)}" style="--c:${esc(hColor(x))}">${esc(hIcon(x))} ${esc(x.name)}</button>`).join('') || '<span class="hint">＋ 습관에서 오늘 할 습관을 만들어요</span>'}</div></div>`;
   // 읽는 책 + 올해 목표
   const reading = L('book').filter(i => i.status === '읽는중' && !i.shared).slice(-1)[0], y = today.slice(0, 4), goal = +store.get('bookGoal', {})[y] || 0;
   const read = L('book').filter(i => i.status === '완독' && i.year === y + '년' && !i.shared).length;
-  $('#dashBook').innerHTML = `<h2>읽는 책</h2>${reading ? `<button type="button" class="dash-book" data-go="book">${reading.image ? `<img src="${esc(reading.image)}" alt="" referrerpolicy="no-referrer">` : '<span class="cover ph">📖</span>'}<span><b>${esc(reading.title)}</b><small>${esc(reading.author || '')}</small></span></button>` : '<p class="hint">읽고 있는 책이 없어요 · 독서에서 ＋로 추가해요</p>'}
+  $('#dashBook').innerHTML = `<h2>읽는 책</h2>${reading ? `<button type="button" class="dash-book" data-go="book">${reading.image ? `<img src="${esc(reading.image)}" alt="" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=&quot;cover ph&quot;>📖</span>'">` : '<span class="cover ph">📖</span>'}<span><b>${esc(reading.title)}</b><small>${esc(reading.author || '')}</small></span></button>` : '<p class="hint">읽고 있는 책이 없어요 · 독서에서 ＋로 추가해요</p>'}
     <div class="dash-goal"><span>올해 ${read}권 읽음${goal ? ` / 목표 ${goal}권` : ''}</span><span class="bar"><i style="--w:${goal ? Math.min(100, read / goal * 100) : 0}%"></i></span></div>`;
   // 최근 기록 (모든 취미에서 날짜순 5개)
-  const all = RECENT_KEYS.flatMap(([k, key, ic]) => L(k).filter(i => !i.shared).map(i => ({ k, ic, t: i[key], d: i.date || (i.year ? `${parseInt(i.year)}-${String(parseInt(i.month) || 1).padStart(2, '0')}` : ''), r: i.rating || i.stars || '' })));
+  const all = RECENT_KEYS.flatMap(([k, key, ic]) => L(k).filter(i => !i.shared).map(i => ({ k, ic, img: i.image || '', t: i[key], d: i.date || (i.year ? `${parseInt(i.year)}-${String(parseInt(i.month) || 1).padStart(2, '0')}` : ''), r: i.rating || i.stars || '' })));
   const recent = all.filter(x => x.t).sort((a, b) => (b.d || '').localeCompare(a.d || '')).slice(0, 5);
-  $('#dashRecent').innerHTML = recent.map(x => `<li data-go="${x.k}"><span class="em">${x.ic}</span><div><span>${esc(x.t)}</span><small>${esc(x.d)}</small></div><b>${esc(x.r)}</b></li>`).join('') || '<li class="empty">아직 기록이 없어요 · 메뉴에서 독서·방탈출을 골라 ＋로 남겨요</li>';
+  // 표지·포스터가 있으면 작은 그림, 안 불러와지면 이모지로 (이미지가 깨진 채로 남지 않게)
+  const thumb = x => x.img ? `<img class="thumb" src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'em',textContent:'${x.ic}'}))">` : `<span class="em">${x.ic}</span>`;
+  $('#dashRecent').innerHTML = recent.map(x => `<li data-go="${x.k}">${thumb(x)}<div><span>${esc(x.t)}</span><small>${esc(x.d)}</small></div><b>${esc(x.r)}</b></li>`).join('') || '<li class="empty">아직 기록이 없어요 · 메뉴에서 독서·방탈출을 골라 ＋로 남겨요</li>';
   // 함께한 기록 (친구가 나를 태그한 것)
   const shared = RECENT_KEYS.flatMap(([k, key, ic]) => L(k).filter(i => i.shared).map(i => ({ k, ic, t: i[key], by: i.shared, d: i.date || '' }))).sort((a, b) => b.d.localeCompare(a.d)).slice(0, 4);
   $('#dashShared').hidden = !shared.length;
@@ -1603,6 +1643,15 @@ $('#v-dash').addEventListener('click', e => {
   const g = e.target.closest('[data-go]'); if (!g) return;
   setSection(g.dataset.go); if (g.dataset.list) { curList = g.dataset.list; renderLists(); }
 });
+// 습관 색: 내가 고른 색(이 기기에 저장) > 운동은 기본 하늘색(절주 분홍과 헷갈리지 않게) > 틱틱·시트 색
+const hColor = h => store.get('habitColors', {})[h.id] || (/^운동/.test(h.name) ? '#5ac8fa' : h.color) || '#3182f6';
+function setHabitColor(id, c) {
+  const m = store.get('habitColors', {}); m[id] = c; store.set('habitColors', m);
+  const h = habits.find(x => x.id === id); renderHabits(); if (sec === 'home') renderDash();
+  if (h) { $('#hdGrid').style.setProperty('--c', c); $('#hdColors').querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === c)); }
+}
+$('#hdColors').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) setHabitColor($('#hdColors').dataset.id, b.dataset.c); });
+$('#hdColors').addEventListener('input', e => { if (e.target.type === 'color') setHabitColor($('#hdColors').dataset.id, e.target.value); });
 // ── 친구 습관 (틱틱 없이 시트에): 만들기·지우기 ──
 const hIcon = h => HICON[h.icon] || (h.local && h.icon) || '⭐';
 const H_EMOJI = ['💧', '🏃', '📖', '🧘', '💊', '🥗', '😴', '✍️', '🚭', '🍺'], H_COLOR = ['#3182f6', '#20c997', '#f59f00', '#f06595', '#845ef7', '#fa5252'];
@@ -1622,9 +1671,9 @@ $('#haForm').addEventListener('submit', e => {
   queue({ action: 'habitAdd', habitId: h.id, name: h.name, icon: h.icon, color: h.color }).then(ok => ok && toast(`「${h.name}」 습관을 만들었어요`));
 });
 $('#haCancel').addEventListener('click', () => $('#habitAdd').close());
-$('#hdDelete').addEventListener('click', () => {
+$('#hdDelete').addEventListener('click', async () => {
   const h = habits.find(x => x.id === $('#hdDelete').dataset.id);
-  if (!h || !confirm(`「${h.name}」 습관과 체크 기록을 지울까요?`)) return;
+  if (!h || !(await ask(`「${h.name}」 습관과 체크 기록을 지울까요?`, { ok: '지우기', danger: true }))) return;
   habits = habits.filter(x => x !== h); store.set('habits', habits); $('#hDetail').close(); renderHabits();
   queue({ action: 'habitDelete', habitId: h.id });
 });
@@ -1635,6 +1684,7 @@ async function loadMe() {
   if (!cfg.token) return;
   try {
     const r = await api(null, '&what=me');
+    loadedAt.me = Date.now();
     if (!r.role) return; // 예전 Code.gs
     me = { token: cfg.token, role: r.role, name: r.name || '', people: r.people || [], friends: r.friends || [] }; store.set('me', me);
   } catch (e) { return; }
@@ -1664,11 +1714,11 @@ function flyPlane(from) {
 // 공유: 아이폰 공유 시트(카톡·메시지 등). 공유를 못 쓰거나 실패하면 링크 + 복사하기/취소 창
 async function shareInvite(name, inv, btn) {
   if (!inv) return toast('초대 링크를 만드는 중이에요 · 잠시 뒤 다시 눌러 주세요');
-  const url = friendLink(inv), text = `${name}님, 하트에 초대해요! 아래 링크를 누르면 바로 시작돼요`;
+  const url = friendLink(inv), text = `${name}님, 하트 : 해빗 트래커에 초대해요! 링크를 누르면 바로 시작돼요`;
   if (btn) flyPlane(btn);
   try { await navigator.clipboard.writeText(url); } catch (e) {} // 먼저 조용히 복사해 둠
   if (navigator.share) {
-    try { await navigator.share({ title: '하트 초대', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ title: '하트 : 해빗 트래커', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요`; $('#shareUrl').value = url; $('#shareSheet').showModal();
 }
@@ -1686,10 +1736,10 @@ $('#inviteBtn').addEventListener('click', () => {
   const btn = $('#inviteBtn');
   friendOp({ action: 'invite', name: n }, r => { $('#inviteName').value = ''; shareInvite(n, r.invite, btn); });
 });
-$('#friendList').addEventListener('click', e => {
+$('#friendList').addEventListener('click', async e => {
   const sh = e.target.closest('[data-share]'), u = e.target.closest('[data-uninvite]')?.dataset.uninvite;
   if (sh) shareInvite(sh.dataset.name, sh.dataset.share, sh);
-  if (u && confirm('이 친구를 삭제할까요? 친구는 더 이상 로그인할 수 없어요 (기록은 시트에 남아요)')) friendOp({ action: 'uninvite', code: u });
+  if (u && await ask('이 친구를 삭제할까요? 친구는 더 이상 로그인할 수 없어요 (기록은 시트에 남아요)', { ok: '삭제', danger: true })) friendOp({ action: 'uninvite', code: u });
 });
 function applyRole() {
   document.body.classList.toggle('friend', isFriend());
@@ -1955,8 +2005,8 @@ $('#lMove').addEventListener('click', e => {
   if (!to || !lEditing) return;
   $('#lItem').close(); moveBook(lEditing, curList, to);
 });
-$('#lDelete').addEventListener('click', () => {
-  if (!confirm('이 기록을 시트에서 삭제할까요?')) return;
+$('#lDelete').addEventListener('click', async () => {
+  if (!(await ask('이 기록을 시트에서 삭제할까요?', { ok: '삭제', danger: true }))) return;
   const id = $('#lForm').dataset.id;
   lists[curList] = (lists[curList] || []).filter(i => i.id !== id);
   store.set('lists', lists);
@@ -2100,7 +2150,7 @@ function setBrag(on) {
   render(); if (sec === 'habit') renderHabits();
 }
 $('#bragBtn').addEventListener('click', () => { setBrag(!brag); $('#menu').close(); toast(brag ? '자랑하기 모드: 금액과 거래 내용을 가렸어요' : '자랑하기 모드를 껐어요'); });
-$('#bragBadge').addEventListener('click', () => { if (confirm('자랑하기 모드를 끌까요? 금액이 다시 보여요')) setBrag(false); });
+$('#bragBadge').addEventListener('click', async () => { if (await ask('자랑하기 모드를 끌까요? 금액이 다시 보여요', { ok: '끄기' })) setBrag(false); });
 // ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 시트(구글 드라이브 OCR)가 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
 // 이미 시트에 있는 거래(같은 날 같은 금액)와 사진 안에서 겹치는 건 체크를 빼 둠
 const ruleFor = s => { s = (s || '').toLowerCase(); return s ? data.meta.rules.find(r => r[0] && s.includes(r[0].toLowerCase())) : null; };

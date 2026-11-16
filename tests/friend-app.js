@@ -54,7 +54,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.match(await p.textContent('#hList'), /물 마시기/);
   await p.click('#hList .hcheck'); await p.waitForTimeout(400);
   assert.equal(posts.at(-1).action, 'habitCheck'); assert.equal(posts.at(-1).habitId, add.habitId);
-  p.once('dialog', d => d.accept()); await p.click('#hList li div'); await p.waitForSelector('#hDetail[open]'); await p.click('#hdDelete'); await p.waitForTimeout(400);
+  await p.evaluate(() => { window.__askAuto = () => true; }); await p.click('#hList li div'); await p.waitForSelector('#hDetail[open]'); await p.click('#hdDelete'); await p.waitForTimeout(400);
   assert.equal(posts.at(-1).action, 'habitDelete');
   // 설정: 친구 코드로 연결됨, 초대 칸 없음
   await p.click('#openSettings'); await p.waitForTimeout(400);
@@ -62,7 +62,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
 
   // 주인: 설정에서 친구 초대 → 접속 링크 복사
   const o = await page('owner-pw', 'owner');
-  assert.equal(await o.p.textContent('#appTitle'), 'MONEY');
+  assert.equal(await o.p.textContent('#appTitle'), '가계부');
   await o.p.click('#openSettings'); await o.p.waitForTimeout(600);
   assert.match(await o.p.textContent('#friendList'), /민지/); assert.equal(await o.p.inputValue('#myName'), '나리');
   await o.p.evaluate(() => { navigator.share = undefined; }); // 공유 시트가 없는 경우 → 링크 + 복사하기/취소 창

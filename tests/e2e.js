@@ -85,7 +85,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   p.on('pageerror', e => { console.error('PAGE ERROR', e); process.exit(1); });
   let promptAnswer = '';
-  p.on('dialog', d => d.type() === 'prompt' ? d.accept(promptAnswer) : d.accept());
+  await p.exposeFunction('__askAuto', (m, isPrompt) => isPrompt ? promptAnswer : true); // 앱 안 확인·입력 창에 자동으로 대답
   await p.route('https://script.google.com/**', async rt => {
     if (offline || (postBlocked && rt.request().method() === 'POST')) return rt.abort();
     if (oldServer && /[?&]op=/.test(rt.request().url())) return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"items":[]}' });
@@ -356,8 +356,8 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   console.log('font:', await p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family)[0] || 'not loaded'; }));
 
   // 12) BAB:ZIP 메뉴: 독서·방탈출·보드게임
-  assert.equal(await p.textContent('#appTitle'), 'MONEY');
-  const go = async name => { await p.click('#menuBtn'); await p.click(`#menuList button:has-text("${name}")`); await status(/동기화됨/); };
+  assert.equal(await p.textContent('#appTitle'), '가계부');
+  const go = async name => { await p.click('#menuBtn'); await p.click(`#menuList button:has-text("${name}")`); await p.waitForTimeout(500); }; // 목록은 한 번 불러오면 3분 동안 다시 안 부름
   await go('독서');
   assert.equal(await p.textContent('#appTitle'), '독서');
   assert.equal(await p.getAttribute('#lViews [data-v=flow]', 'aria-pressed'), 'true', 'cover flow is the default');
@@ -424,7 +424,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(await p.textContent('#appTitle'), '보드게임', '마지막 섹션 기억');
   assert.equal(await p.locator('#lList li[data-id]').count(), 1);
   await p.screenshot({ path: SHOTS + '/l-board.png' });
-  await go('MONEY');
+  await go('가계부');
   assert.ok(await p.isVisible('nav') && await p.isVisible('#monthRow') && await p.isVisible('#v-home'));
   // 13) 영화·연극 저장
   await go('영화'); await p.click('#lViews [data-v=list]');
@@ -437,7 +437,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(extraTabs['연극·뮤지컬 기록'].d[1][2], '뮤지컬'); assert.ok(extraTabs['연극·뮤지컬 기록'].d[1][9], 'play id');
 
   // 14) 날짜 휠
-  await p.click('#menuBtn'); await p.click('#menuList button:has-text("MONEY")'); await p.waitForSelector('nav', { state: 'visible' });
+  await p.click('#menuBtn'); await p.click('#menuList button:has-text("가계부")'); await p.waitForSelector('nav', { state: 'visible' });
   await p.click('nav button[data-view=home]');
   await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#entry', { state: 'visible' });
   // 날짜: 한 줄 버튼 → 캘린더 창에서 고르기
@@ -477,7 +477,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
 
 
   // 16) 달력 손잡이: 누르면 접히고 다시 펼쳐짐
-  await p.click('#menuBtn'); await p.click('#menuList button:has-text("MONEY")'); await p.waitForSelector('nav', { state: 'visible' });
+  await p.click('#menuBtn'); await p.click('#menuList button:has-text("가계부")'); await p.waitForSelector('nav', { state: 'visible' });
   await p.click('nav button[data-view=cal]');
   const clipH = () => p.evaluate(() => document.querySelector('#calClip').offsetHeight);
   const openH = await clipH();

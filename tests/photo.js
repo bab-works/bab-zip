@@ -42,6 +42,6 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.equal(await p.textContent('#exp'), '••,•••원'); assert.equal(await p.isVisible('#bragBadge'), true);
   assert.doesNotMatch(await p.textContent('#v-home'), /\d{1,3},\d{3}원/, 'no amount visible on home');
   await p.reload(); await p.waitForTimeout(800); assert.equal(await p.textContent('#exp'), '••,•••원', 'kept after reload');
-  p.once('dialog', d => d.accept()); await p.click('#bragBadge'); await p.waitForTimeout(700);
+  await p.evaluate(() => { window.__askAuto = () => true; }); await p.click('#bragBadge'); await p.waitForTimeout(700);
   assert.match(await p.textContent('#exp'), /^[\d,]+원$/); assert.equal(await p.isVisible('#bragBadge'), false);
   console.log('PHOTO OK'); await b.close(); process.exit(0); });

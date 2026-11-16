@@ -173,8 +173,21 @@ const newId_ = (p, n) => p + Utilities.getUuid().replace(/-/g, '').slice(0, n);
 // 예전에 초대한 친구에게도 짧은 초대 ID를 만들어 줌 (주인이 설정을 열 때)
 function ensureInvites_() {
   const sh = ss_().getSheetByName(FRIEND_TAB_); if (!sh) return;
-  sh.getRange(1, 4, 1, 2).setValues([['초대ID', '비밀번호']]);
-  body_(sh).forEach((r, i) => { if (r[0] && r[1] && !r[3]) sh.getRange(i + 2, 4).setValue(newId_('i', 9)); });
+  const rows = body_(sh), miss = rows.map((r, i) => r[0] && r[1] && !r[3] ? i : -1).filter(i => i >= 0);
+  if (!miss.length) return; // 대부분은 쓸 게 없음 → 잠금·쓰기 없이 바로 (예전엔 매번 써서 느렸음)
+  withLock_(() => { sh.getRange(1, 4, 1, 2).setValues([['초대ID', '비밀번호']]); miss.forEach(i => sh.getRange(i + 2, 4).setValue(newId_('i', 9))); });
+}
+// ── 빠르게: 목록·습관 응답을 CacheService에 잠깐 저장. 기록이 바뀌면 DATA_VER가 바뀌어 옛 캐시는 안 씀 ──
+// shortcut: 시트에서 손으로 고친 건 최대 10분 늦게 보임 (앱의 새로고침 단추는 캐시를 건너뜀)
+const cache_ = () => { try { return CacheService.getScriptCache(); } catch (e) { return null; } };
+const dataVer_ = () => PropertiesService.getScriptProperties().getProperty('DATA_VER') || '0';
+const bumpVer_ = () => PropertiesService.getScriptProperties().setProperty('DATA_VER', String(Date.now()));
+function cached_(key, sec, fresh, make) {
+  const c = cache_(), k = key + ':' + dataVer_();
+  if (c && !fresh) { const hit = c.get(k); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  const v = make();
+  if (c) { try { c.put(k, JSON.stringify(v), sec); } catch (e) {} } // 100KB가 넘으면 그냥 안 담음
+  return v;
 }
 // 로그인: 이름 + 비밀번호 → 접속 토큰 (주인: 시트 비밀번호, 친구: 자기가 정한 비밀번호). 같은 이름으로 10번 넘게 틀리면 10분 쉬기
 function login_(b) {
@@ -624,22 +637,25 @@ function doGet(e) {
   if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'me') {
-      if (me.role === 'owner') withLock_(ensureInvites_);
+      if (me.role === 'owner') ensureInvites_();
       return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
     if (me.role === 'friend' && !['escape', 'book', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
-    if (e.parameter.what === 'habits') return out_({ ok: true, habits: me.role === 'owner' ? habits_() : fHabits_(me) }); // 주인은 틱틱, 친구는 시트
+    const fresh = e.parameter.fresh === '1';
+    if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트
     if (e.parameter.what === 'lists') {
-      return out_(withLock_(() => ({ ok: true, lists: listsFor_(me), people: people_() })));
+      return out_({ ok: true, ...cached_('L:' + (me.code || 'owner'), 600, fresh, () => withLock_(() => ({ lists: listsFor_(me), people: people_() }))) });
     }
     // since=날짜: 그날 이후 거래만 보내고, 그 이전 줄은 지문(old.h)만 보냄 → 앱은 지문이 같으면 가진 것을 그대로 씀
     // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
     const since = /^\d{4}-\d{2}-\d{2}$/.test(e.parameter.since || '') ? e.parameter.since : '';
     return out_(withLock_(() => {
-      runRecurring_();
+      // 반복 거래 채우기는 하루 한 번이면 충분 (매번 돌려서 느렸음). 반복 규칙을 바꾸면 다시 돎
+      const props = PropertiesService.getScriptProperties(), day = fmt_(new Date(), 'yyyy-MM-dd');
+      if (props.getProperty('REC_RUN') !== day) { runRecurring_(); props.setProperty('REC_RUN', day); }
       const sh = tx_(), last = last_(sh);
       ids_(sh, last);
       const v = (last < 2 ? [] : sh.getRange(2, 1, last - 1, ID_COL).getValues()).filter(r => r[0] !== '');
@@ -695,6 +711,8 @@ function writeOp_(b) {
       else throw new Error('알 수 없는 동작');
       SpreadsheetApp.flush(); // 시트 규칙 위반 같은 오류를 여기서 잡아 글로 돌려줌 (안 그러면 오류 페이지가 가서 앱엔 Load failed로 보임)
     });
+    if (!/^(save|delete|recSave|recDelete|budget)$/.test(b.action)) bumpVer_(); // 목록·습관·친구가 바뀌면 캐시 새로
+    if (/^rec(Save|Delete)$/.test(b.action)) PropertiesService.getScriptProperties().setProperty('REC_RUN', ''); // 새 반복 규칙은 다음 불러오기 때 바로 채움
     return out_({ ok: true, wrote: true, ...res });
   } catch (err) {
     // 잠금 대기 초과 같은 일시적 오류는 앱이 다시 보내도록 retry 표시

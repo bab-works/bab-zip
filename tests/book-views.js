@@ -105,7 +105,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.locator('#lNav [data-list=movieWant]').count(), 1, 'want-to-see tab');
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=book]'); await p.waitForTimeout(400);
   // 독서 목표 고리: 눌러서 정하면 올해 완독 / 목표
-  p.once('dialog', d => d.accept('10')); await p.click('#goalSet');
+  await p.evaluate(() => { window.__askAuto = () => '10'; }); await p.click('#goalSet');
   assert.match(await p.textContent('#goalSet'), /\/10/);
   // 밑줄 문장: 가운데 책에서 열어 추가
   await p.click('#fQuotes'); await p.waitForSelector('#quotes[open]');
