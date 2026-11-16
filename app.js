@@ -1714,11 +1714,11 @@ function flyPlane(from) {
 // 공유: 아이폰 공유 시트(카톡·메시지 등). 공유를 못 쓰거나 실패하면 링크 + 복사하기/취소 창
 async function shareInvite(name, inv, btn) {
   if (!inv) return toast('초대 링크를 만드는 중이에요 · 잠시 뒤 다시 눌러 주세요');
-  const url = friendLink(inv), text = `${name}님, 하트 : 해빗 트래커에 초대해요! 링크를 누르면 바로 시작돼요`;
+  const url = friendLink(inv), text = `${name}님, 하트 : 하비 트래커에 초대해요! 링크를 누르면 바로 시작돼요`;
   if (btn) flyPlane(btn);
   try { await navigator.clipboard.writeText(url); } catch (e) {} // 먼저 조용히 복사해 둠
   if (navigator.share) {
-    try { await navigator.share({ title: '하트 : 해빗 트래커', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ title: '하트 : 하비 트래커', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요`; $('#shareUrl').value = url; $('#shareSheet').showModal();
 }
