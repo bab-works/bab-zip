@@ -113,6 +113,17 @@ assert.equal(get(MJ, 'lists').lists.escape.find(i => i.id === 'e1').pub, true);
 const hs = get(JH, 'house', { name: '민지' }).house;
 assert.deepEqual([hs.name, hs.icon, hs.intro, hs.items.escape.map(i => i.theme), hs.items.escape[0].with], ['민지', 'c3', '방탈출 좋아해요', ['오시리스'], undefined]);
 assert.equal(get(OWNER, 'house', { name: '민지' }).house.items.escape.length, 1, 'owner is friends with invited guests');
+// 한 번에: 여러 개 공개 / 여러 개 저장·삭제
+post(MJ, { action: 'listSave', list: 'movie', item: { id: 'mv1', title: 'A' } }); post(MJ, { action: 'listSave', list: 'movie', item: { id: 'mv2', title: 'B' } });
+assert.equal(post(MJ, { action: 'setPub', list: 'movie', ids: ['mv1', 'mv2', 'mv1'], on: true }).ok, true);
+assert.deepEqual(get(OWNER, 'house', { name: '민지' }).house.items.movie.map(i => i.title).sort(), ['A', 'B']);
+assert.equal(post(MJ, { action: 'setPub', list: 'movie', ids: ['mv1', 'mv2'], on: false }).ok, true);
+assert.equal(get(OWNER, 'house', { name: '민지' }).house.items.movie.length, 0);
+assert.equal(post(MJ, { action: 'bulk', ops: [{ action: 'listSave', list: 'movie', item: { id: 'mv1', title: 'A', rating: '😍' } }, { action: 'listDelete', list: 'movie', id: 'mv2' }] }).ok, true);
+assert.deepEqual(get(MJ, 'lists').lists.movie.filter(i => !i.shared).map(i => [i.title, i.rating]), [['A', '😍']]);
+assert.equal(post(MJ, { action: 'bulk', ops: [{ action: 'listDelete', list: 'escape', id: 's:owner:x' }] }).ok, false, 'cannot bulk-touch shared');
+assert.equal(post(OWNER, { action: 'bulk', ops: [{ action: 'listSave', list: 'escape', item: { id: 'o1', theme: '사라진 목격자', result: '성공' } }] }).ok, true);
+assert.equal(get(OWNER, 'lists').lists.escape.find(i => i.id === 'o1').result, '성공');
 // 친구 끊기 → 집도 태그도 안 보임
 assert.equal(post(JH, { action: 'friendRemove', name: '민지' }).ok, true);
 assert.equal(get(JH, 'house', { name: '민지' }).ok, false); assert.equal(get(JH, 'lists').lists.escape.length, 0);

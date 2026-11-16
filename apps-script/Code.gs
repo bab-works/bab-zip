@@ -252,7 +252,7 @@ function social_(me) {
   const folks = folks_(), rels = rels_(), k = keyOf_(me), hs = houses_();
   return { friends: friendKeys_(k, rels, folks).map(x => ({ name: folks[x], icon: (hs[x] || {}).icon || '', intro: (hs[x] || {}).intro || '' })),
     incoming: rels.filter(r => r.st === '요청' && r.b === k && folks[r.a]).map(r => folks[r.a]), outgoing: rels.filter(r => r.st === '요청' && r.a === k && folks[r.b]).map(r => folks[r.b]),
-    house: hs[k] || {} };
+    house: hs[k] || {}, ownerName: folks.owner || '' };
 }
 // friendRequest(이름): 상대가 이미 나에게 신청했으면 바로 친구 / friendAccept / friendRemove(거절·취소·끊기 모두)
 function friendOp_(me, b) {
@@ -276,10 +276,20 @@ function setHouse_(me, b) {
 }
 // 공개한 작품: 「공개」 탭 [사람 열쇠, 목록, id]. 시트 원래 목록 탭은 건드리지 않음
 function pubs_() { const sh = ss_().getSheetByName(PUB_TAB_); return sh ? body_(sh).map((r, i) => ({ k: String(r[0]), list: String(r[1]), id: String(r[2]), row: i + 2 })) : []; }
+// 하나(id) 또는 여러 개(ids)를 한 번에: 읽기 한 번, 추가는 한 번에 쓰고, 지우기는 아래 줄부터
 function setPub_(me, b) {
-  if (!LISTS[b.list] || !b.id || String(b.id).startsWith('s:')) throw new Error('입력값 오류');
-  const sh = tab_(PUB_TAB_, ['사람', '목록', 'id']), k = keyOf_(me), hit = pubs_().find(r => r.k === k && r.list === b.list && r.id === String(b.id));
-  if (b.on && !hit) sh.appendRow([k, b.list, String(b.id)]); else if (!b.on && hit) sh.deleteRow(hit.row);
+  const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).map(String).slice(0, 2000);
+  if (!LISTS[b.list] || !ids.length || ids.some(id => !id || id.startsWith('s:'))) throw new Error('입력값 오류');
+  const sh = tab_(PUB_TAB_, ['사람', '목록', 'id']), k = keyOf_(me), mine = {};
+  pubs_().filter(r => r.k === k && r.list === b.list).forEach(r => { mine[r.id] = r.row; });
+  if (b.on) { const add = ids.filter((id, i) => !mine[id] && ids.indexOf(id) === i).map(id => [k, b.list, id]); if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, 3).setValues(add); }
+  else ids.map(id => mine[id]).filter(Boolean).sort((x, y) => y - x).forEach(r => sh.deleteRow(r));
+}
+// 여러 기록을 한 번에 저장·삭제 (선택해서 상태 바꾸기·삭제·옮기기)
+function listOp_(me, o) {
+  if (!/^list(Save|Delete)$/.test(o.action) || String((o.item || {}).id || o.id).startsWith('s:')) throw new Error('입력값 오류');
+  if (me.role === 'friend') return o.action === 'listSave' ? fListSave_(me, o.list, o.item) : fListDelete_(me, o.list, o.id);
+  return o.action === 'listSave' ? listSave_(o.list, o.item) : listDelete_(o.list, o.id);
 }
 // 친구 집 구경: 친구가 공개한 기록만 (함께한 사람·비용은 빼고)
 const HOUSE_LISTS_ = ['book', 'escape', 'board', 'movie', 'play'];
@@ -826,6 +836,7 @@ function writeOp_(b) {
       else if (/^friend(Request|Accept|Remove)$/.test(b.action)) res = { social: friendOp_(me, b) };
       else if (b.action === 'setHouse') setHouse_(me, b);
       else if (b.action === 'setPub') setPub_(me, b);
+      else if (b.action === 'bulk') (Array.isArray(b.ops) ? b.ops : []).slice(0, 300).forEach(o => listOp_(me, o));
       else if (/^(invite|uninvite)$/.test(b.action)) res = invite_(b);
       else if (b.action === 'setPassword') res = setPassword_(me, b);
       else if (me.role === 'friend' && b.action === 'listSave') fListSave_(me, b.list, b.item);
