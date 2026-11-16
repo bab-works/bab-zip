@@ -102,6 +102,45 @@ function allowPhoto() {
   try { ocr_(png); Logger.log('✅ 사진 인식 준비 끝 · 이제 새 버전으로 배포하면 앱에서 돼요'); } catch (e) { Logger.log('❌ ' + e.message); }
 }
 
+// ── 방탈출 테마 검색: 전국방탈출(roomescape.co.kr) 공개 테마 페이지(사이트맵·robots 허용)를 천천히 읽어 「방탈출 테마 목록」 탭에 모아 둠 ──
+// 처음 한 번 함수 목록에서 escapeIndex를 실행해요. 한 번에 4분씩 읽고, 남으면 1분 뒤 저절로 이어서, 다 끝나면 매주 새 테마만 추가해요
+const ESC_TAB_ = '방탈출 테마 목록';
+function escParse_(url, html) {
+  const id = (url.match(/themeId=(\d+)/) || [])[1] || '';
+  const meta = p => { const m = html.match(new RegExp('<meta property="' + p + '" content="([^"]*)"')); return m ? m[1].replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>') : ''; };
+  const t = meta('og:title').replace(/ 방탈출 테마 후기 - 전국방탈출$/, ''), cut = t.lastIndexOf(' - ');
+  if (!id || cut < 0) return [id, '', '', '', '', url];
+  const genre = (meta('og:description').split(' · ')[1] || '').trim();
+  return [id, t.slice(0, cut), t.slice(cut + 3), /분$|평점/.test(genre) ? '' : genre, meta('og:image'), url];
+}
+function escapeIndex() {
+  const sh = ss_().getSheetByName(ESC_TAB_) || ss_().insertSheet(ESC_TAB_);
+  if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 6).setValues([['themeId', '테마', '매장', '장르', '포스터', '주소']]);
+  const have = new Set(sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0])) : []);
+  const locs = x => (x.match(/<loc>[^<]*<\/loc>/g) || []).map(s => s.replace(/<\/?loc>/g, '').replace(/&amp;/g, '&'));
+  const maps = locs(UrlFetchApp.fetch('https://www.roomescape.co.kr/sitemap.xml').getContentText()).filter(u => /sitemap-theme/.test(u));
+  const todo = [].concat(...maps.map(m => locs(UrlFetchApp.fetch(m).getContentText()))).filter(u => !have.has((u.match(/themeId=(\d+)/) || [])[1]));
+  const t0 = Date.now(); let i = 0;
+  for (; i < todo.length && Date.now() - t0 < 4 * 60e3; i += 10) { // 10쪽씩, 쉬어 가며 (사이트에 부담 안 주게)
+    const part = todo.slice(i, i + 10), rows = UrlFetchApp.fetchAll(part.map(u => ({ url: u, muteHttpExceptions: true }))).map((r, k) => escParse_(part[k], r.getContentText()));
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
+    Utilities.sleep(1000);
+  }
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'escapeIndex').forEach(t => ScriptApp.deleteTrigger(t));
+  if (i < todo.length) ScriptApp.newTrigger('escapeIndex').timeBased().after(60e3).create(); // 남은 건 1분 뒤 이어서
+  else ScriptApp.newTrigger('escapeIndex').timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create(); // 다 읽었으면 매주 새 테마만
+  Logger.log('방탈출 테마 ' + Math.min(i, todo.length) + '개 추가 · 남은 ' + Math.max(0, todo.length - i) + '개' + (i < todo.length ? ' (1분 뒤 저절로 이어서 읽어요)' : ' · 다 읽었어요'));
+}
+function escapeSearch_(q) {
+  const sh = ss_().getSheetByName(ESC_TAB_), k = String(q || '').replace(/\s+/g, '').toLowerCase();
+  if (!sh || sh.getLastRow() < 2) throw new Error('먼저 Apps Script에서 escapeIndex를 실행해 테마 목록을 만들어 주세요');
+  if (k.length < 1) return [];
+  const flat = s => String(s).replace(/\s+/g, '').toLowerCase();
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues().filter(r => r[1] && flat(r[1] + r[2]).includes(k))
+    .sort((a, b) => (flat(b[1]).startsWith(k) - flat(a[1]).startsWith(k)) || (flat(b[1]).includes(k) - flat(a[1]).includes(k)))
+    .slice(0, 6).map(r => ({ theme: String(r[1]), shop: String(r[2]), genre: String(r[3]), image: /^https:\/\//.test(r[4]) ? String(r[4]) : '', url: String(r[5]) }));
+}
+
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
 function bookSearch_(q) {
@@ -447,6 +486,7 @@ function doGet(e) {
   if (!authOk_(e.parameter.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
+    if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q) }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'book') return out_({ ok: true, books: bookSearch_(e.parameter.q) }); // 알라딘 검색 (시트 안 건드림)
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: habits_() }); // 시트를 안 건드려 잠금 불필요
     if (e.parameter.what === 'lists') {

@@ -16,7 +16,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request();
     if (q.method() === 'POST') { posts.push(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
-    rt.fulfill({ contentType: 'application/json', body: /what=book&/.test(q.url()) ? JSON.stringify({ ok: true, books: [{ title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/x/cover500/p.jpg' }] }) : /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
+    rt.fulfill({ contentType: 'application/json', body: /what=escape&/.test(q.url()) ? JSON.stringify({ ok: true, themes: [{ theme: '오시리스', shop: '서울이스케이프룸 홍대점', genre: '공포', image: 'https://image.roomsescape.org/theme/83.jpg', url: '' }] }) : /what=book&/.test(q.url()) ? JSON.stringify({ ok: true, books: [{ title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/x/cover500/p.jpg' }] }) : /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
   });
   await p.goto('http://localhost:8791/'); await p.waitForSelector('#lFlow .fc'); await p.waitForTimeout(COVERS ? 2500 : 600);
   // 기본은 커버플로우, 가장 최근(시트 맨 아래) 책이 가운데
@@ -78,6 +78,16 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.isVisible('#lViews'), true, 'escape also has 3 views');
   assert.equal(await p.isVisible('#lNav'), true, 'same tab bar everywhere'); assert.equal(await p.locator('#lNav [data-search]').count(), 1);
   assert.equal(await p.locator('#lNav .tab-pill').count(), 1, 'liquid glass pill');
+  // 방탈출 ＋ → 테마 검색 → 고르면 테마·매장·포스터가 채워진 입력 창
+  await p.click('#fab'); assert.deepEqual(await p.$$eval('#addMenu [data-add]', b => b.map(x => x.textContent)), ['테마 검색해서 추가', '직접 입력']);
+  await p.click('#addMenu [data-add=find]'); await p.waitForSelector('#bookFind[open]');
+  assert.equal(await p.textContent('#findTitle'), '테마 검색해서 추가');
+  await p.fill('#findQ', '오시리스'); await p.waitForSelector('#findList [data-to=escape]');
+  assert.match(await p.textContent('#findList'), /서울이스케이프룸 홍대점 · 공포/);
+  await p.click('#findList [data-to=escape]'); await p.waitForSelector('#lItem[open]');
+  assert.deepEqual([await p.inputValue('#lForm [name=theme]'), await p.inputValue('#lForm [name=shop]'), await p.inputValue('#lForm [name=image]')], ['오시리스', '서울이스케이프룸 홍대점', 'https://image.roomsescape.org/theme/83.jpg']);
+  assert.equal(await p.isHidden('#lDelete'), true, 'new record, not edit');
+  await p.click('#lCancel'); await p.waitForTimeout(300);
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'movies too');
   assert.equal(await p.locator('#lNav [data-list=movieWant]').count(), 1, 'want-to-see tab');

@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v70'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v71'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -684,20 +684,20 @@ const addMenu = open => {
   document.body.classList.toggle('adding', open); $('#fab').setAttribute('aria-expanded', open);
   if (open) { // 가계부: 사진·직접 / 독서: 책 검색·직접
     const opt = (k, icon, t) => `<button type="button" data-add="${k}"><svg class="i" aria-hidden="true"><use href="#${icon}"/></svg>${t}</button>`;
-    m.innerHTML = sec === 'book' ? opt('find', 'i-search', '책 검색해서 추가') + opt('manual', 'i-pen', '직접 입력') : opt('photo', 'i-photo', '사진으로 입력') + opt('manual', 'i-pen', '직접 입력');
+    m.innerHTML = (sec === 'book' ? opt('find', 'i-search', '책 검색해서 추가') : sec === 'escape' ? opt('find', 'i-search', '테마 검색해서 추가') : opt('photo', 'i-photo', '사진으로 입력')) + opt('manual', 'i-pen', '직접 입력');
     m.classList.remove('out'); m.hidden = false; return;
   }
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => sec === 'money' || sec === 'book' ? addMenu($('#addMenu').hidden) : openItem());
+$('#fab').addEventListener('click', () => ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
   addMenu(false);
   if (k === 'photo') $('#photoIn').click();
   else if (k === 'find') openFind();
-  else if (sec === 'book') openItem();
+  else if (sec !== 'money') openItem();
   else openEntry(null, $('#v-cal').hidden ? '' : selDay);
 });
 document.addEventListener('pointerdown', e => { if (document.body.classList.contains('adding') && !e.target.closest('#addMenu, #fab')) addMenu(false); });
@@ -1155,11 +1155,18 @@ $('#fAdd').addEventListener('click', () => sec === 'book' ? openFind() : openIte
 // ── 독서: 책을 검색해서 읽는 책 · 위시리스트 · 추천 목록에 바로 추가 (알라딘) ──
 const FIND_TO = [['book', '읽는 중'], ['buy', '위시리스트'], ['wish', '추천']];
 let findHits = [], findT = 0;
+// 방탈출은 전국방탈출(roomescape.co.kr) 공개 테마 페이지로 시트가 만든 목록에서 검색 → 고르면 테마·매장·포스터가 채워진 입력 창
+const escMode = () => sec === 'escape';
 function openFind() {
-  $('#findQ').value = ''; $('#findList').innerHTML = '<li class="empty">책 제목이나 저자를 검색해요</li>';
+  $('#findTitle').textContent = escMode() ? '테마 검색해서 추가' : '책 검색해서 추가';
+  $('#findQ').placeholder = escMode() ? '테마나 매장 이름' : '책 제목이나 저자';
+  $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${escMode() ? '테마나 매장 이름을 검색해요 · 전국방탈출 정보' : '책 제목이나 저자를 검색해요'}</li>`;
   $('#bookFind').showModal(); $('#findQ').focus();
 }
+const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
+    <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="escape">＋ 기록하기</button></div></div></li>`;
 const findRow = (b, k) => {
+  if (escMode()) return escRow(b, k);
   const has = FIND_TO.filter(([l]) => L(l).some(i => i.title === b.title)).map(([, n]) => n);
   return `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.title)}</span><small>${esc(b.author)}${has.length ? ' · ' + has.join('·') + '에 있어요' : ''}</small>
     <div class="find-to">${FIND_TO.map(([l, n]) => `<button type="button" class="small" data-k="${k}" data-to="${l}">＋ ${n}</button>`).join('')}</div></div></li>`;
@@ -1171,10 +1178,11 @@ $('#findQ').addEventListener('input', () => {
   $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
   findT = setTimeout(async () => {
     try {
-      const r = await api(null, '&what=book&q=' + encodeURIComponent(q));
+      const r = await api(null, `&what=${escMode() ? 'escape' : 'book'}&q=` + encodeURIComponent(q));
       if (q !== $('#findQ').value.trim()) return;
-      if (!r.books) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
-      findHits = r.books;
+      const hits = escMode() ? r.themes : r.books;
+      if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
+      findHits = hits;
       $('#findList').innerHTML = findHits.map(findRow).join('') || '<li class="empty">검색 결과가 없어요</li>';
     } catch (e) { $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
   }, 400);
@@ -1183,6 +1191,7 @@ $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.b
 $('#findList').addEventListener('click', e => {
   const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
   if (!b) return;
+  if (btn.dataset.to === 'escape') { $('#bookFind').close(); return openItem(null, { theme: b.theme, shop: b.shop, ...(b.image ? { image: b.image } : {}) }); } // 날짜·결과는 직접
   const to = btn.dataset.to, t = localISO(), arr = lists[to] = lists[to] || [];
   const item = { id: crypto.randomUUID(), title: b.title, author: b.author, memo: '', ...(b.image ? { image: b.image } : {}),
     ...{ book: { year: t.slice(0, 4) + '년', month: t.slice(5, 7) + '월', status: '읽는중' }, buy: { done: false }, wish: { kind: '추천받은 책' } }[to] };
@@ -1521,7 +1530,7 @@ document.addEventListener('error', e => {
 // 목록 항목 추가·수정 창 (필드 표로 자동 생성)
 // 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
 let lEditing = null;
-function openItem(it) {
+function openItem(it, pre) {
   const fs = LIST_FIELDS[curList], label = SECTIONS[sec].tabs.find(t => t[0] === curList)[1];
   lEditing = it || null;
   const opt = (n, base) => base.map(([v, l]) => `<label><input type="radio" name="${n}" value="${esc(v)}"><span>${esc(l)}</span></label>`).join('');
@@ -1542,7 +1551,7 @@ function openItem(it) {
     return `<label class="f${full}">${lab}<input name="${n}" type="${type}" ${extra}></label>`;
   }).join('');
   const f = $('#lForm').elements, today = localISO();
-  const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책' };
+  const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책', ...pre };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
   $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
   if (curList === 'book') { // 연도·월은 시간처럼 휠 하나로 (값은 원래 두 select에 그대로)
@@ -1557,7 +1566,7 @@ function openItem(it) {
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
   $('#lTitle').textContent = `${label} ${it ? '수정' : '추가'}`;
-  lPreview(it?.image || '');
+  lPreview((it || pre)?.image || '');
   $('#lItem').showModal();
 }
 // 책 제목을 치면 알라딘 검색 3권 → 고르면 제목·저자·표지 채움 (새로 추가할 때만)

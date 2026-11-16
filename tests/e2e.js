@@ -407,7 +407,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.click('#lViews [data-v=list]'); // 아래 테스트는 목록 보기에서
   const E = hobbySS['방탈출 기록'];
   assert.equal(E.d[2][14], 'id'); assert.equal(await p.locator('#lList li[data-id]').count(), 2);
-  await p.click('#fab'); await p.fill('#lForm [name=theme]', '새 테마'); await p.fill('#lForm [name=shop]', '키이스케이프');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#lForm [name=theme]', '새 테마'); await p.fill('#lForm [name=shop]', '키이스케이프');
   await p.click(`#lForm label:has(input[name=result][value="성공"])`); await p.click(`#lForm label:has(input[name=rating][value="😍"])`); await p.fill('#lForm [name=cost]', '28000');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(E.d[5][1], '새 테마'); assert.equal(ymd(E.d[5][0]), TODAY); assert.equal(E.d[5][5], '성공'); assert.equal(E.d[5][9], 28000); assert.equal(E.d[5][10], '😍');
