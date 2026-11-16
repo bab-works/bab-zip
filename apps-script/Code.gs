@@ -85,12 +85,22 @@ function ocr_(b64) {
   const head = Utilities.newBlob('--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'BABZIP 사진 인식 (자동 삭제)', mimeType: 'application/vnd.google-apps.document' }) + '\r\n--' + bd + '\r\nContent-Type: image/jpeg\r\n\r\n').getBytes();
   const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ko', { method: 'post', headers: auth, muteHttpExceptions: true,
     contentType: 'multipart/related; boundary=' + bd, payload: head.concat(img).concat(Utilities.newBlob('\r\n--' + bd + '--').getBytes()) });
-  if (r.getResponseCode() >= 300) throw new Error(r.getResponseCode() === 403 ? 'Apps Script에서 allowPhoto를 한 번 실행해 드라이브 권한을 허용해 주세요' : r.getContentText().slice(0, 120));
+  if (r.getResponseCode() >= 300) { // 진짜 이유를 그대로 보여 줌 (예전엔 403을 전부 권한 문제로 안내해서 헷갈렸음)
+    const t = r.getContentText();
+    if (/accessNotConfigured|has not been used|is disabled|SERVICE_DISABLED/.test(t)) throw new Error('Apps Script 왼쪽 「서비스 ＋」에서 Drive API를 추가한 뒤 새 버전으로 배포해 주세요');
+    if (/insufficient|scope/i.test(t)) throw new Error('Apps Script에서 allowPhoto를 실행해 권한을 허용한 뒤 새 버전으로 배포해 주세요');
+    throw new Error('드라이브 응답 ' + r.getResponseCode() + ' ' + t.replace(/\s+/g, ' ').slice(0, 160));
+  }
   const id = JSON.parse(r.getContentText()).id;
   try { return UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: auth }).getContentText(); }
   finally { DriveApp.getFileById(id).setTrashed(true); }
 }
-function allowPhoto() { Logger.log('드라이브 권한 OK · 남은 용량 ' + Math.round(DriveApp.getStorageUsed() / 1e6) + 'MB 사용 중'); }
+// 권한 허용 + 실제로 사진 인식이 되는지 확인 (실행 로그에 결과가 나옴)
+function allowPhoto() {
+  DriveApp.getStorageUsed();
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  try { ocr_(png); Logger.log('✅ 사진 인식 준비 끝 · 이제 새 버전으로 배포하면 앱에서 돼요'); } catch (e) { Logger.log('❌ ' + e.message); }
+}
 
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기

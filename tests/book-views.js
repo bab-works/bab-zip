@@ -27,6 +27,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
   assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
   // ＋ → 책 검색 → 결과에서 바로 위시리스트·읽는 중에 추가
+  await p.click('#lNav [data-find]'); await p.waitForSelector('#bookFind[open]'); await p.click('#findClose'); await p.waitForTimeout(300); // 하단 탭 「책 추가」
   const n0 = posts.length; await p.click('#fAdd'); await p.waitForSelector('#bookFind[open]');
   await p.fill('#findQ', '페스트'); await p.waitForSelector('#findList [data-to=buy]');
   await p.click('#findList [data-to=buy]'); await p.waitForTimeout(400);

@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v67'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v68'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -23,7 +23,9 @@ navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로
 let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
 let pending = store.get('pending', []); // 아직 시트에 못 보낸 작업 (오프라인 대비, 순서대로 전송)
 
-const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+// 자랑하기 모드: 금액은 전부 ••로 가리고, 거래 내용·결제수단은 흐리게 (화면 캡처해서 자랑해도 안전)
+let brag = store.get('brag', false);
+const won = n => brag ? '••,•••원' : Math.round(n).toLocaleString('ko-KR') + '원';
 const pad2 = n => String(n).padStart(2, '0');
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, k) => a + k);
 const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; };
@@ -442,7 +444,7 @@ function renderRec() {
 // ── 달력 ──
 const cf1 = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 1 });
 const cf0 = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 0 });
-const compact = n => (Math.abs(n) >= 1e6 ? cf0 : cf1).format(Math.abs(n)); // 칸이 좁아 100만 이상은 소수점 없이
+const compact = n => brag ? '••만' : (Math.abs(n) >= 1e6 ? cf0 : cf1).format(Math.abs(n)); // 칸이 좁아 100만 이상은 소수점 없이
 const WEEK = '일월화수목금토';
 let selDay = localISO().slice(0, 10);
 function daySums(list) {
@@ -503,7 +505,7 @@ function renderCal() {
   const bigCut = Math.max(1e6, 3 * (exps[Math.floor(exps.length / 2)] || 0));
   const today = localISO().slice(0, 10);
   // 칸엔 지출만 만 단위로 (15.6만), 수입은 파란 점. 정확한 금액은 날짜를 누르면 아래 목록에
-  const man = n => { n = Math.abs(n); return n >= 1e4 ? `${+(n / 1e4).toFixed(n >= 1e6 ? 0 : 1)}만` : n.toLocaleString('ko-KR'); };
+  const man = n => { n = Math.abs(n); if (brag) return '••'; return n >= 1e4 ? `${+(n / 1e4).toFixed(n >= 1e6 ? 0 : 1)}만` : n.toLocaleString('ko-KR'); };
   let html = lead;
   for (let d = 1; d <= days; d++) {
     const ds = `${m}-${pad2(d)}`, s = sums[ds], wd = (first + d - 1) % 7;
@@ -1031,7 +1033,8 @@ function renderLists() {
   $('#lTabs').hidden = true;
   $('#lNav').hidden = tabs.length < 2;
   $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-l-${k}"/></svg>${label}</button>`).join('')
-    + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>';
+    + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>'
+    + (sec === 'book' ? '<button type="button" data-find><svg class="i" aria-hidden="true"><use href="#i-l-find"/></svg>책 추가</button>' : '');
   document.body.classList.toggle('tabbar', tabs.length >= 2);
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
   const a = all.filter(i => !q || Object.values(i).join(' ').toLowerCase().includes(q));
@@ -1463,6 +1466,7 @@ $('#menuList').addEventListener('click', e => {
   if (k) { $('#menu').close(); setSection(k); }
 });
 $('#lNav').addEventListener('click', e => {
+  if (e.target.closest('[data-find]')) return openFind();
   const k = e.target.closest('[data-list]')?.dataset.list;
   if (k) { curList = k; renderLists(); }
 });
@@ -1694,6 +1698,7 @@ function pickerField(input, kind, title, opt = {}) {
 pickerField($('#entryForm [name=time]'), 'time', '시간', { empty: '시간 없음' });
 
 document.body.classList.add('money', 'tabbar');
+if (brag) setTimeout(() => setBrag(true));
 const now = localISO();
 $('#month').value = now.slice(0, 7);
 render();
@@ -1701,6 +1706,14 @@ refresh();
 if (!cfg.token) $('#welcome').showModal(); // 연결 전이면 시작 화면
 else lockNow();
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
+function setBrag(on) {
+  brag = on; store.set('brag', on);
+  document.body.classList.toggle('brag', on); $('#bragBadge').hidden = !on;
+  $('#bragBtn').setAttribute('aria-pressed', on);
+  render(); if (sec === 'habit') renderHabits();
+}
+$('#bragBtn').addEventListener('click', () => { setBrag(!brag); $('#menu').close(); toast(brag ? '자랑하기 모드: 금액과 거래 내용을 가렸어요' : '자랑하기 모드를 껐어요'); });
+$('#bragBadge').addEventListener('click', () => { if (confirm('자랑하기 모드를 끌까요? 금액이 다시 보여요')) setBrag(false); });
 $('#homeQuick').addEventListener('click', () => openEntry(null, localISO().slice(0, 10)));
 // ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 시트(구글 드라이브 OCR)가 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
 // 이미 시트에 있는 거래(같은 날 같은 금액)와 사진 안에서 겹치는 건 체크를 빼 둠

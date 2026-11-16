@@ -33,4 +33,11 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const saved = posts.filter(o => o.action === 'save').map(o => o.item);
   assert.deepEqual(saved.map(i => [i.content, i.amount, i.type, i.major, i.minor, i.date]), [['스타벅스 강남점', 4500, '지출', '카페·간식', '카페', today], ['급여 입금', 2500000, '수입', '수입', '', today]]);
   assert.match(await p.textContent('#homeQuickSum'), /오늘/);
+  // 자랑하기 모드: 금액 가림 → 새로고침해도 유지 → 배지로 끔
+  await p.click('#menuBtn'); await p.waitForTimeout(500); await p.click('#bragBtn'); await p.waitForTimeout(700);
+  assert.equal(await p.textContent('#exp'), '••,•••원'); assert.equal(await p.isVisible('#bragBadge'), true);
+  assert.doesNotMatch(await p.textContent('#v-home'), /\d{1,3},\d{3}원/, 'no amount visible on home');
+  await p.reload(); await p.waitForTimeout(800); assert.equal(await p.textContent('#exp'), '••,•••원', 'kept after reload');
+  p.once('dialog', d => d.accept()); await p.click('#bragBadge'); await p.waitForTimeout(700);
+  assert.match(await p.textContent('#exp'), /^[\d,]+원$/); assert.equal(await p.isVisible('#bragBadge'), false);
   console.log('PHOTO OK'); await b.close(); process.exit(0); });
