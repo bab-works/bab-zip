@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BAB:ZIP">
+<script>/* 고른 테마·아이콘을 그리기 전에 먼저 적용 (깜빡임 없게) */ try { var s = JSON.parse(localStorage.getItem('skin')); if (s) document.documentElement.dataset.skin = s; } catch (e) {}</script>
 <style>
   /* Pretendard (SIL Open Font License) — 파일을 앱에 같이 둬서 오프라인에서도 적용 */
   @font-face { font-family:"Pretendard Variable"; font-weight:45 920; font-display:swap; src:url("PretendardVariable.woff2") format("woff2-variations"); }
@@ -554,6 +555,112 @@
   .shared-badge { display:inline-block; margin-left:6px; background:var(--accent-soft); color:var(--accent); }
   .ha-pick { display:flex; flex-wrap:wrap; gap:8px; } .ha-pick button { width:44px; height:44px; padding:0; border-radius:12px; font-size:1.3rem; background:var(--fill); }
   .ha-pick button[aria-pressed="true"] { box-shadow:0 0 0 2px var(--accent); } .ha-colors button { background:var(--c); border-radius:50%; }
+  /* 사이드바: 위 사용자, 왼쪽 아래 설정 */
+  #menu[open] { display:flex; flex-direction:column; }
+  html.menu-open, html.menu-open body { overflow-x:clip; } /* 본문이 옆으로 밀려도 화면이 넓어지지(축소되지) 않게 */
+  .menu-user { display:flex; align-items:center; gap:10px; background:none; padding:4px; border-radius:16px; text-align:left; min-width:0; }
+  .menu-user > span:last-child { display:flex; flex-direction:column; min-width:0; } .menu-user b { font-size:1.118rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .menu-user small { color:var(--muted); font-size:0.706rem; }
+  .avatar { width:40px; height:40px; flex:none; border-radius:50%; display:grid; place-items:center; font-weight:800; color:#fff; background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #000)); }
+  .menu-foot { margin-top:auto; padding-top:12px; padding-bottom:env(safe-area-inset-bottom); }
+  .menu-settings { display:flex; align-items:center; gap:8px; background:none; padding:10px 12px; border-radius:14px; font-weight:600; color:var(--muted); }
+  .menu-settings svg.i { width:20px; height:20px; }
+  /* 설정: 묶음 카드 + 줄 (토스·iOS 설정처럼) */
+  .prefs-title { text-align:center; margin:0 0 4px; }
+  .set-label { margin:16px 6px 6px; font-size:0.706rem; font-weight:700; color:var(--muted); }
+  .set-group { background:var(--fill); border-radius:18px; overflow:hidden; } .set-pad { padding:12px; }
+  .set-row { display:flex; align-items:center; gap:10px; width:100%; min-height:52px; padding:10px 16px; border-radius:0; background:none; text-align:left; font-weight:600; }
+  .set-row + .set-row { border-top:1px solid var(--line); }
+  .set-row small { display:block; color:var(--muted); font-weight:500; font-size:0.765rem; }
+  .set-grow { flex:1; min-width:0; } .set-row input:not([type=checkbox]) { background:var(--glass); padding:9px 12px; }
+  .set-val { margin-left:auto; color:var(--muted); font-weight:500; } .set-link span:first-child { flex:1; } .chev { color:var(--muted); font-size:1.3rem; }
+  .set-row.switch { cursor:pointer; } .set-row.switch > i { margin-left:auto; }
+  .skin-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; }
+  .skin-list button, .icon-list button { display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; border-radius:16px; background:var(--glass); font-size:0.765rem; font-weight:700; }
+  .skin-list button[aria-checked="true"], .icon-list button[aria-checked="true"] { box-shadow:0 0 0 2px var(--accent); color:var(--accent); }
+  .skin-prev { width:100%; aspect-ratio:3/4; border-radius:12px; padding:8px 6px; display:flex; flex-direction:column; gap:5px; background:var(--pb); border:1px solid rgba(0,0,0,.06); }
+  .skin-prev i { display:block; height:16px; border-radius:var(--pr); background:var(--pc); box-shadow:var(--ps); }
+  .skin-prev i:nth-child(2) { width:70%; } .skin-prev b { margin-top:auto; align-self:flex-end; width:16px; height:16px; border-radius:50%; background:var(--pa); }
+  .icon-list { display:flex; gap:14px; } .icon-list img { width:60px; height:60px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+
+  /* ═════ 테마 2~5 (1번 메인 테마는 위의 기본 그대로) ═════ */
+  /* 2. 클레이모피즘: 크림 파스텔, 말랑한 3D 볼륨(바깥 그림자 + 이중 안쪽 빛), 큰 둥근 모서리 */
+  :root[data-skin="clay"] { color-scheme:light; --bg:#fbefe5; --fg:#3b2a22; --muted:#9a7f70; --line:#f1dfd1; --glass:#fff7f0; --fill:#f7e6d8;
+    --accent:#ff7a3d; --accent-soft:#ffe6d6; --in:#2f9e8f; --out:#e8553d; --refund:#2f9e8f; --warn:#f0a020;
+    --shadow:10px 12px 24px rgba(214,160,125,.32), -6px -6px 16px rgba(255,255,255,.85), inset 2px 2px 3px rgba(255,255,255,.9), inset -3px -4px 8px rgba(214,160,125,.16); }
+  [data-skin="clay"] body { font-weight:500; }
+  [data-skin="clay"] .card, [data-skin="clay"] dialog:not(#menu) { border-radius:30px; }
+  [data-skin="clay"] dialog:not(#menu) { border-radius:32px 32px 0 0; }
+  [data-skin="clay"] button:not(.icon-btn):not(nav button):not(.set-row):not(.menu-list button) { box-shadow:3px 4px 8px rgba(214,160,125,.28), -2px -2px 5px rgba(255,255,255,.9), inset 1px 1px 2px rgba(255,255,255,.9); }
+  [data-skin="clay"] .primary, [data-skin="clay"] #fab { background:linear-gradient(150deg, #ffa36b, #ff6a2b); color:#fff;
+    box-shadow:6px 8px 18px rgba(255,106,43,.42), inset 2px 2px 4px rgba(255,255,255,.5), inset -3px -4px 8px rgba(160,50,0,.25) !important; }
+  [data-skin="clay"] nav { border-radius:30px; } [data-skin="clay"] header h1 { font-weight:900; letter-spacing:-.03em; }
+  [data-skin="clay"] input, [data-skin="clay"] select, [data-skin="clay"] textarea { border-radius:16px; box-shadow:inset 2px 2px 5px rgba(214,160,125,.25), inset -2px -2px 4px rgba(255,255,255,.9); }
+  [data-skin="clay"] nav .tab-pill { background:#ffe6d6; box-shadow:inset 2px 2px 3px #fff, inset -2px -3px 6px rgba(255,122,61,.18), 2px 3px 8px rgba(214,160,125,.3); }
+  [data-skin="clay"] .set-group { background:#fff7f0; box-shadow:var(--shadow); }
+  /* 카드마다 다른 파스텔 + 첫 카드는 살구색 덩어리 */
+  [data-skin="clay"] main .card:nth-of-type(3n+2) { background:linear-gradient(160deg, #f1fbf6, #e3f4ec); }
+  [data-skin="clay"] main .card:nth-of-type(3n) { background:linear-gradient(160deg, #f6f1ff, #ebe3fb); }
+  [data-skin="clay"] .hero { background:linear-gradient(150deg, #ffd9c0, #ffb48c) !important; }
+  [data-skin="clay"] .hero .big, [data-skin="clay"] .today-can b { color:#5a2a12; }
+  [data-skin="clay"] .daily button i { border-radius:999px; opacity:.9; }
+  [data-skin="clay"] .month-pill, [data-skin="clay"] .icon-btn { border-radius:999px; }
+
+  /* 3. iOS 27: 리퀴드 글래스 — 뒤 배경이 비치는 유리 카드, 반짝이는 테두리, 은은한 색 번짐 배경 */
+  :root[data-skin="ios"] { --bg:#eef1f7; --fg:#0b0b0f; --muted:#6e6e78; --line:rgba(60,60,67,.12); --glass:rgba(255,255,255,.58); --fill:rgba(118,118,128,.12);
+    --accent:#0a84ff; --accent-soft:rgba(10,132,255,.14); --in:#0a84ff; --out:#ff3b30; --refund:#34c759; --warn:#ff9f0a;
+    --shadow:0 10px 30px rgba(31,38,135,.10), inset 0 1px 0 rgba(255,255,255,.8), inset 0 0 0 1px rgba(255,255,255,.45); }
+  @media (prefers-color-scheme: dark) { :root[data-skin="ios"]:not([data-theme="light"]) { --bg:#05060a; --fg:#f5f5f7; --muted:#98989f; --line:rgba(255,255,255,.1);
+    --glass:rgba(44,44,52,.55); --fill:rgba(120,120,128,.22); --accent-soft:rgba(10,132,255,.22);
+    --shadow:0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 0 1px rgba(255,255,255,.08); } }
+  html[data-skin="ios"] { background:radial-gradient(60% 40% at 15% 10%, rgba(122,162,255,.35), transparent 70%), radial-gradient(50% 40% at 90% 30%, rgba(214,140,255,.28), transparent 70%),
+    radial-gradient(60% 50% at 50% 100%, rgba(80,220,190,.25), transparent 70%), var(--bg); background-attachment:fixed; }
+  [data-skin="ios"] body, [data-skin="ios"] .topglass { background:transparent; }
+  [data-skin="ios"] .card, [data-skin="ios"] nav, [data-skin="ios"] #fab, [data-skin="ios"] dialog, [data-skin="ios"] .icon-btn, [data-skin="ios"] .month-pill, [data-skin="ios"] .sbar {
+    -webkit-backdrop-filter:blur(24px) saturate(1.8); backdrop-filter:blur(24px) saturate(1.8); }
+  [data-skin="ios"] .card { border-radius:26px; } [data-skin="ios"] dialog:not(#menu) { border-radius:30px 30px 0 0; }
+  [data-skin="ios"] #fab { background:color-mix(in srgb, var(--accent) 88%, transparent); box-shadow:0 8px 24px rgba(10,132,255,.35), inset 0 1px 0 rgba(255,255,255,.5); }
+  [data-skin="ios"] header h1 { font-weight:800; letter-spacing:-.025em; } [data-skin="ios"] .set-group { background:var(--glass); box-shadow:var(--shadow); }
+  /* 더 진한 색 번짐 + 유리 위 반사광, 큰 숫자는 그러데이션 */
+  html[data-skin="ios"] { background:radial-gradient(55% 35% at 10% 5%, rgba(90,140,255,.55), transparent 70%), radial-gradient(45% 35% at 95% 25%, rgba(220,120,255,.45), transparent 70%),
+    radial-gradient(55% 45% at 40% 95%, rgba(40,210,170,.4), transparent 70%), var(--bg); }
+  [data-skin="ios"] .card::before { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; background:linear-gradient(160deg, rgba(255,255,255,.55), rgba(255,255,255,0) 40%); mix-blend-mode:soft-light; }
+  [data-skin="ios"] .hero .big { background:linear-gradient(90deg, #0a84ff, #8e5cff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  [data-skin="ios"] .daily button i { border-radius:999px; background:linear-gradient(180deg, #5ac8fa, #0a84ff); }
+
+  /* 4. 쿠베르토: 흑백 대비, 아주 굵은 큰 글자, 볼륨감 있는 카드(깊은 그림자), 검은 버튼 */
+  :root[data-skin="cuberto"] { color-scheme:light; --bg:#f4f4f2; --fg:#0b0b0b; --muted:#6e6e73; --line:#e4e4e1; --glass:#ffffff; --fill:#ececea;
+    --accent:#4f3dff; --accent-soft:#ecebff; --in:#4f3dff; --out:#ff3d2e; --refund:#14b86a; --warn:#ff9500;
+    --shadow:0 28px 50px -28px rgba(20,20,40,.35), 0 2px 6px rgba(0,0,0,.04); }
+  [data-skin="cuberto"] header h1 { font-size:2.1rem; font-weight:900; letter-spacing:-.055em; }
+  [data-skin="cuberto"] .card { border-radius:34px; } [data-skin="cuberto"] dialog:not(#menu) { border-radius:36px 36px 0 0; }
+  [data-skin="cuberto"] .hero .big { font-size:2.6rem; font-weight:900; letter-spacing:-.05em; }
+  [data-skin="cuberto"] h2 { font-weight:900; letter-spacing:-.03em; }
+  [data-skin="cuberto"] .primary, [data-skin="cuberto"] #fab { background:#0b0b0b; color:#fff; }
+  [data-skin="cuberto"] #fab { box-shadow:0 18px 30px -12px rgba(0,0,0,.5); }
+  [data-skin="cuberto"] nav { background:#0b0b0b; } [data-skin="cuberto"] nav button { color:rgba(255,255,255,.55); }
+  [data-skin="cuberto"] nav button[aria-current="page"] { color:#fff; } [data-skin="cuberto"] nav .tab-pill { background:rgba(255,255,255,.14); box-shadow:none; }
+  [data-skin="cuberto"] button:active, [data-skin="cuberto"] .card:active { transform:scale(.97); }
+  [data-skin="cuberto"] .set-group { background:#fff; box-shadow:var(--shadow); }
+  /* 첫 카드는 검정 판에 흰 큰 숫자, 포인트는 보라 원 */
+  [data-skin="cuberto"] .hero { background:#0b0b0b; color:#fff; box-shadow:0 30px 60px -30px rgba(79,61,255,.6); }
+  [data-skin="cuberto"] .hero small, [data-skin="cuberto"] .hero .sub, [data-skin="cuberto"] .hero #cmp { color:#a1a1aa; }
+  [data-skin="cuberto"] .hero .sub b:not(.out), [data-skin="cuberto"] .hero .today-can b { color:#fff; } [data-skin="cuberto"] .hero .today-can { border-color:#2a2a2e; }
+  [data-skin="cuberto"] .hero::after { content:''; position:absolute; right:-30px; top:-30px; width:120px; height:120px; border-radius:50%; background:#4f3dff; filter:blur(2px); opacity:.9; pointer-events:none; }
+  [data-skin="cuberto"] .hero { overflow:hidden; } [data-skin="cuberto"] .daily button i { background:#0b0b0b; border-radius:999px; }
+  [data-skin="cuberto"] .month-pill { background:#0b0b0b; color:#fff; } [data-skin="cuberto"] .month-pill button { color:#fff; }
+
+  /* 5. 리니어: 어두운 바탕, 1px 테두리, 작은 모서리, 그림자 없음, 촘촘한 글자, 보라 포인트 */
+  :root[data-skin="linear"] { color-scheme:dark; --bg:#0d0e10; --fg:#e6e6e8; --muted:#8a8f98; --line:rgba(255,255,255,.07); --glass:#151619; --fill:#1d1e22;
+    --accent:#5e6ad2; --accent-soft:rgba(94,106,210,.16); --in:#6c9cff; --out:#eb5757; --refund:#4cb782; --warn:#f2994a; --shadow:none; }
+  [data-skin="linear"] body { font-size:.882rem; letter-spacing:-.005em; }
+  [data-skin="linear"] .card, [data-skin="linear"] nav, [data-skin="linear"] dialog, [data-skin="linear"] .icon-btn, [data-skin="linear"] .month-pill, [data-skin="linear"] .sbar { border:1px solid var(--line); }
+  [data-skin="linear"] .card { border-radius:12px; } [data-skin="linear"] dialog:not(#menu) { border-radius:14px 14px 0 0; }
+  [data-skin="linear"] button { border-radius:8px; } [data-skin="linear"] input, [data-skin="linear"] select, [data-skin="linear"] textarea { border-radius:8px; border:1px solid var(--line); }
+  [data-skin="linear"] nav { border-radius:14px; } [data-skin="linear"] nav .tab-pill { border-radius:10px; background:rgba(255,255,255,.06); box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }
+  [data-skin="linear"] #fab { border-radius:16px; background:var(--accent); box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(94,106,210,.35); }
+  [data-skin="linear"] header h1 { font-size:1.294rem; font-weight:600; letter-spacing:-.01em; } [data-skin="linear"] h2 { font-weight:600; }
+  [data-skin="linear"] .hero .big { font-weight:600; letter-spacing:-.02em; } [data-skin="linear"] .set-group { border:1px solid var(--line); background:var(--glass); }
 </style>
 </head>
 <body>
@@ -791,10 +898,11 @@
 </dialog>
 
 <dialog id="menu" aria-label="메뉴" data-close-ms="420">
-  <div class="menu-head"><h2>BAB:ZIP</h2><button type="button" id="menuDone" class="small" hidden>완료</button></div>
+  <div class="menu-head"><button type="button" id="menuUser" class="menu-user"><span class="avatar" id="menuAvatar" aria-hidden="true"></span><span><b id="menuName"></b><small id="menuRole"></small></span></button><button type="button" id="menuDone" class="small" hidden>완료</button></div>
   <div id="menuList" class="menu-list"></div>
   <button type="button" id="bragBtn" class="brag-btn" aria-pressed="false">✨ 자랑하기 모드<small>금액·거래 내용을 가려요</small></button>
   <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요</p>
+  <div class="menu-foot"><button type="button" id="menuSettings" class="menu-settings"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg>설정</button></div>
 </dialog>
 
 <dialog id="lItem" class="sheet">
@@ -898,18 +1006,39 @@
   <a class="wbtn" href="https://github.com/bab-works/bab-zip/blob/main/FRIEND.md" target="_blank" rel="noopener">처음이에요<small>내 시트 만드는 방법 (10분)</small></a>
   <div class="row" style="justify-content:center; margin-top:6px"><button type="button" id="wLater" class="small">나중에 하기</button></div>
 </dialog>
-<dialog id="settings">
-  <form method="dialog" id="settingsForm">
-    <h2>설정</h2>
-    <label class="switch" style="margin:4px 0 14px"><input type="checkbox" id="lockOn"><i aria-hidden="true"></i>Face ID 잠금 (앱을 열 때)</label>
-    <label class="f">시트 비밀번호<input name="token" type="password" autocomplete="current-password"></label>
-    <p id="friendMe" class="hint" hidden></p>
-    <details id="friendBox" class="friends" hidden><summary>친구 초대 · 접속코드</summary>
+<dialog id="prefs" class="sheet prefs" aria-labelledby="prefsTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="prefsTitle" class="prefs-title">설정</h2>
+  <p class="set-label">계정</p>
+  <div class="set-group">
+    <div class="set-row"><span>사용자명</span><span class="set-val" id="prefName"></span></div>
+    <div class="set-row owner-only"><span class="set-grow"><input id="myName" placeholder="내 이름 (띄어쓰기 없이)" maxlength="20" aria-label="내 이름"></span><button type="button" id="myNameSave" class="small">저장</button></div>
+    <button type="button" class="set-row set-link" id="prefPw"><span>비밀번호 (접속코드) 변경하기</span><span class="chev" aria-hidden="true">›</span></button>
+  </div>
+  <p class="set-label">보안</p>
+  <div class="set-group">
+    <label class="set-row switch"><span class="set-grow">Face ID 잠금<small>앱을 열 때 Face ID로 열어요</small></span><input type="checkbox" id="lockOn"><i aria-hidden="true"></i></label>
+  </div>
+  <p class="set-label">테마</p>
+  <div class="set-group set-pad"><div id="skinList" class="skin-list" role="radiogroup" aria-label="테마"></div></div>
+  <p class="set-label">앱 아이콘</p>
+  <div class="set-group set-pad"><div id="iconList" class="icon-list" role="radiogroup" aria-label="앱 아이콘"></div>
+    <p class="hint">바꾼 아이콘은 홈 화면의 BAB:ZIP을 지우고 사파리에서 다시 「홈 화면에 추가」하면 적용돼요.</p></div>
+  <p id="friendMe" class="hint" hidden></p>
+  <div id="friendBox" hidden>
+    <p class="set-label">친구 초대 · 접속코드</p>
+    <div class="set-group set-pad">
       <p class="hint">친구는 가계부 없이 취미 기록·습관만 써요. 친구 기록은 내 시트 「친구 기록」 탭에 친구마다 따로 저장돼요 (시트 주인인 나는 볼 수 있어요).</p>
-      <div class="frow2"><input id="myName" placeholder="내 이름 (친구가 태그할 때 쓰는 이름)" maxlength="20" aria-label="내 이름"><button type="button" id="myNameSave" class="small">저장</button></div>
       <div class="frow2"><input id="inviteName" placeholder="친구 이름 (띄어쓰기 없이)" maxlength="20" aria-label="초대할 친구 이름"><button type="button" id="inviteBtn" class="small primary">초대</button></div>
       <ul id="friendList" class="pend-list"></ul>
-    </details>
+    </div>
+  </div>
+  <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="prefsClose">닫기</button></div>
+</dialog>
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h2>비밀번호 (접속코드) 변경</h2>
+    <label class="f">시트 비밀번호 또는 친구 접속코드<input name="token" type="password" autocomplete="current-password"></label>
     <details class="adv"><summary>고급 · 다른 시트에 연결</summary>
       <label class="f">설정 링크 붙여넣기<input name="link" type="url" placeholder="https://bab-works.github.io/bab-zip/#url=…&token=…"></label>
       <label class="f">시트 주소 (웹 앱 URL)<input name="url" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>

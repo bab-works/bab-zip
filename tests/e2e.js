@@ -348,7 +348,10 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.mouse.click(195, 10); await p.waitForSelector('#entry', { state: 'hidden' });
   await p.click('#budgets [data-cat] >> nth=0'); await p.waitForSelector('#catSheet', { state: 'visible' });
   await p.mouse.click(195, 10); await p.waitForSelector('#catSheet', { state: 'hidden' });
-  await p.click('#openSettings'); await p.mouse.click(195, 10); await p.waitForSelector('#settings', { state: 'hidden' });
+  await p.click('#openSettings'); await p.waitForSelector('#prefs[open]'); await p.mouse.click(195, 10); await p.waitForSelector('#prefs', { state: 'hidden' });
+  // 설정 목록 → 비밀번호(접속코드) 변경 창
+  await p.click('#openSettings'); await p.click('#prefPw'); await p.waitForSelector('#settings[open]'); assert.equal(await p.inputValue('[name=token]'), TOKEN);
+  await p.click('#settings button[value=cancel]'); await p.waitForSelector('#settings', { state: 'hidden' });
   await status(/저장됨|동기화됨|삭제됨/); // 설정을 바깥 클릭으로 닫아도 연결 유지
   console.log('font:', await p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family)[0] || 'not loaded'; }));
 

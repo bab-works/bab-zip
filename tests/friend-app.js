@@ -61,7 +61,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   // 주인: 설정에서 친구 초대 → 접속 링크 복사
   const o = await page('owner-pw', 'owner');
   assert.equal(await o.p.textContent('#appTitle'), 'MONEY');
-  await o.p.click('#openSettings'); await o.p.waitForTimeout(600); await o.p.click('#friendBox summary');
+  await o.p.click('#openSettings'); await o.p.waitForTimeout(600);
   assert.match(await o.p.textContent('#friendList'), /민지/); assert.equal(await o.p.inputValue('#myName'), '나리');
   o.p.once('dialog', d => d.accept());
   await o.p.fill('#inviteName', '준호'); await o.p.click('#inviteBtn'); await o.p.waitForTimeout(800);

@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v74'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v75'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -158,7 +158,7 @@ $('#pendClose').addEventListener('click', () => $('#pend').close());
 $('#status').addEventListener('click', () => {
   if (statusAct === 'pending') { renderPending(); $('#pend').showModal(); return; }
   if (statusAct === 'retry') retry();
-  else if (statusAct === 'settings') $('#openSettings').click();
+  else if (statusAct === 'settings') openConn();
   else if (statusAct === 'welcome') $('#welcome').showModal();
   else if (HELP[statusAct]) openHelp(statusAct);
 });
@@ -867,19 +867,27 @@ $('#fReset').addEventListener('click', () => {
 // shortcut: 서명을 서버에서 확인하지 않음, 진짜 보안이 필요하면 Code.gs에서 검증
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const rand = n => crypto.getRandomValues(new Uint8Array(n));
+// Face ID가 두 번 뜨던 문제: ① 이미 묻는 중이면 또 묻지 않음 ② 방금(2분 안) 풀었으면, 새 버전으로 새로고침돼도 다시 잠그지 않음
+// ③ Face ID 창이 떠 있는 동안 앱이 잠깐 「숨김」이 되는 것은 나갔다 온 걸로 치지 않음
+let unlocking = false;
+const ss = { get: k => { try { return +sessionStorage.getItem(k) || 0; } catch (e) { return 0; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} } };
+const unlocked = () => { ss.set('unlockedAt', Date.now()); $('#lock').close(); };
 async function unlock(auto) {
+  if (unlocking) return;
+  unlocking = true;
   try {
     await navigator.credentials.get({ publicKey: { challenge: rand(32), allowCredentials: [{ type: 'public-key', id: unb64(store.get('lockId')) }], userVerification: 'required', timeout: 60000 } });
-    $('#lock').close();
+    unlocked();
   } catch (e) { if (auto !== true) toast('Face ID를 확인하지 못했어요 · 다시 누르거나 비밀번호로 열어요'); } // 자동 시도가 막히면(손가락 터치 필요) 조용히 단추로
+  finally { unlocking = false; hiddenAt = 0; }
 }
 // 잠기면 바로 Face ID 창을 띄움 (아이폰이 터치 없이는 막는 경우엔 「Face ID로 열기」 단추)
-const lockNow = () => { if (store.get('lockId') && cfg.token && !$('#lock').open) { $('#lock').showModal(); $('#lockPw').pw.value = ''; setTimeout(() => unlock(true), 150); } };
+const lockNow = () => { if (store.get('lockId') && cfg.token && !$('#lock').open && !unlocking && Date.now() - ss.get('unlockedAt') > 120e3) { $('#lock').showModal(); $('#lockPw').pw.value = ''; setTimeout(() => unlock(true), 150); } };
 $('#lock').addEventListener('cancel', e => e.preventDefault()); // Esc로 못 닫게
 $('#unlock').addEventListener('click', () => unlock());
-$('#lockPw').addEventListener('submit', e => { e.preventDefault(); if (e.target.pw.value === cfg.token) $('#lock').close(); else toast('비밀번호가 맞지 않아요'); });
+$('#lockPw').addEventListener('submit', e => { e.preventDefault(); if (e.target.pw.value === cfg.token) unlocked(); else toast('비밀번호가 맞지 않아요'); });
 let hiddenAt = 0;
-document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenAt = Date.now(); else if (hiddenAt && Date.now() - hiddenAt > 60e3) lockNow(); }); // 1분 넘게 나갔다 오면 다시 잠금
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (!unlocking) hiddenAt = Date.now(); } else if (hiddenAt && Date.now() - hiddenAt > 60e3) lockNow(); }); // 1분 넘게 나갔다 오면 다시 잠금
 $('#lockOn').addEventListener('change', async e => {
   if (!e.target.checked) { store.set('lockId', ''); return toast('Face ID 잠금을 껐어요'); }
   try {
@@ -892,18 +900,62 @@ $('#lockOn').addEventListener('change', async e => {
 });
 $('#wLater').addEventListener('click', () => $('#welcome').close());
 ['#wLink', '#wPw'].forEach(s => $(s).addEventListener('click', () => {
-  $('#welcome').close(); $('#openSettings').click();
+  $('#welcome').close(); openConn();
   const f = $('#settingsForm');
   if (s === '#wLink') { f.querySelector('details.adv').open = true; f.link.focus(); } else f.token.focus();
 }));
 document.addEventListener('click', e => { const k = e.target.closest('[data-help]')?.dataset.help; if (k && HELP[k]) openHelp(k); });
 $('#reload').addEventListener('click', () => sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
-$('#openSettings').addEventListener('click', () => {
+// ── 테마 5가지: 기능은 같고 모양만 완전히 다름. html[data-skin]으로 index.html의 테마 CSS가 켜짐 (첫 화면 깜빡임 없게 head에서도 미리 적용) ──
+const SKINS = [['main', '메인 테마', '#f2f4f6', '#ffffff', '#3182f6', '10px', '0 1px 2px rgba(0,0,0,.06)'],
+  ['clay', '클레이모피즘', '#fbefe5', '#fff7f0', '#ff7a3d', '12px', '3px 3px 6px rgba(214,160,125,.35), inset 1px 1px 2px #fff'],
+  ['ios', 'iOS 27', 'linear-gradient(160deg,#dfe9ff,#f7e8ff 55%,#e3fbf3)', 'rgba(255,255,255,.6)', '#0a84ff', '12px', 'inset 0 1px 0 #fff, 0 2px 8px rgba(31,38,135,.12)'],
+  ['cuberto', '쿠베르토', '#f4f4f2', '#ffffff', '#0b0b0b', '14px', '0 8px 14px -8px rgba(20,20,40,.35)'],
+  ['linear', '리니어', '#0d0e10', '#17181b', '#5e6ad2', '4px', 'inset 0 0 0 1px rgba(255,255,255,.08)']];
+const skin = () => store.get('skin', 'main');
+function setSkin(k) {
+  store.set('skin', k); document.documentElement.dataset.skin = k;
+  const tc = { clay: '#fbefe5', linear: '#0d0e10', cuberto: '#f4f4f2', ios: '#eef1f7' }[k];
+  document.querySelectorAll('meta[name=theme-color]').forEach(m => tc ? m.setAttribute('content', tc) : m.setAttribute('content', m.media.includes('dark') ? '#101013' : '#f2f4f6'));
+  requestAnimationFrame(() => document.querySelectorAll('nav').forEach(movePill)); renderSkins();
+}
+function renderSkins() {
+  $('#skinList').innerHTML = SKINS.map(([k, n, bg, card, acc, r, sh], i) => `<button type="button" role="radio" data-skin="${k}" aria-checked="${skin() === k}">
+    <span class="skin-prev" style="--pb:${bg};--pc:${card};--pa:${acc};--pr:${r};--ps:${sh}" aria-hidden="true"><i></i><i></i><i></i><b></b></span>${i + 1}. ${n}</button>`).join('');
+}
+$('#skinList').addEventListener('click', e => { const k = e.target.closest('[data-skin]')?.dataset.skin; if (k) { setSkin(k); toast(`「${SKINS.find(x => x[0] === k)[1]}」로 바꿨어요`); } });
+// 앱 아이콘 3가지: 사파리 「홈 화면에 추가」가 읽는 아이콘 주소를 바꿈 (이미 추가한 아이콘은 지우고 다시 추가해야 바뀜)
+const ICONS = [['main', '기본', 'icon-180.png', 'icon-192.png'], ['clay', '클레이', 'icon-clay-180.png', 'icon-clay-192.png'], ['glass', '글래스', 'icon-glass-180.png', 'icon-glass-192.png']];
+function setIcon(k) {
+  const c = ICONS.find(x => x[0] === k) || ICONS[0]; store.set('appIcon', c[0]);
+  $('link[rel=apple-touch-icon]').href = c[2]; $('link[rel=icon]').href = c[3];
+  $('link[rel=manifest]').href = c[0] === 'main' ? 'manifest.webmanifest' : `manifest-${c[0]}.webmanifest`;
+  renderIcons();
+}
+function renderIcons() {
+  const cur = store.get('appIcon', 'main');
+  $('#iconList').innerHTML = ICONS.map(([k, n, src]) => `<button type="button" role="radio" data-icon="${k}" aria-checked="${cur === k}"><img src="${src}" alt="">${n}</button>`).join('');
+}
+$('#iconList').addEventListener('click', e => { const k = e.target.closest('[data-icon]')?.dataset.icon; if (k) { setIcon(k); toast('아이콘을 바꿨어요 · 홈 화면에 다시 추가하면 적용돼요'); } });
+setSkin(skin()); if (store.get('appIcon', 'main') !== 'main') setIcon(store.get('appIcon'));
+// 설정: 목록 시트(prefs) — 사용자명·비밀번호 변경·Face ID·테마·앱 아이콘·친구 초대 / 비밀번호(접속코드) 변경은 따로 창
+function openConn() {
   const f = $('#settingsForm');
-  $('#lockOn').checked = !!store.get('lockId');
   f.url.value = cfg.url; f.token.value = cfg.token;
   $('#settings').showModal();
-});
+}
+function openPrefs() {
+  $('#lockOn').checked = !!store.get('lockId');
+  $('#prefName').textContent = me.token === cfg.token && me.name ? me.name : isFriend() ? '친구' : '아직 안 정함';
+  document.querySelectorAll('#prefs .owner-only').forEach(el => { el.hidden = isFriend() || !cfg.token; });
+  renderSkins(); renderIcons(); renderFriends(); loadMe();
+  $('#prefs').showModal();
+}
+$('#openSettings').addEventListener('click', openPrefs);
+$('#prefPw').addEventListener('click', () => { $('#prefs').close(); openConn(); });
+$('#prefsClose').addEventListener('click', () => $('#prefs').close());
+$('#menuSettings').addEventListener('click', () => { $('#menu').close(); setTimeout(openPrefs, 200); });
+$('#menuUser').addEventListener('click', () => { $('#menu').close(); setTimeout(openPrefs, 200); });
 $('#settings').addEventListener('close', () => {
   if ($('#settings').returnValue !== 'save') return;
   const f = $('#settingsForm'), link = f.link.value.trim();
@@ -912,7 +964,7 @@ $('#settings').addEventListener('close', () => {
   cfg = c;
   f.link.value = '';
   store.set('cfg', cfg);
-  refresh();
+  refresh(); loadMe().then(() => { if (sec !== 'money') sec === 'habit' ? refreshHabits() : refreshLists(); });
 });
 window.addEventListener('online', refresh);
 // 바텀시트 끌어 닫기
@@ -1466,6 +1518,7 @@ function renderFriends() {
   if (isFriend()) $('#friendMe').textContent = `친구 접속코드로 연결됨${me.name ? ' · ' + me.name : ''} · 가계부 없이 취미 기록과 습관을 써요`;
   if (!owner) return;
   if (document.activeElement !== $('#myName')) $('#myName').value = me.name || '';
+  $('#prefName').textContent = me.name || '아직 안 정함';
   $('#friendList').innerHTML = (me.friends || []).map(f => `<li><span><b>${esc(f.name)}</b></span><button type="button" class="small" data-copy="${esc(f.code)}">접속 링크 복사</button><button type="button" class="small danger" data-uninvite="${esc(f.code)}">삭제</button></li>`).join('')
     || '<li class="hint">아직 초대한 친구가 없어요</li>';
 }
@@ -1483,7 +1536,6 @@ $('#friendList').addEventListener('click', e => {
   if (c) copyText(friendLink(c));
   if (u && confirm('이 친구의 접속코드를 없앨까요? 친구 앱은 더 이상 연결되지 않아요 (기록은 시트에 남아요)')) friendOp({ action: 'uninvite', code: u });
 });
-$('#openSettings').addEventListener('click', () => { renderFriends(); loadMe(); });
 function applyRole() {
   document.body.classList.toggle('friend', isFriend());
   if (isFriend() && sec === 'money') setSection('book');
@@ -1503,6 +1555,10 @@ $('#menu').addEventListener('transitionend', e => { if (e.target === e.currentTa
 function openMenu(dragging) {
   $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
     `<button type="button" data-sec="${k}" data-hidden="${store.get('menuHidden', []).includes(k) && k !== sec ? 1 : 0}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}${k === 'money' ? '' : '<span class="eye" data-eye role="button" aria-label="메뉴에서 숨기기·보이기">👁</span>'}</button>`).join('');
+  const nm = me.token === cfg.token && me.name ? me.name : '';
+  $('#menuName').textContent = nm || (isFriend() ? '친구' : '이름을 정해 주세요');
+  $('#menuRole').textContent = isFriend() ? '친구 접속코드' : cfg.token ? '내 시트 · 눌러서 설정' : '아직 연결 전';
+  $('#menuAvatar').textContent = (nm || 'B').slice(0, 1);
   menuP(0, true); root.classList.add('menu-open');
   $('#menu').showModal();
   if (dragging) return;
