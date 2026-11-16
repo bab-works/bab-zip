@@ -328,7 +328,8 @@
   body.white { background:var(--glass); }
   .flow-card { background:none; box-shadow:none; border-radius:0; color:var(--fg); padding:4px 0 8px; margin:0 -16px; overflow:hidden; position:relative; } /* 화면 끝까지 */
   body.white main .card { box-shadow:none; }
-  .fadd { position:absolute; top:calc(var(--cw) * 1.5 + 10px); right:20px; z-index:200; width:36px; height:36px; border-radius:50%; padding:0; font-size:1.176rem; color:var(--fg); background:var(--fill); }
+  .fadd { display:none !important; } /* 추가는 떠 있는 ＋로 통일 */
+  .fadd-old { position:absolute; top:calc(var(--cw) * 1.5 + 10px); right:20px; z-index:200; width:36px; height:36px; border-radius:50%; padding:0; font-size:1.176rem; color:var(--fg); background:var(--fill); }
   .flow { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; perspective:700px;
     padding:8px calc(50% - 40px) 0; height:calc(var(--cw) * 1.5 + 42px); -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); align-items:flex-start; overscroll-behavior-x:contain; }
   .flow::-webkit-scrollbar { display:none; }

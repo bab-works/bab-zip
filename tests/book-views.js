@@ -25,10 +25,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.textContent('#fTitle'), '페스트');
   assert.equal(await p.isVisible('#lNav'), true); assert.equal(await p.locator('#lNav button[data-list]').count(), 3); assert.equal(await p.locator('#lNav [data-search]').count(), 1); assert.equal(await p.isVisible('#lTabs'), false);
   assert.equal(await p.getAttribute('#lNav [data-list=book]', 'aria-current'), 'page');
-  assert.equal(await p.isVisible('#fab'), false, 'floating + hidden so it does not cover the rating');
-  // ＋ → 책 검색 → 결과에서 바로 위시리스트·읽는 중에 추가
-  await p.click('#lNav [data-find]'); await p.waitForSelector('#bookFind[open]'); await p.click('#findClose'); await p.waitForTimeout(300); // 하단 탭 「책 추가」
-  const n0 = posts.length; await p.click('#fAdd'); await p.waitForSelector('#bookFind[open]');
+  assert.equal(await p.isVisible('#fab'), true, 'same floating + as money'); assert.equal(await p.locator('#lNav [data-find]').count(), 0);
+  // ＋ → 「책 검색해서 추가」「직접 입력」 → 책 검색 → 결과에서 바로 위시리스트·읽는 중에 추가
+  await p.click('#fab'); await p.waitForSelector('#addMenu:not([hidden])');
+  assert.deepEqual(await p.$$eval('#addMenu [data-add]', b => b.map(x => x.dataset.add)), ['find', 'manual']);
+  const n0 = posts.length; await p.click('#addMenu [data-add=find]'); await p.waitForSelector('#bookFind[open]');
   await p.fill('#findQ', '페스트'); await p.waitForSelector('#findList [data-to=buy]');
   await p.click('#findList [data-to=buy]'); await p.waitForTimeout(400);
   const add = posts.slice(n0).find(x => x.action === 'listSave');

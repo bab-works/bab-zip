@@ -372,7 +372,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.equal(B.d[0][29], 'id'); assert.ok(B.d[1][29] && B.d[3][29], 'book ids assigned');
   assert.equal(await p.locator('#lList li[data-id]').count(), 3);
   assert.match(await p.textContent('#lInfo'), /3권 · 완독 2권 · 올해 완독 1권/);
-  await p.click('#fab'); await p.waitForSelector('#bookFind[open]'); await p.click('#findManual'); await p.waitForSelector('#lItem', { state: 'visible' });
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.waitForSelector('#lItem', { state: 'visible' });
   await p.fill('#lForm [name=title]', '=새 책'); await p.fill('#lForm [name=author]', '작가'); await p.click(`#lForm label:has(input[name=stars][value="🙂"])`);
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.deepEqual([B.d[4][0], B.d[4][1], B.d[4][2], B.d[4][3], B.d[4][5], B.d[4][6], B.d[4][7], B.d[4][8]], [4, CUR.slice(0, 4) + '년', CUR.slice(5) + '월', 3, '=새 책', '작가', '읽는중', '★★★★']);

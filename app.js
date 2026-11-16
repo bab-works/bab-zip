@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v69'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v70'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -682,16 +682,23 @@ $('#entryCancel').addEventListener('click', () => $('#entry').close());
 const addMenu = open => {
   const m = $('#addMenu');
   document.body.classList.toggle('adding', open); $('#fab').setAttribute('aria-expanded', open);
-  if (open) { m.classList.remove('out'); m.hidden = false; return; }
+  if (open) { // 가계부: 사진·직접 / 독서: 책 검색·직접
+    const opt = (k, icon, t) => `<button type="button" data-add="${k}"><svg class="i" aria-hidden="true"><use href="#${icon}"/></svg>${t}</button>`;
+    m.innerHTML = sec === 'book' ? opt('find', 'i-search', '책 검색해서 추가') + opt('manual', 'i-pen', '직접 입력') : opt('photo', 'i-photo', '사진으로 입력') + opt('manual', 'i-pen', '직접 입력');
+    m.classList.remove('out'); m.hidden = false; return;
+  }
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => sec === 'money' ? addMenu($('#addMenu').hidden) : sec === 'book' ? openFind() : openItem());
+$('#fab').addEventListener('click', () => sec === 'money' || sec === 'book' ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
   addMenu(false);
-  if (k === 'photo') $('#photoIn').click(); else openEntry(null, $('#v-cal').hidden ? '' : selDay);
+  if (k === 'photo') $('#photoIn').click();
+  else if (k === 'find') openFind();
+  else if (sec === 'book') openItem();
+  else openEntry(null, $('#v-cal').hidden ? '' : selDay);
 });
 document.addEventListener('pointerdown', e => { if (document.body.classList.contains('adding') && !e.target.closest('#addMenu, #fab')) addMenu(false); });
 // 리퀴드 글래스 알약: 선택된 탭 뒤로 스프링처럼 미끄러지며 살짝 늘어났다 돌아옴
@@ -1058,8 +1065,7 @@ function renderLists() {
   $('#lTabs').hidden = true;
   $('#lNav').hidden = false; // 목록이 하나여도 같은 탭 바 (검색은 탭 바 안)
   $('#lNav').innerHTML = tabs.map(([k, label]) => `<button type="button" data-list="${k}" ${k === curList ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#${document.getElementById('i-l-' + k) ? 'i-l-' + k : 'i-s-' + sec}"/></svg>${label}</button>`).join('')
-    + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>'
-    + (sec === 'book' ? '<button type="button" data-find><svg class="i" aria-hidden="true"><use href="#i-l-find"/></svg>책 추가</button>' : '');
+    + '<button type="button" data-search><svg class="i" aria-hidden="true"><use href="#i-search"/></svg>검색</button>'; // 책 추가는 가계부처럼 떠 있는 ＋
   document.body.classList.add('tabbar');
   requestAnimationFrame(() => movePill($('#lNav')));
   const q = $('#lq').value.trim().toLowerCase(), all = listSorted(curList);
@@ -1075,7 +1081,7 @@ function renderLists() {
   $('#lList').classList.toggle('grid', view === 'grid');
   $('#lHead').hidden = $('#lTabs').hidden && $('#lViews').hidden; // 탭도 보기 선택도 없으면 빈 상자를 숨김
   document.body.classList.toggle('white', view === 'flow' && a.length > 0);
-  setFab(view === 'flow' && a.length > 0); // 커버플로우에선 평가 단추를 가리지 않게 카드 안 ＋ 사용
+  setFab(false); // 모든 목록에 가계부와 같은 떠 있는 ＋ (카드 안 ＋는 안 씀)
   if (view === 'flow' && a.length) return renderFlow(a);
   if (view === 'grid') {
     $('#lList').innerHTML = a.map(i => `<li data-id="${esc(i.id)}">${coverHTML(i)}<span>${esc(LIST_ROW[curList](i)[0])}</span><small>${esc(joinDot([i.author || i.shop || i.director || i.place, LIST_ROW[curList](i)[2]]))}</small></li>`).join('')
