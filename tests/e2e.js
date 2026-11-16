@@ -95,9 +95,9 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   });
   const status = re => p.waitForFunction(r => new RegExp(r).test(document.querySelector('#syncPop').textContent + ' ' + document.querySelector('#status').textContent), re.source);
   await p.goto('http://localhost:8766/');
-  assert.ok(await p.isVisible('#welcome'), 'welcome screen when not connected');
+  assert.ok(await p.isVisible('#login'), 'login screen when not connected');
   assert.equal(await p.textContent('#status'), '', 'no sheet error before connecting');
-  await p.click('#wPw'); await p.waitForSelector('#settings', { state: 'visible' });
+  await p.click('#loginAdv'); await p.waitForSelector('#settings', { state: 'visible' });
   // 잘못된 링크 → 거부, 창 유지
   // 틀린 비밀번호 → 상태 줄이 쉬운 말로, 누르면 설정 창
   await p.fill('[name=token]', 'wrong'); await p.click('button[value=save]');
@@ -304,7 +304,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const p4 = await (await b.newContext()).newPage();
   await p4.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: gs.doGet({ parameter: Object.fromEntries(new URL(rt.request().url()).searchParams) }) }));
   await p4.goto('http://localhost:8766/');
-  await p4.click('#wLink');
+  await p4.click('#loginAdv'); await p4.click('#settingsForm .adv summary');
   await p4.fill('[name=link]', 'https://babjange1.github.io/Budget-book/#url=' + encodeURIComponent('https://script.google.com/macros/s/AKfy_-z9/exec') + '&token=' + encodeURIComponent(TOKEN));
   await p4.click('button[value=save]');
   await p4.waitForFunction(() => /동기화됨/.test(document.querySelector('#syncPop').textContent + document.querySelector('#status').textContent));
@@ -350,7 +350,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.mouse.click(195, 10); await p.waitForSelector('#catSheet', { state: 'hidden' });
   await p.click('#openSettings'); await p.waitForSelector('#prefs[open]'); await p.mouse.click(195, 10); await p.waitForSelector('#prefs', { state: 'hidden' });
   // 설정 목록 → 비밀번호(접속코드) 변경 창
-  await p.click('#openSettings'); await p.click('#prefPw'); await p.waitForSelector('#settings[open]'); assert.equal(await p.inputValue('[name=token]'), TOKEN);
+  await p.click('#openSettings'); await p.click('#prefAdv'); await p.waitForSelector('#settings[open]'); assert.equal(await p.inputValue('[name=token]'), TOKEN);
   await p.click('#settings button[value=cancel]'); await p.waitForSelector('#settings', { state: 'hidden' });
   await status(/저장됨|동기화됨|삭제됨/); // 설정을 바깥 클릭으로 닫아도 연결 유지
   console.log('font:', await p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family)[0] || 'not loaded'; }));

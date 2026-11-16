@@ -6,12 +6,12 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
     const ctx = await b.newContext({ ...devices['iPhone 13'], reducedMotion: 'reduce' }), p = await ctx.newPage(), posts = [], gets = [];
     p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
     await ctx.addInitScript(t => localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: t })), token);
-    let friends = [{ name: '민지', code: 'f0123456789a' }];
+    let friends = [{ name: '민지', code: 'f0123456789a', invite: 'i0123456789' }];
     await p.route('https://script.google.com/**', rt => {
       const q = rt.request(), u = q.url();
       if (q.method() === 'POST') {
         const o = JSON.parse(q.postData()); posts.push(o);
-        if (o.action === 'invite') { friends.push({ name: o.name, code: 'fbbbbbbbbbbb' }); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true,"code":"fbbbbbbbbbbb"}' }); }
+        if (o.action === 'invite') { friends.push({ name: o.name, code: 'fbbbbbbbbbbb', invite: 'iabcdef0123' }); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true,"code":"fbbbbbbbbbbb","invite":"iabcdef0123"}' }); }
         return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true}' });
       }
       gets.push(u);
@@ -27,13 +27,15 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
 
   // 친구
   const { p, posts, gets } = await page('f0123456789a', 'friend');
-  assert.equal(await p.textContent('#appTitle'), '독서', 'friend lands on 독서, not 가계부');
+  assert.equal(await p.textContent('#appTitle'), '오늘', 'friend lands on the 오늘 dashboard, not 가계부');
+  assert.match(await p.textContent('#dashHi'), /민지님/); assert.match(await p.textContent('#v-dash'), /위시리스트/);
   assert.ok(!gets.some(u => !/what=/.test(u) || /what=summary/.test(u)), 'never asks for money data');
   await p.click('#menuBtn'); await p.waitForTimeout(500);
   assert.equal(await p.locator('#menuList [data-sec=money]').count(), 0, 'no MONEY in menu');
   // 태그된 기록: 배지 + 읽기 전용
   await p.click('#menuList [data-sec=escape]'); await p.waitForTimeout(800); await p.click('#lViews [data-v=list]');
   assert.match(await p.textContent('#lList'), /오시리스.*나리 기록/);
+  assert.equal(await p.locator('#lNav [data-list=escapeWant]').count(), 1, '방탈출 위시리스트 탭');
   await p.click('#lList li[data-id]'); await p.waitForTimeout(300);
   assert.equal(await p.locator('#lItem[open]').count(), 0, 'shared record opens read-only (toast)'); assert.match(await p.textContent('#toast'), /나리님이 나를 태그/);
   // 직접 입력 → 「함께한 사람」 아래 앱 친구 칩 (나는 빼고)
@@ -56,15 +58,18 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.equal(posts.at(-1).action, 'habitDelete');
   // 설정: 친구 코드로 연결됨, 초대 칸 없음
   await p.click('#openSettings'); await p.waitForTimeout(400);
-  assert.equal(await p.isVisible('#friendBox'), false); assert.match(await p.textContent('#friendMe'), /친구 접속코드로 연결됨 · 민지/);
+  assert.equal(await p.isVisible('#friendBox'), false); assert.match(await p.textContent('#friendMe'), /친구로 로그인했어요/);
 
   // 주인: 설정에서 친구 초대 → 접속 링크 복사
   const o = await page('owner-pw', 'owner');
   assert.equal(await o.p.textContent('#appTitle'), 'MONEY');
   await o.p.click('#openSettings'); await o.p.waitForTimeout(600);
   assert.match(await o.p.textContent('#friendList'), /민지/); assert.equal(await o.p.inputValue('#myName'), '나리');
-  o.p.once('dialog', d => d.accept());
-  await o.p.fill('#inviteName', '준호'); await o.p.click('#inviteBtn'); await o.p.waitForTimeout(800);
+  await o.p.evaluate(() => { navigator.share = undefined; }); // 공유 시트가 없는 경우 → 링크 + 복사하기/취소 창
+  await o.p.fill('#inviteName', '준호'); await o.p.click('#inviteBtn');
+  await o.p.waitForSelector('#shareSheet[open]');
   assert.deepEqual(o.posts.find(x => x.action === 'invite').name, '준호');
+  const link = await o.p.inputValue('#shareUrl'); assert.match(link, /#i=iabcdef0123(&s=|$)/); assert.doesNotMatch(link, /token|fbbbb/, 'no password/code in the link');
+  await o.p.click('#shareCancel'); await o.p.waitForTimeout(300);
   assert.match(await o.p.textContent('#friendList'), /준호/);
   console.log('FRIEND APP OK'); await b.close(); process.exit(0); });

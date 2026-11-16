@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v78'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v79'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -67,7 +67,8 @@ HTMLDialogElement.prototype.close = function (rv) {
   setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, +this.dataset.closeMs || 220);
 };
 // ESC·뒤로가기로 닫을 때도 같은 애니메이션
-document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogElement) { e.preventDefault(); e.target.close(); } }, true);
+// 로그인·잠금 화면은 ESC로도 안 닫힘
+document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogElement) { e.preventDefault(); if (!['login', 'lock'].includes(e.target.id)) e.target.close(); } }, true);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const localISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString(); };
 const persist = () => { store.set('data2', data); store.set('pending', pending); };
@@ -123,7 +124,7 @@ function openHelp(k) {
 }
 const retry = () => (sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 // 저장 대기 목록: 무엇이 막혔는지 보고, 다시 보내거나 하나씩 버림
-const LIST_NAME = { book: '독서', buy: '위시리스트', wish: '추천 목록', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬', movieWant: '보고 싶은 영화', playWant: '보고 싶은 공연' };
+const LIST_NAME = { book: '독서', buy: '위시리스트', wish: '추천 목록', escape: '방탈출', board: '보드게임', movie: '영화', play: '연극·뮤지컬', movieWant: '보고 싶은 영화', playWant: '보고 싶은 공연', escapeWant: '가고 싶은 방탈출', boardWant: '해 보고 싶은 보드게임' };
 function opText(o) {
   const i = o.item || {};
   if (o.action === 'save') return `거래 저장 · ${i.date || ''} ${i.content || i.minor || i.major || ''} ${won(i.amount || 0)}`;
@@ -159,7 +160,7 @@ $('#status').addEventListener('click', () => {
   if (statusAct === 'pending') { renderPending(); $('#pend').showModal(); return; }
   if (statusAct === 'retry') retry();
   else if (statusAct === 'settings') openConn();
-  else if (statusAct === 'welcome') $('#welcome').showModal();
+  else if (statusAct === 'welcome') showLogin();
   else if (HELP[statusAct]) openHelp(statusAct);
 });
 $('#helpRetry').addEventListener('click', () => { $('#help').close(); retry(); });
@@ -699,7 +700,7 @@ const addMenu = open => {
   if (m.hidden) return;
   m.classList.add('out'); setTimeout(() => { m.hidden = true; m.classList.remove('out'); }, calm() ? 0 : 200);
 };
-$('#fab').addEventListener('click', () => sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
+$('#fab').addEventListener('click', () => sec === 'home' ? (setSection('book'), openFind()) : sec === 'habit' ? openHabitAdd() : ['money', 'book', 'escape'].includes(sec) ? addMenu($('#addMenu').hidden) : openItem());
 $('#addMenu').addEventListener('click', e => {
   const k = e.target.closest('[data-add]')?.dataset.add;
   if (!k) return;
@@ -892,18 +893,70 @@ $('#lockOn').addEventListener('change', async e => {
   if (!e.target.checked) { store.set('lockId', ''); return toast('Face ID 잠금을 껐어요'); }
   try {
     if (!window.PublicKeyCredential) throw new Error('지원 안 함');
-    const c = await navigator.credentials.create({ publicKey: { challenge: rand(32), rp: { name: 'BAB:ZIP' }, user: { id: rand(16), name: 'BAB:ZIP', displayName: 'BAB:ZIP' },
+    const c = await navigator.credentials.create({ publicKey: { challenge: rand(32), rp: { name: '하트' }, user: { id: rand(16), name: '하트', displayName: '하트' },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], timeout: 60000,
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' } } });
     store.set('lockId', b64(c.rawId)); toast('다음부터 앱을 열 때 Face ID로 잠금을 풀어요');
   } catch (err) { e.target.checked = false; toast('이 기기에서는 Face ID 잠금을 켤 수 없어요'); }
 });
-$('#wLater').addEventListener('click', () => $('#welcome').close());
-['#wLink', '#wPw'].forEach(s => $(s).addEventListener('click', () => {
-  $('#welcome').close(); openConn();
-  const f = $('#settingsForm');
-  if (s === '#wLink') { f.querySelector('details.adv').open = true; f.link.focus(); } else f.token.focus();
-}));
+// ── 로그인 (흔한 앱처럼 아이디·비밀번호). 맞게 로그인하기 전엔 창이 안 닫힘 ──
+// 로그인·초대 확인은 토큰 없이 시트에 보냄
+async function pub(body) {
+  const res = await fetch(cfg.url || SHEET_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  let r; try { r = JSON.parse(await res.text()); } catch (e) { throw new Error('시트가 알 수 없는 응답을 보냈어요 · Code.gs를 새 버전으로 배포했는지 확인해 주세요'); }
+  if (!r.ok) throw new Error(r.error || '로그인하지 못했어요');
+  return r;
+}
+function showLogin(msg) {
+  const f = $('#loginForm'); f.reset(); $('#loginErr').textContent = msg || '';
+  if (!$('#login').open) $('#login').showModal();
+  setTimeout(() => f.name.focus(), 50);
+}
+$('#login').addEventListener('cancel', e => e.preventDefault()); // Esc로도 못 닫음
+async function loggedIn(r) {
+  cfg = { url: cfg.url || SHEET_URL, token: r.token }; store.set('cfg', cfg);
+  me = { token: r.token, role: r.role, name: r.name, people: [], friends: [] }; store.set('me', me);
+  ss.set('unlockedAt', Date.now()); // 방금 로그인했으면 Face ID 다시 안 물음
+  $('#login').close();
+  await hello(r.name);
+  applyRole(); loadMe();
+  if (isFriend()) setSection('home'); else { setSection('money'); refresh(); }
+}
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, btn = $('#loginBtn');
+  if (!f.name.value.trim() || !f.password.value) { $('#loginErr').textContent = '아이디와 비밀번호를 넣어 주세요'; return; }
+  btn.disabled = true; btn.textContent = '확인하는 중…'; $('#loginErr').textContent = '';
+  try { await loggedIn(await pub({ action: 'login', name: f.name.value.trim(), password: f.password.value })); }
+  catch (err) { $('#loginErr').textContent = err.message; replay($('#login'), 'shake'); f.password.select(); }
+  finally { btn.disabled = false; btn.textContent = '로그인'; }
+});
+$('#loginAdv').addEventListener('click', () => { openConn(); }); // 다른 사람 시트 주소·예전 방식 링크
+// 「○○님 반가워요」를 펜으로 쓰듯 그린 뒤, 종이 한 장이 넘어가며 앱이 보임
+function hello(name) {
+  return new Promise(done => {
+    const t = `${name || ''}님 반가워요`, el = $('#hello'), svg = $('#helloSvg'), d = Math.min(3, .5 + t.length * .12);
+    $('#helloText').textContent = t;
+    if (calm()) { el.hidden = false; setTimeout(() => { el.hidden = true; done(); }, 700); return; }
+    svg.innerHTML = `<text x="50%" y="62" text-anchor="middle" class="write" style="--d:${d}s">${esc(t)}</text><circle class="nib" r="5" cx="0" cy="66"/>`;
+    const w = svg.querySelector('text').getComputedTextLength?.() || 300;
+    svg.querySelector('.nib').style.cssText = `--d:${d}s;--x0:${180 - w / 2}px;--x1:${180 + w / 2}px`;
+    el.classList.remove('turn'); el.hidden = false;
+    setTimeout(() => el.classList.add('turn'), d * 1000 + 350);
+    setTimeout(() => { el.hidden = true; el.classList.remove('turn'); done(); }, d * 1000 + 1250);
+  });
+}
+// 로그아웃: 이 기기에 저장된 연결·기록 사본을 지우고 로그인 화면으로 (시트의 기록은 그대로)
+function logout() {
+  const left = pending.length ? `\n아직 시트에 못 보낸 ${pending.length}건은 사라져요.` : '';
+  if (!confirm('로그아웃할까요?' + left)) return;
+  ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+  cfg = { url: cfg.url, token: '' }; store.set('cfg', cfg); me = {};
+  document.querySelectorAll('dialog[open]').forEach(d => d.id !== 'login' && d.close());
+  location.hash = ''; setTimeout(() => location.reload(), 50);
+}
+$('#menuLogout').addEventListener('click', logout);
+$('#prefLogout').addEventListener('click', logout);
 document.addEventListener('click', e => { const k = e.target.closest('[data-help]')?.dataset.help; if (k && HELP[k]) openHelp(k); });
 $('#reload').addEventListener('click', () => sec === 'money' ? refresh() : sec === 'habit' ? refreshHabits() : refreshLists());
 // ── 테마 5가지: 기능은 같고 모양만 완전히 다름. html[data-skin]으로 index.html의 테마 CSS가 켜짐 (첫 화면 깜빡임 없게 head에서도 미리 적용) ──
@@ -918,6 +971,7 @@ function setSkin(k) {
   const tc = { clay: '#fbefe5', linear: '#0d0e10', cuberto: '#f4f4f2', ios: '#eef1f7' }[k];
   document.querySelectorAll('meta[name=theme-color]').forEach(m => tc ? m.setAttribute('content', tc) : m.setAttribute('content', m.media.includes('dark') ? '#101013' : '#f2f4f6'));
   requestAnimationFrame(() => document.querySelectorAll('nav').forEach(movePill)); renderSkins();
+  if ($('#prefThemeVal')) $('#prefThemeVal').textContent = (SKINS.find(x => x[0] === k) || SKINS[0])[1];
 }
 function renderSkins() {
   $('#skinList').innerHTML = SKINS.map(([k, n, bg, card, acc, r, sh], i) => `<button type="button" role="radio" data-skin="${k}" aria-checked="${skin() === k}">
@@ -947,13 +1001,34 @@ function openConn() {
 }
 function openPrefs() {
   $('#lockOn').checked = !!store.get('lockId');
-  $('#prefName').textContent = me.token === cfg.token && me.name ? me.name : isFriend() ? '친구' : '아직 안 정함';
+  const nm = me.token === cfg.token && me.name ? me.name : '';
+  $('#prefName').textContent = nm || (isFriend() ? '친구' : '이름(아이디)을 정해 주세요');
+  $('#prefRole').textContent = isFriend() ? '친구 계정' : '내 시트 주인 · 가계부까지';
+  $('#prefAvatar').textContent = (nm || '♥').slice(0, 1);
+  $('#prefThemeVal').textContent = SKINS.find(x => x[0] === skin())[1];
   document.querySelectorAll('#prefs .owner-only').forEach(el => { el.hidden = isFriend() || !cfg.token; });
-  renderSkins(); renderIcons(); renderFriends(); loadMe();
-  $('#prefs').showModal();
+  renderFriends(); loadMe();
+  if (!$('#prefs').open) $('#prefs').showModal();
 }
 $('#openSettings').addEventListener('click', openPrefs);
-$('#prefPw').addEventListener('click', () => { $('#prefs').close(); openConn(); });
+$('#prefAdv').addEventListener('click', () => { $('#prefs').close(); openConn(); });
+// 테마·아이콘은 「테마 변경」에 들어가서
+$('#prefTheme').addEventListener('click', () => { renderSkins(); renderIcons(); $('#themeSheet').showModal(); });
+$('#themeClose').addEventListener('click', () => { $('#themeSheet').close(); if ($('#prefs').open) openPrefs(); });
+// 비밀번호 변경: 새 비밀번호 두 번, 가벼운 비밀번호를 쓰라는 안내
+$('#prefPw').addEventListener('click', () => { $('#pwForm').reset(); $('#pwErr').textContent = ''; $('#pwSheet').showModal(); });
+$('#pwCancel').addEventListener('click', () => $('#pwSheet').close());
+$('#pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, a = f.pw1.value, b = f.pw2.value;
+  if (a.length < 4) return $('#pwErr').textContent = '4자 이상으로 정해 주세요';
+  if (a !== b) return $('#pwErr').textContent = '두 번 적은 비밀번호가 달라요';
+  try {
+    const r = await api({ action: 'setPassword', password: a });
+    if (r.token) { cfg.token = r.token; store.set('cfg', cfg); me.token = r.token; store.set('me', me); }
+    $('#pwSheet').close(); toast('비밀번호를 바꿨어요 · 다음 로그인부터 새 비밀번호를 써요');
+  } catch (err) { $('#pwErr').textContent = err.message.replace(/^입력값 오류:?\s*/, ''); }
+});
 $('#prefsClose').addEventListener('click', () => $('#prefs').close());
 $('#menuSettings').addEventListener('click', () => { $('#menu').close(); setTimeout(openPrefs, 200); });
 $('#menuUser').addEventListener('click', () => { $('#menu').close(); setTimeout(openPrefs, 200); });
@@ -965,6 +1040,7 @@ $('#settings').addEventListener('close', () => {
   cfg = c;
   f.link.value = '';
   store.set('cfg', cfg);
+  if ($('#login').open) $('#login').close(); // 로그인 화면의 「다른 시트에 연결」로 들어온 경우
   refresh(); loadMe().then(() => { if (sec !== 'money') sec === 'habit' ? refreshHabits() : refreshLists(); });
 });
 window.addEventListener('online', refresh);
@@ -1038,12 +1114,13 @@ $('#homeEdit').addEventListener('click', () => {
 
 // ── BAB:ZIP 섹션: MONEY · 독서 · 방탈출 · 보드게임 ──
 const SECTIONS = {
+  home: { title: '오늘', icon: '🏠' }, // 친구(게스트)의 첫 화면 대시보드. 주인도 메뉴에서 볼 수 있음
   money: { title: 'MONEY', icon: '💰' },
   book: { title: '독서', icon: '📚', tabs: [['book', '읽는 책'], ['buy', '위시리스트'], ['wish', '추천 목록']] },
-  escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록']] },
-  board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록']] },
-  movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '보고 싶어요']] },
-  play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '본 공연'], ['playWant', '보고 싶어요']] },
+  escape: { title: '방탈출', icon: '🔐', tabs: [['escape', '방탈출 기록'], ['escapeWant', '위시리스트']] },
+  board: { title: '보드게임', icon: '🎲', tabs: [['board', '보드게임 기록'], ['boardWant', '위시리스트']] },
+  movie: { title: '영화', icon: '🎬', tabs: [['movie', '본 영화'], ['movieWant', '위시리스트']] },
+  play: { title: '연극·뮤지컬', icon: '🎭', tabs: [['play', '본 공연'], ['playWant', '위시리스트']] },
   habit: { title: '습관', icon: '🔥' },
 };
 let lists = store.get('lists', {}); // 시트 목록의 화면용 사본
@@ -1069,11 +1146,13 @@ const LIST_FIELDS = {
     ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
   play: [['title', '작품명', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['date', '관람일', 'date'], ['place', '극장', 'text'], ['cast', '출연', 'text'],
     ['rating', '평점', 'select', RATE_OPTS], ['with', '함께한 사람', 'text'], ['review', '한 줄 리뷰', 'text'], ['image', '포스터 이미지 주소', 'url']],
+  escapeWant: [['theme', '가고 싶은 테마', 'text'], ['shop', '매장', 'text'], ['area', '지역', 'text'], ['memo', '메모', 'text'], ['image', '포스터 이미지 주소', 'url']],
+  boardWant: [['name', '해 보고 싶은 보드게임', 'text'], ['memo', '메모', 'text'], ['image', '이미지 주소', 'url']],
   movieWant: [['title', '보고 싶은 영화', 'text'], ['memo', '메모 (개봉일, 추천한 사람 등)', 'text'], ['image', '포스터 이미지 주소', 'url']],
   playWant: [['title', '보고 싶은 작품', 'text'], ['kind', '종류', 'select', ['연극', '뮤지컬']], ['memo', '메모', 'text'], ['image', '포스터 이미지 주소', 'url']],
 };
 const joinDot = a => a.filter(Boolean).join(' · ');
-const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭', movieWant: '🔖', playWant: '🔖' };
+const LIST_ICON = { book: '📚', buy: '🛒', wish: '⭐', escape: '🔐', board: '🎲', movie: '🎬', play: '🎭', movieWant: '🔖', playWant: '🔖', escapeWant: '🔖', boardWant: '🔖' };
 // 목록 한 줄: [제목, 설명, 오른쪽 표시]
 const LIST_ROW = {
   book: i => [i.title, joinDot([i.author, [i.year, i.month].filter(Boolean).join(' '), i.memo]), i.stars || i.status],
@@ -1084,6 +1163,8 @@ const LIST_ROW = {
   movie: i => [i.title, joinDot([i.director, i.date, i.place, i.with, i.review]), i.rating],
   play: i => [i.title, joinDot([i.kind, i.date, i.place, i.cast, i.with, i.review]), i.rating || i.kind],
   movieWant: i => [i.title, i.memo || '', ''],
+  escapeWant: i => [i.theme, joinDot([i.shop, i.area, i.memo]), ''],
+  boardWant: i => [i.name, i.memo || '', ''],
   playWant: i => [i.title, joinDot([i.kind, i.memo]), ''],
 };
 function listSorted(k) {
@@ -1235,7 +1316,7 @@ function openFind() {
   $('#bookFind').showModal(); $('#findQ').focus();
 }
 const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.area, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
-    <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="escape">＋ 기록하기</button></div></div></li>`;
+    <div class="find-to"><button type="button" class="small" data-k="${k}" data-to="escape">＋ 기록하기</button><button type="button" class="small" data-k="${k}" data-to="escapeWant">＋ 위시리스트</button></div></div></li>`;
 const findRow = (b, k) => {
   if (escMode()) return escRow(b, k);
   const has = FIND_TO.filter(([l]) => L(l).some(i => i.title === b.title)).map(([, n]) => n);
@@ -1262,6 +1343,13 @@ $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.b
 $('#findList').addEventListener('click', e => {
   const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
   if (!b) return;
+  if (btn.dataset.to === 'escapeWant') { // 가고 싶은 방탈출은 바로 저장
+    const item = { id: crypto.randomUUID(), theme: b.theme, shop: b.shop, area: b.area || '', memo: '', ...(b.image ? { image: b.image } : {}) };
+    (lists.escapeWant = lists.escapeWant || []).push(item); store.set('lists', lists);
+    btn.disabled = true; btn.textContent = '✓ 담음';
+    queue({ action: 'listSave', list: 'escapeWant', item }).then(ok => ok && toast(`「${b.theme}」 위시리스트에 담았어요`));
+    return curList === 'escapeWant' && renderLists();
+  }
   if (btn.dataset.to === 'escape') { $('#bookFind').close(); return openItem(null, { theme: b.theme, shop: b.shop, area: b.area || '', ...(b.image ? { image: b.image } : {}) }); } // 날짜·결과는 직접
   const to = btn.dataset.to, t = localISO(), arr = lists[to] = lists[to] || [];
   const item = { id: crypto.randomUUID(), title: b.title, author: b.author, memo: '', ...(b.image ? { image: b.image } : {}),
@@ -1344,19 +1432,21 @@ function setSection(k) {
   if ($('#lq').value) $('#lq').value = '';
   store.set('sec', k);
   $('#appTitle').textContent = SECTIONS[k].title;
-  const money = k === 'money', habit = k === 'habit';
+  const money = k === 'money', habit = k === 'habit', home = k === 'home';
+  $('#v-dash').hidden = !home;
   $('#monthRow').hidden = !money;
   document.querySelector('nav').hidden = !money;
   $('#lNav').hidden = true; // 목록 화면이면 renderLists가 다시 켬
   requestAnimationFrame(() => movePill(document.querySelector('nav')));
-  $('#v-lists').hidden = money || habit;
+  $('#v-lists').hidden = money || habit || home;
   $('#v-habit').hidden = !habit;
-  if (!money) replay($('#v-' + (habit ? 'habit' : 'lists')), 'enter');
+  if (!money) replay($('#v-' + (home ? 'dash' : habit ? 'habit' : 'lists')), 'enter');
   if (money) show(curView);
   else {
     ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = true; });
     $('#filters').hidden = true;
-    setFab(habit && !isFriend()); // 친구는 습관도 ＋로 직접 만듦
+    setFab((habit && !isFriend()) || home); // 친구는 습관도 ＋로 직접 만듦
+    if (home) { renderDash(); Promise.all([refreshLists(), refreshHabits()]).then(() => sec === 'home' && renderDash()); window.scrollTo(0, 0); return; }
     if (habit) { renderHabits(); refreshHabits(); window.scrollTo(0, 0); return; }
     curList = SECTIONS[k].tabs[0][0];
     $('#lq').value = '';
@@ -1474,6 +1564,45 @@ function openHabit(h) {
   g.parentElement.scrollLeft = 1e6; // 이번 주가 보이게
 }
 $('#hdClose').addEventListener('click', () => $('#hDetail').close());
+// ── 「오늘」 대시보드 (게스트의 첫 화면): 인사 → 오늘 습관 고리 → 읽는 책 → 최근 기록 → 함께한 기록 → 위시리스트 ──
+// 참고: Apple 피트니스 요약(고리), 토스 홈(카드 묶음), Daylio·Streaks(연속 기록), 인스타 친구 피드(함께한 기록), Notion 홈(최근 항목)
+const RECENT_KEYS = [['escape', 'theme', '🔐'], ['board', 'name', '🎲'], ['movie', 'title', '🎬'], ['play', 'title', '🎭'], ['book', 'title', '📚']];
+function renderDash() {
+  const now = new Date(), h = now.getHours(), today = localISO().slice(0, 10), st = stampOf(today);
+  const nm = me.token === cfg.token && me.name ? me.name : '';
+  $('#dashDate').textContent = `${now.getMonth() + 1}월 ${now.getDate()}일 ${'일월화수목금토'[now.getDay()]}요일`;
+  $('#dashHi').textContent = `${nm ? nm + '님, ' : ''}${h < 6 ? '늦은 밤이에요' : h < 12 ? '좋은 아침이에요' : h < 18 ? '좋은 오후예요' : '오늘도 수고했어요'}`;
+  // 오늘 습관 고리
+  const due = habits.filter(x => dueOn(x, today)), done = due.filter(x => x.done.includes(st)).length, pct = due.length ? done / due.length : 0, C = 2 * Math.PI * 34;
+  $('#dashHabit').innerHTML = `<button type="button" class="dash-ring" data-go="habit" aria-label="오늘 습관 ${done}/${due.length}"><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34" class="tr"/><circle cx="40" cy="40" r="34" class="pg" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/></svg><b>${done}<small>/${due.length}</small></b></button>
+    <div><h2>오늘 습관</h2><div class="dash-chips">${due.map(x => `<button type="button" class="small" data-hab="${esc(x.id)}" aria-pressed="${x.done.includes(st)}" style="--c:${esc(x.color)}">${esc(hIcon(x))} ${esc(x.name)}</button>`).join('') || '<span class="hint">＋ 습관에서 오늘 할 습관을 만들어요</span>'}</div></div>`;
+  // 읽는 책 + 올해 목표
+  const reading = L('book').filter(i => i.status === '읽는중' && !i.shared).slice(-1)[0], y = today.slice(0, 4), goal = +store.get('bookGoal', {})[y] || 0;
+  const read = L('book').filter(i => i.status === '완독' && i.year === y + '년' && !i.shared).length;
+  $('#dashBook').innerHTML = `<h2>읽는 책</h2>${reading ? `<button type="button" class="dash-book" data-go="book">${reading.image ? `<img src="${esc(reading.image)}" alt="" referrerpolicy="no-referrer">` : '<span class="cover ph">📖</span>'}<span><b>${esc(reading.title)}</b><small>${esc(reading.author || '')}</small></span></button>` : '<p class="hint">읽고 있는 책이 없어요 · 독서에서 ＋로 추가해요</p>'}
+    <div class="dash-goal"><span>올해 ${read}권 읽음${goal ? ` / 목표 ${goal}권` : ''}</span><span class="bar"><i style="--w:${goal ? Math.min(100, read / goal * 100) : 0}%"></i></span></div>`;
+  // 최근 기록 (모든 취미에서 날짜순 5개)
+  const all = RECENT_KEYS.flatMap(([k, key, ic]) => L(k).filter(i => !i.shared).map(i => ({ k, ic, t: i[key], d: i.date || (i.year ? `${parseInt(i.year)}-${String(parseInt(i.month) || 1).padStart(2, '0')}` : ''), r: i.rating || i.stars || '' })));
+  const recent = all.filter(x => x.t).sort((a, b) => (b.d || '').localeCompare(a.d || '')).slice(0, 5);
+  $('#dashRecent').innerHTML = recent.map(x => `<li data-go="${x.k}"><span class="em">${x.ic}</span><div><span>${esc(x.t)}</span><small>${esc(x.d)}</small></div><b>${esc(x.r)}</b></li>`).join('') || '<li class="empty">아직 기록이 없어요 · 메뉴에서 독서·방탈출을 골라 ＋로 남겨요</li>';
+  // 함께한 기록 (친구가 나를 태그한 것)
+  const shared = RECENT_KEYS.flatMap(([k, key, ic]) => L(k).filter(i => i.shared).map(i => ({ k, ic, t: i[key], by: i.shared, d: i.date || '' }))).sort((a, b) => b.d.localeCompare(a.d)).slice(0, 4);
+  $('#dashShared').hidden = !shared.length;
+  $('#dashSharedList').innerHTML = shared.map(x => `<li data-go="${x.k}"><span class="em">${x.ic}</span><div><span>${esc(x.t)}</span><small>${esc(x.by)}님이 함께한 기록 · ${esc(x.d)}</small></div></li>`).join('');
+  // 위시리스트 개수
+  const W = [['buy', '책', 'book'], ['escapeWant', '방탈출', 'escape'], ['boardWant', '보드게임', 'board'], ['movieWant', '영화', 'movie'], ['playWant', '공연', 'play']];
+  $('#dashWish').innerHTML = W.map(([k, n, s]) => `<button type="button" class="dash-wish" data-go="${s}" data-list="${k}"><b>${L(k).length}</b><small>${n}</small></button>`).join('');
+}
+$('#v-dash').addEventListener('click', e => {
+  const hb = e.target.closest('[data-hab]');
+  if (hb) { // 대시보드에서 바로 체크
+    const x = habits.find(q => q.id === hb.dataset.hab), st = stampOf(localISO().slice(0, 10)), done = !x.done.includes(st);
+    x.done = done ? [...x.done, st] : x.done.filter(q => q !== st); x.total = Math.max(0, x.total + (done ? 1 : -1)); store.set('habits', habits); renderDash();
+    return queue({ action: 'habitCheck', habitId: x.id, stamp: st, done });
+  }
+  const g = e.target.closest('[data-go]'); if (!g) return;
+  setSection(g.dataset.go); if (g.dataset.list) { curList = g.dataset.list; renderLists(); }
+});
 // ── 친구 습관 (틱틱 없이 시트에): 만들기·지우기 ──
 const hIcon = h => HICON[h.icon] || (h.local && h.icon) || '⭐';
 const H_EMOJI = ['💧', '🏃', '📖', '🧘', '💊', '🥗', '😴', '✍️', '🚭', '🍺'], H_COLOR = ['#3182f6', '#20c997', '#f59f00', '#f06595', '#845ef7', '#fa5252'];
@@ -1511,35 +1640,60 @@ async function loadMe() {
   } catch (e) { return; }
   applyRole();
 }
-// 설정 창: 주인은 친구 초대·접속코드 관리, 친구는 「친구 코드로 연결됨」
-const friendLink = code => `${location.origin}${location.pathname}#url=${encodeURIComponent(cfg.url)}&token=${code}`;
+// 설정 창: 주인은 친구 초대, 친구는 「친구로 로그인됨」
+// 초대 링크는 짧은 초대ID만 담음 (비밀번호·접속코드가 안 보임). 누르면 바로 로그인
+const friendLink = inv => `${location.origin}${location.pathname}#i=${inv}${cfg.url !== SHEET_URL ? '&s=' + encodeURIComponent(cfg.url) : ''}`;
 function renderFriends() {
   const owner = !!cfg.token && !isFriend() && me.token === cfg.token;
   $('#friendBox').hidden = !owner; $('#friendMe').hidden = !isFriend();
-  if (isFriend()) $('#friendMe').textContent = `친구 접속코드로 연결됨${me.name ? ' · ' + me.name : ''} · 가계부 없이 취미 기록과 습관을 써요`;
+  if (isFriend()) $('#friendMe').textContent = `친구로 로그인했어요 · 가계부 없이 취미 기록과 습관을 써요`;
   if (!owner) return;
   if (document.activeElement !== $('#myName')) $('#myName').value = me.name || '';
-  $('#prefName').textContent = me.name || '아직 안 정함';
-  $('#friendList').innerHTML = (me.friends || []).map(f => `<li><span><b>${esc(f.name)}</b></span><button type="button" class="small" data-copy="${esc(f.code)}">접속 링크 복사</button><button type="button" class="small danger" data-uninvite="${esc(f.code)}">삭제</button></li>`).join('')
+  $('#friendList').innerHTML = (me.friends || []).map(f => `<li><span><b>${esc(f.name)}</b></span><button type="button" class="small plane-btn" data-share="${esc(f.invite || '')}" data-name="${esc(f.name)}"><svg class="i" aria-hidden="true"><use href="#i-plane"/></svg>공유</button><button type="button" class="small danger" data-uninvite="${esc(f.code)}">삭제</button></li>`).join('')
     || '<li class="hint">아직 초대한 친구가 없어요</li>';
 }
-const copyText = async t => { try { await navigator.clipboard.writeText(t); toast('복사했어요 · 친구에게 보내 주세요'); } catch (e) { prompt('이 링크를 복사해 친구에게 보내 주세요', t); } };
+// 종이비행기가 단추에서 위로 날아감 (지나간 자리에 점 몇 개)
+function flyPlane(from) {
+  if (calm()) return;
+  const r = from.getBoundingClientRect(), pl = document.createElement('div');
+  pl.className = 'plane-fly'; pl.innerHTML = '<svg viewBox="0 0 24 24"><use href="#i-plane"/></svg>';
+  pl.style.left = r.left + r.width / 2 - 17 + 'px'; pl.style.top = r.top - 10 + 'px'; document.body.append(pl);
+  for (let k = 1; k <= 5; k++) setTimeout(() => { const pr = pl.getBoundingClientRect(), d = document.createElement('i'); d.className = 'plane-trail'; d.style.left = pr.left + 4 + 'px'; d.style.top = pr.top + pr.height - 6 + 'px'; document.body.append(d); setTimeout(() => d.remove(), 800); }, k * 110);
+  setTimeout(() => pl.remove(), 1200);
+}
+// 공유: 아이폰 공유 시트(카톡·메시지 등). 공유를 못 쓰거나 실패하면 링크 + 복사하기/취소 창
+async function shareInvite(name, inv, btn) {
+  if (!inv) return toast('초대 링크를 만드는 중이에요 · 잠시 뒤 다시 눌러 주세요');
+  const url = friendLink(inv), text = `${name}님, 하트에 초대해요! 아래 링크를 누르면 바로 시작돼요`;
+  if (btn) flyPlane(btn);
+  try { await navigator.clipboard.writeText(url); } catch (e) {} // 먼저 조용히 복사해 둠
+  if (navigator.share) {
+    try { await navigator.share({ title: '하트 초대', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  $('#shareInfo').textContent = `${name}님에게 이 링크를 보내 주세요`; $('#shareUrl').value = url; $('#shareSheet').showModal();
+}
+$('#shareCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#shareUrl').value); toast('복사했어요 · 친구에게 보내 주세요'); $('#shareSheet').close(); }
+  catch (e) { $('#shareUrl').select(); toast('링크를 길게 눌러 복사해 주세요'); }
+});
+$('#shareCancel').addEventListener('click', () => $('#shareSheet').close());
 async function friendOp(body, done) {
   try { const r = await api(body); await loadMe(); done && done(r); } catch (e) { toast(e.message.replace(/^입력값 오류:?\s*/, '')); }
 }
-$('#myNameSave').addEventListener('click', () => { const n = $('#myName').value.trim(); if (n) friendOp({ action: 'setName', name: n }, () => toast('이름을 저장했어요')); });
+$('#myNameSave').addEventListener('click', () => { const n = $('#myName').value.trim(); if (n) friendOp({ action: 'setName', name: n }, () => { toast('이름을 저장했어요 · 이제 이 이름이 아이디예요'); openPrefs(); }); });
 $('#inviteBtn').addEventListener('click', () => {
-  const n = $('#inviteName').value.trim(); if (!n) return;
-  friendOp({ action: 'invite', name: n }, r => { $('#inviteName').value = ''; if (r.code) copyText(friendLink(r.code)); });
+  const n = $('#inviteName').value.trim(); if (!n) return $('#inviteName').focus();
+  const btn = $('#inviteBtn');
+  friendOp({ action: 'invite', name: n }, r => { $('#inviteName').value = ''; shareInvite(n, r.invite, btn); });
 });
 $('#friendList').addEventListener('click', e => {
-  const c = e.target.closest('[data-copy]')?.dataset.copy, u = e.target.closest('[data-uninvite]')?.dataset.uninvite;
-  if (c) copyText(friendLink(c));
-  if (u && confirm('이 친구의 접속코드를 없앨까요? 친구 앱은 더 이상 연결되지 않아요 (기록은 시트에 남아요)')) friendOp({ action: 'uninvite', code: u });
+  const sh = e.target.closest('[data-share]'), u = e.target.closest('[data-uninvite]')?.dataset.uninvite;
+  if (sh) shareInvite(sh.dataset.name, sh.dataset.share, sh);
+  if (u && confirm('이 친구를 삭제할까요? 친구는 더 이상 로그인할 수 없어요 (기록은 시트에 남아요)')) friendOp({ action: 'uninvite', code: u });
 });
 function applyRole() {
   document.body.classList.toggle('friend', isFriend());
-  if (isFriend() && sec === 'money') setSection('book');
+  if (isFriend() && sec === 'money') setSection('home');
   renderFriends();
 }
 // 사이드바 (클로드 앱 방식): 「열린 정도」 --p(0~1) 하나만 바꾸면 메뉴·본문·모서리·배경이 같은 곡선·같은 시간으로 함께 움직임
@@ -1927,7 +2081,15 @@ const now = localISO();
 $('#month').value = now.slice(0, 7);
 render();
 refresh();
-if (!cfg.token) $('#welcome').showModal(); // 연결 전이면 시작 화면
+// 초대 링크(#i=초대ID)로 열면 비밀번호 없이 바로 로그인 → 반가워요
+const invite = new URLSearchParams(location.hash.slice(1)).get('i');
+if (invite) {
+  const su = new URLSearchParams(location.hash.slice(1)).get('s');
+  if (su && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(su)) cfg.url = su;
+  history.replaceState(null, '', location.pathname + location.search);
+  showLogin('초대 링크를 확인하는 중이에요…');
+  pub({ action: 'redeem', invite }).then(loggedIn).catch(err => showLogin(err.message));
+} else if (!cfg.token) showLogin(); // 로그인 전이면 로그인 화면
 else lockNow();
 if (SECTIONS[store.get('sec', 'money')] && store.get('sec', 'money') !== 'money') setSection(store.get('sec')); // 마지막에 보던 섹션으로
 applyRole(); loadMe(); // 친구 코드면 가계부 대신 독서로 (시트에 다시 물어 확인)
@@ -2057,7 +2219,7 @@ function recapLines(r) {
 }
 function openRecap() {
   const r = recapData();
-  $('#rcTitle').textContent = `올해의 BAB:ZIP ${r.y}`;
+  $('#rcTitle').textContent = `올해의 하트 ${r.y}`;
   $('#rcList').innerHTML = recapLines(r).map(([e, t, v, sub]) => `<li><span class="em" aria-hidden="true">${e}</span><div><small>${esc(t)}</small><b>${esc(v)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div></li>`).join('');
   $('#recap').showModal();
 }
@@ -2068,7 +2230,7 @@ function recapImage() {
   const g = x.createLinearGradient(0, 0, 1080, 1350); g.addColorStop(0, '#3182f6'); g.addColorStop(1, '#7b5cf5');
   x.fillStyle = g; x.fillRect(0, 0, 1080, 1350);
   const font = (w, px) => `${w} ${px}px "Pretendard Variable", -apple-system, sans-serif`;
-  x.fillStyle = '#fff'; x.font = font(600, 40); x.fillText('BAB:ZIP', 80, 120);
+  x.fillStyle = '#fff'; x.font = font(600, 40); x.fillText('하트', 80, 120);
   x.font = font(800, 84); x.fillText(`올해의 ${r.y}`, 80, 220);
   const rowH = Math.min(130, 960 / Math.max(1, lines.length));
   lines.forEach(([e, t, v, sub], k) => {
@@ -2083,7 +2245,7 @@ function recapImage() {
 }
 $('#rcSave').addEventListener('click', async () => {
   const blob = await recapImage(), file = new File([blob], `BABZIP-${recapYear()}.png`, { type: 'image/png' });
-  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: `올해의 BAB:ZIP ${recapYear()}` }); } catch (e) {} return; } // 아이폰: 공유 시트 → 이미지 저장
+  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: `올해의 하트 ${recapYear()}` }); } catch (e) {} return; } // 아이폰: 공유 시트 → 이미지 저장
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });
 $('#rcClose').addEventListener('click', () => $('#recap').close());

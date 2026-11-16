@@ -166,7 +166,43 @@ const FRIEND_TAB_ = '친구', FREC_TAB_ = '친구 기록', FHAB_TAB_ = '친구 �
 const ownerName_ = () => PropertiesService.getScriptProperties().getProperty('OWNER_NAME') || '';
 const tab_ = (name, head) => { let sh = ss_().getSheetByName(name); if (!sh) { sh = ss_().insertSheet(name); sh.getRange(1, 1, 1, head.length).setValues([head]); } return sh; };
 const body_ = sh => sh && sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues() : [];
-const friends_ = () => body_(ss_().getSheetByName(FRIEND_TAB_)).filter(r => r[0] && r[1]).map(r => ({ name: String(r[0]).trim(), code: String(r[1]) }));
+// 「친구」 탭 열: 이름 | 접속코드 | 만든 날 | 초대ID(짧은 초대 링크용) | 비밀번호(해시)
+const friends_ = () => body_(ss_().getSheetByName(FRIEND_TAB_)).filter(r => r[0] && r[1]).map(r => ({ name: String(r[0]).trim(), code: String(r[1]), invite: String(r[3] || ''), pw: String(r[4] || '') }));
+const pwHash_ = (salt, pw) => Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pw));
+const newId_ = (p, n) => p + Utilities.getUuid().replace(/-/g, '').slice(0, n);
+// 예전에 초대한 친구에게도 짧은 초대 ID를 만들어 줌 (주인이 설정을 열 때)
+function ensureInvites_() {
+  const sh = ss_().getSheetByName(FRIEND_TAB_); if (!sh) return;
+  sh.getRange(1, 4, 1, 2).setValues([['초대ID', '비밀번호']]);
+  body_(sh).forEach((r, i) => { if (r[0] && r[1] && !r[3]) sh.getRange(i + 2, 4).setValue(newId_('i', 9)); });
+}
+// 로그인: 이름 + 비밀번호 → 접속 토큰 (주인: 시트 비밀번호, 친구: 자기가 정한 비밀번호). 같은 이름으로 10번 넘게 틀리면 10분 쉬기
+function login_(b) {
+  const name = String(b.name || '').trim(), pw = String(b.password || ''), cache = typeof CacheService !== 'undefined' ? CacheService.getScriptCache() : null, key = 'fail:' + name;
+  if (!name || !pw) throw new Error('아이디와 비밀번호를 넣어 주세요');
+  if (cache && +(cache.get(key) || 0) >= 10) throw new Error('너무 많이 틀렸어요 · 10분 뒤에 다시 해 주세요');
+  const owner = ownerName_();
+  if (authOk_(pw) && (!owner || owner === name)) { if (!owner) PropertiesService.getScriptProperties().setProperty('OWNER_NAME', name); return { token: pw, role: 'owner', name }; }
+  const f = friends_().find(x => x.name === name && x.pw && x.pw === pwHash_(x.code, pw));
+  if (f) return { token: f.code, role: 'friend', name: f.name };
+  if (cache) cache.put(key, String(+(cache.get(key) || 0) + 1), 600);
+  throw new Error('아이디 또는 비밀번호가 맞지 않아요');
+}
+// 초대 링크(#i=초대ID)로 열면 비밀번호 없이 바로 로그인
+function redeem_(b) {
+  const f = /^i[0-9a-f]{9}$/.test(String(b.invite || '')) && friends_().find(x => x.invite === String(b.invite));
+  if (!f) throw new Error('초대 링크가 맞지 않거나 취소됐어요 · 초대한 사람에게 다시 받아 주세요');
+  return { token: f.code, role: 'friend', name: f.name, hasPassword: !!f.pw };
+}
+// 비밀번호 바꾸기: 주인은 시트 비밀번호(APP_TOKEN) 자체가 바뀜 → 새 토큰을 돌려줌, 친구는 로그인용 비밀번호만
+function setPassword_(me, b) {
+  const pw = String(b.password || '');
+  if (pw.length < 4 || pw.length > 40) throw new Error('입력값 오류: 비밀번호는 4~40자');
+  if (me.role === 'owner') { PropertiesService.getScriptProperties().setProperty('APP_TOKEN', pw); return { token: pw }; }
+  const sh = ss_().getSheetByName(FRIEND_TAB_), i = body_(sh).findIndex(r => String(r[1]) === me.code);
+  sh.getRange(1, 5).setValue('비밀번호'); sh.getRange(i + 2, 5).setValue(pwHash_(me.code, pw));
+  return { token: me.code };
+}
 function who_(t) {
   if (authOk_(t)) return { role: 'owner', name: ownerName_(), code: '' };
   const f = t && String(t).length >= 8 && friends_().find(x => x.code === String(t));
@@ -233,9 +269,10 @@ function invite_(b) {
   const name = String(b.name || '').trim().slice(0, 20);
   if (!name || /[,·、/&+\s]/.test(name)) throw new Error('입력값 오류: 이름은 띄어쓰기 없이');
   if (people_().includes(name)) throw new Error('입력값 오류: 이미 있는 이름');
-  const code = 'f' + Utilities.getUuid().replace(/-/g, '').slice(0, 11);
-  sh.appendRow(["'" + name, code, new Date()]);
-  return { code };
+  const code = newId_('f', 11), invite = newId_('i', 9);
+  sh.getRange(1, 1, 1, 5).setValues([['이름', '접속코드', '만든 날', '초대ID', '비밀번호']]);
+  sh.appendRow(["'" + name, code, new Date(), invite, '']);
+  return { code, invite };
 }
 const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'setName', 'invite', 'uninvite'];
 
@@ -374,6 +411,8 @@ const LISTS = {
   play: { tab: '연극·뮤지컬 기록', head: 1, key: 'title', idHead: 'id', no: '번호', f: {
     title: ['작품명'], kind: ['종류'], date: ['관람일', 'date'], place: ['극장'], cast: ['출연'], rating: ['평점'], with: ['함께한 사람'], review: ['후기'], image: ['포스터'] } },
   // 보고 싶어요: 탭이 없으면 처음 저장할 때 만듦
+  escapeWant: { tab: '가고 싶은 방탈출', head: 1, key: 'theme', idHead: 'id', create: ['테마', '매장', '지역', '메모', '포스터', 'id'], f: { theme: ['테마'], shop: ['매장'], area: ['지역'], memo: ['메모'], image: ['포스터'] } },
+  boardWant: { tab: '해 보고 싶은 보드게임', head: 1, key: 'name', idHead: 'id', create: ['보드게임', '메모', '이미지', 'id'], f: { name: ['보드게임'], memo: ['메모'], image: ['이미지'] } },
   movieWant: { tab: '보고 싶은 영화', head: 1, key: 'title', idHead: 'id', create: ['제목', '메모', '포스터', 'id'], f: { title: ['제목'], memo: ['메모'], image: ['포스터'] } },
   playWant: { tab: '보고 싶은 공연', head: 1, key: 'title', idHead: 'id', create: ['제목', '종류', '메모', '포스터', 'id'], f: { title: ['제목'], kind: ['종류'], memo: ['메모'], image: ['포스터'] } },
 };
@@ -584,7 +623,10 @@ function doGet(e) {
   const me = who_(e.parameter.token);
   if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
-    if (e.parameter.what === 'me') return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_() : undefined });
+    if (e.parameter.what === 'me') {
+      if (me.role === 'owner') withLock_(ensureInvites_);
+      return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
+    }
     if (me.role === 'friend' && !['escape', 'book', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
@@ -619,6 +661,9 @@ function doGet(e) {
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
+  if (b.action === 'login' || b.action === 'redeem') { // 로그인은 토큰 없이
+    try { return out_({ ok: true, ...withLock_(() => b.action === 'login' ? login_(b) : redeem_(b)) }); } catch (err) { return out_({ ok: false, error: err.message }); }
+  }
   if (b.action === 'ocr') { // 사진 글자 읽기 (시트는 안 건드림)
     if (!who_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
     try { return out_({ ok: true, text: ocr_(b.image) }); } catch (err) { return out_({ ok: false, error: '사진 인식 실패: ' + err.message }); }
@@ -634,6 +679,7 @@ function writeOp_(b) {
   try {
     withLock_(() => {
       if (/^(setName|invite|uninvite)$/.test(b.action)) res = invite_(b);
+      else if (b.action === 'setPassword') res = setPassword_(me, b);
       else if (me.role === 'friend' && b.action === 'listSave') fListSave_(me, b.list, b.item);
       else if (me.role === 'friend' && b.action === 'listDelete') fListDelete_(me, b.list, b.id);
       else if (me.role === 'friend' && /^habit(Check|Add|Delete)$/.test(b.action)) fHabit_(me, b);

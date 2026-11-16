@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BAB:ZIP</title>
+<title>하트</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#101013" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="BAB:ZIP">
+<meta name="apple-mobile-web-app-title" content="하트">
 <script>/* 고른 테마·아이콘을 그리기 전에 먼저 적용 (깜빡임 없게) */ try { var s = JSON.parse(localStorage.getItem('skin')); if (s) document.documentElement.dataset.skin = s; } catch (e) {}</script>
 <style>
   /* Pretendard (SIL Open Font License) — 파일을 앱에 같이 둬서 오프라인에서도 적용 */
@@ -531,7 +531,57 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) nav .tab-pill { background:linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.05)), color-mix(in srgb, var(--accent) 22%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 10px rgba(0,0,0,.3); } }
   :root[data-theme="dark"] nav .tab-pill { background:linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.05)), color-mix(in srgb, var(--accent) 22%, transparent); box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 10px rgba(0,0,0,.3); }
   nav button:active { transform:scale(.92); }
-  .sbtn { display:none !important; } /* 검색은 늘 탭 바 안 돋보기 */
+  .sbtn { display:none !important; }
+  /* 「오늘」 대시보드 */
+  .dash-hi { padding:4px 4px 8px; } .dash-hi small { color:var(--muted); font-size:0.765rem; } .dash-hi h2 { font-size:1.412rem; margin:2px 0 0; }
+  .dash-habit { display:flex; gap:16px; align-items:center; } .dash-habit h2 { margin-bottom:8px; }
+  .dash-ring { position:relative; width:84px; height:84px; flex:none; padding:0; background:none; display:grid; place-items:center; }
+  .dash-ring svg { position:absolute; inset:0; transform:rotate(-90deg); } .dash-ring circle { fill:none; stroke-width:9; } .dash-ring .tr { stroke:var(--fill); }
+  .dash-ring .pg { stroke:var(--accent); stroke-linecap:round; transition:stroke-dasharray .6s var(--spring); } .dash-ring b { font-size:1.3rem; font-weight:800; } .dash-ring small { font-size:0.706rem; color:var(--muted); }
+  .dash-chips { display:flex; flex-wrap:wrap; gap:6px; } .dash-chips button[aria-pressed="true"] { background:var(--c, var(--accent)); color:#fff; }
+  .dash-book { display:flex; gap:12px; align-items:center; width:100%; text-align:left; background:none; padding:0; border-radius:12px; }
+  .dash-book img, .dash-book .cover { width:52px; height:76px; border-radius:6px; object-fit:cover; flex:none; } .dash-book span { display:flex; flex-direction:column; } .dash-book small { color:var(--muted); }
+  .dash-goal { display:grid; gap:6px; margin-top:12px; font-size:0.824rem; color:var(--muted); }
+  .dash-list li { cursor:pointer; } .dash-list b { font-size:1.1rem; }
+  .dash-wishes { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:8px; }
+  .dash-wish { display:flex; flex-direction:column; align-items:center; gap:2px; padding:12px 4px; border-radius:16px; background:var(--fill); } .dash-wish b { font-size:1.235rem; } .dash-wish small { color:var(--muted); font-size:0.706rem; }
+  /* 로그인: 전체 화면, 맞게 로그인하기 전엔 못 닫음 */
+  .login { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; border-radius:0; background:var(--bg); display:none; place-items:center; padding:24px; }
+  .login[open] { display:grid; } .login::backdrop { background:var(--bg); }
+  .login-in { width:min(100%, 360px); display:flex; flex-direction:column; gap:10px; text-align:center; }
+  .login-logo { width:72px; height:72px; margin:0 auto 4px; border-radius:22px; display:grid; place-items:center; font-size:2.2rem; color:#fff; background:linear-gradient(140deg, #ff6b8b, #ff3d5a); box-shadow:0 12px 28px rgba(255,61,90,.35); }
+  .login-in h2 { margin:0; font-size:1.647rem; } .login-in input { padding:14px 16px; font-size:1rem; background:var(--glass); box-shadow:var(--shadow), inset 0 0 0 1px var(--line); }
+  .login-btn { padding:14px; font-size:1rem; margin-top:4px; } .login-btn[disabled] { opacity:.6; }
+  .login-err { min-height:1.2em; margin:0; color:var(--out); font-size:0.824rem; } .login-tip { margin:4px 0 0; }
+  .login-more { display:flex; justify-content:center; gap:10px; } .login-more a { padding:6px 12px; color:var(--muted); text-decoration:none; font-size:0.765rem; }
+  .login.shake .login-in { animation:shake .4s; } @keyframes shake { 20%, 60% { transform:translateX(-8px); } 40%, 80% { transform:translateX(8px); } }
+  /* 반가워요: 펜으로 쓰듯 그려지고, 다 쓰면 종이 한 장이 넘어가며 앱이 보임 */
+  .hello { position:fixed; inset:0; z-index:50; perspective:1600px; pointer-events:none; }
+  .hello-page { position:absolute; inset:0; display:grid; place-items:center; background:var(--bg); transform-origin:0 50%; box-shadow:0 0 0 rgba(0,0,0,0); }
+  .hello-page svg { width:min(92vw, 520px); overflow:visible; }
+  .hello text { font:800 34px "Pretendard Variable", -apple-system, sans-serif; fill:transparent; stroke:var(--fg); stroke-width:1.1; stroke-linecap:round; stroke-linejoin:round; paint-order:stroke; }
+  .hello text.write { animation:pen var(--d, 1.6s) cubic-bezier(.45,.05,.4,1) forwards, ink .5s ease calc(var(--d, 1.6s) - .25s) forwards; }
+  @keyframes pen { from { stroke-dasharray:0 1200; } to { stroke-dasharray:1200 0; } } @keyframes ink { to { fill:var(--fg); } }
+  .hello .nib { fill:var(--accent); animation:nib var(--d, 1.6s) cubic-bezier(.45,.05,.4,1) forwards; }
+  @keyframes nib { from { transform:translateX(var(--x0)); } to { transform:translateX(var(--x1)); opacity:0; } }
+  .hello.turn .hello-page { animation:pageTurn .9s cubic-bezier(.6,.05,.3,1) forwards; }
+  @keyframes pageTurn { 0% { transform:rotateY(0); box-shadow:0 0 0 rgba(0,0,0,0); } 60% { box-shadow:30px 0 60px rgba(0,0,0,.25); } 100% { transform:rotateY(-105deg); box-shadow:60px 0 80px rgba(0,0,0,0); opacity:.4; } }
+  .hello.turn .hello-page::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,.18)); animation:fadeIn .9s forwards; }
+  /* 설정 화면 */
+  .profile { display:flex; align-items:center; gap:14px; padding:12px 6px 4px; } .profile div { display:flex; flex-direction:column; } .profile b { font-size:1.176rem; } .profile small { color:var(--muted); font-size:0.765rem; }
+  .avatar.big { width:56px; height:56px; font-size:1.4rem; } .name-edit { background:var(--fill); border-radius:14px; margin-top:8px; }
+  .danger-row { color:var(--out); } .pw-warn { background:color-mix(in srgb, var(--warn) 12%, transparent); padding:10px 12px; border-radius:12px; }
+  dialog.sheet { overflow-x:hidden; } .set-row.switch { position:relative; overflow:hidden; } /* 숨은 체크박스 때문에 시트가 좌우로 흔들리던 문제 */
+  #menuLogout { padding:6px 12px; font-size:0.765rem; color:var(--muted); }
+  /* 종이비행기: 초대 단추를 누르면 날아감 */
+  .plane-btn { display:inline-flex; align-items:center; gap:6px; } .plane-btn svg.i { width:18px; height:18px; }
+  .plane-fly { position:fixed; z-index:60; width:34px; height:34px; color:var(--accent); pointer-events:none; animation:fly 1.1s cubic-bezier(.5,0,.6,1) forwards; }
+  .plane-fly svg { width:100%; height:100%; fill:color-mix(in srgb, var(--accent) 20%, transparent); stroke:currentColor; stroke-width:1.6; }
+  @keyframes fly { 0% { transform:translate(0,0) rotate(0) scale(1); } 25% { transform:translate(-16px, 10px) rotate(-12deg) scale(1.05); }
+    100% { transform:translate(calc(50vw), -70vh) rotate(18deg) scale(.4); opacity:0; } }
+  .plane-trail { position:fixed; z-index:59; width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:.5; pointer-events:none; animation:trail .8s ease-out forwards; }
+  @keyframes trail { to { transform:scale(0); opacity:0; } }
+  #shareUrl { font-size:0.824rem; color:var(--muted); } /* 검색은 늘 탭 바 안 돋보기 */
   /* ＋ 누르면 위로 두 가지 선택지가 스프링으로 */
   .add-menu { position:fixed; right:calc(var(--edge) + 12px); bottom:calc(max(8px, calc(env(safe-area-inset-bottom) - 12px)) + 76px); z-index:7; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
   .add-menu[hidden] { display:none; }
@@ -674,10 +724,14 @@
   <symbol id="i-l-find" viewBox="0 0 24 24"><path d="M3 5c3-1 6-1 9 1v14c-3-2-6-2-9-1z"/><circle cx="17" cy="13" r="3.2"/><path d="M19.4 15.4L22 18M12 6c1.5-1 3-1.4 5-1.4"/></symbol>
   <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21.5 3.5L2.8 10.6c-.8.3-.8 1.4 0 1.7l4.7 1.8 1.8 5.6c.2.7 1.1.9 1.6.4l2.7-2.6 4.6 3.4c.6.4 1.4.1 1.6-.6L22.8 4.8c.2-.8-.6-1.5-1.3-1.3z"/><path d="M7.5 14.1L19 6.5l-9.7 9.3"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-s-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-l-escapeWant" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+  <symbol id="i-l-boardWant" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
   <symbol id="i-s-money" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2M6 6l9-3 1 3"/></symbol>
   <symbol id="i-s-book" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h14v14H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h14"/><path d="M8 7h8"/></symbol>
   <symbol id="i-s-escape" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></symbol>
@@ -718,7 +772,7 @@
 <main>
   <section id="v-home">
     <input type="file" id="photoIn" accept="image/png,image/jpeg,image/heic,image/webp" hidden>
-    <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 BAB:ZIP 결산이 나왔어요<span>보기 ›</span></button>
+    <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 하트 결산이 나왔어요<span>보기 ›</span></button>
     <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
       <div id="todayCan" class="today-can" hidden></div>
@@ -792,6 +846,14 @@
     <div class="card"><ul id="list" class="tx"></ul></div>
   </section>
 
+  <section id="v-dash" hidden>
+    <div class="dash-hi"><small id="dashDate"></small><h2 id="dashHi"></h2></div>
+    <div class="card dash-habit" id="dashHabit"></div>
+    <div class="card" id="dashBook"></div>
+    <div class="card"><h2>최근 기록</h2><ul id="dashRecent" class="tx dash-list"></ul></div>
+    <div class="card" id="dashShared" hidden><h2>함께한 기록</h2><ul id="dashSharedList" class="tx dash-list"></ul></div>
+    <div class="card"><h2>위시리스트</h2><div id="dashWish" class="dash-wishes"></div></div>
+  </section>
   <section id="v-habit" hidden>
     <div class="card hcal">
       <div class="hmon"><button type="button" id="hPrev" class="icon-btn" aria-label="이전 달">‹</button><b id="hMonth"></b><button type="button" id="hNext" class="icon-btn" aria-label="다음 달">›</button></div>
@@ -898,7 +960,7 @@
 </dialog>
 
 <dialog id="menu" aria-label="메뉴" data-close-ms="420">
-  <div class="menu-head"><button type="button" id="menuUser" class="menu-user"><span class="avatar" id="menuAvatar" aria-hidden="true"></span><span><b id="menuName"></b><small id="menuRole"></small></span></button><button type="button" id="menuDone" class="small" hidden>완료</button></div>
+  <div class="menu-head"><button type="button" id="menuUser" class="menu-user"><span class="avatar" id="menuAvatar" aria-hidden="true"></span><span><b id="menuName"></b><small id="menuRole"></small></span></button><button type="button" id="menuDone" class="small" hidden>완료</button><button type="button" id="menuLogout" class="small">로그아웃</button></div>
   <div id="menuList" class="menu-list"></div>
   <button type="button" id="bragBtn" class="brag-btn" aria-pressed="false">✨ 자랑하기 모드<small>금액·거래 내용을 가려요</small></button>
   <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요</p>
@@ -959,7 +1021,7 @@
   <div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" id="hdDelete" class="danger" hidden>습관 지우기</button><span style="flex:1"></span><button type="button" id="hdClose">닫기</button></div>
 </dialog>
 <dialog id="lock" class="lock" aria-label="잠김">
-  <div class="lock-in"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><h2>BAB:ZIP</h2><p class="hint">잠겨 있어요</p>
+  <div class="lock-in"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><h2>하트</h2><p class="hint">잠겨 있어요</p>
     <button type="button" id="unlock" class="primary">Face ID로 열기</button>
     <form id="lockPw"><input type="password" name="pw" placeholder="또는 앱 비밀번호" aria-label="앱 비밀번호" autocomplete="current-password"><button class="small">열기</button></form></div>
 </dialog>
@@ -998,42 +1060,79 @@
   <h2 style="text-align:center">결제수단</h2>
   <div id="payList" class="pay-list"></div>
 </dialog>
-<dialog id="welcome" class="welcome" aria-labelledby="wTitle">
-  <h2 id="wTitle">BAB:ZIP 시작하기</h2>
-  <p class="hint">가계부와 취미 기록을 내 구글 시트에 저장해요</p>
-  <button type="button" class="wbtn" id="wLink">연결 링크를 받았어요<small>받은 링크를 붙여넣어요</small></button>
-  <button type="button" class="wbtn" id="wPw">비밀번호가 있어요<small>시트에 정한 비밀번호를 입력해요</small></button>
-  <a class="wbtn" href="https://github.com/bab-works/bab-zip/blob/main/FRIEND.md" target="_blank" rel="noopener">처음이에요<small>내 시트 만드는 방법 (10분)</small></a>
-  <div class="row" style="justify-content:center; margin-top:6px"><button type="button" id="wLater" class="small">나중에 하기</button></div>
+<dialog id="login" class="login" aria-labelledby="loginTitle">
+  <form id="loginForm" class="login-in" novalidate>
+    <div class="login-logo" aria-hidden="true">♥</div>
+    <h2 id="loginTitle">하트</h2>
+    <p class="hint">습관과 취미, 가계부를 한곳에</p>
+    <input name="name" placeholder="아이디 (이름)" autocomplete="username" aria-label="아이디" maxlength="20" required>
+    <input name="password" type="password" placeholder="비밀번호" autocomplete="current-password" aria-label="비밀번호" required>
+    <p id="loginErr" class="login-err" role="alert"></p>
+    <button class="primary login-btn" id="loginBtn">로그인</button>
+    <p class="hint login-tip">초대받았다면 받은 링크를 누르면 바로 로그인돼요</p>
+    <div class="login-more"><button type="button" id="loginAdv" class="small">다른 시트에 연결</button>
+      <a class="small" href="https://github.com/bab-works/bab-zip/blob/main/FRIEND.md" target="_blank" rel="noopener">처음이에요</a></div>
+  </form>
 </dialog>
+<div id="hello" class="hello" hidden aria-live="polite"><div class="hello-page"><svg id="helloSvg" viewBox="0 0 360 120" aria-hidden="true"></svg><p id="helloText" class="sr-only"></p></div></div>
 <dialog id="prefs" class="sheet prefs" aria-labelledby="prefsTitle">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
   <h2 id="prefsTitle" class="prefs-title">설정</h2>
+  <div class="profile"><span class="avatar big" id="prefAvatar" aria-hidden="true"></span><div><b id="prefName"></b><small id="prefRole"></small></div></div>
+  <div class="set-row owner-only name-edit"><span class="set-grow"><input id="myName" placeholder="아이디로 쓸 이름 (띄어쓰기 없이)" maxlength="20" aria-label="내 이름"></span><button type="button" id="myNameSave" class="small">저장</button></div>
   <p class="set-label">계정</p>
   <div class="set-group">
-    <div class="set-row"><span>사용자명</span><span class="set-val" id="prefName"></span></div>
-    <div class="set-row owner-only"><span class="set-grow"><input id="myName" placeholder="내 이름 (띄어쓰기 없이)" maxlength="20" aria-label="내 이름"></span><button type="button" id="myNameSave" class="small">저장</button></div>
-    <button type="button" class="set-row set-link" id="prefPw"><span>비밀번호 (접속코드) 변경하기</span><span class="chev" aria-hidden="true">›</span></button>
+    <button type="button" class="set-row set-link" id="prefPw"><span>비밀번호 변경</span><span class="chev" aria-hidden="true">›</span></button>
+    <button type="button" class="set-row set-link danger-row" id="prefLogout"><span>로그아웃</span></button>
   </div>
   <p class="set-label">보안</p>
   <div class="set-group">
     <label class="set-row switch"><span class="set-grow">Face ID 잠금<small>앱을 열 때 Face ID로 열어요</small></span><input type="checkbox" id="lockOn"><i aria-hidden="true"></i></label>
   </div>
+  <p class="set-label">화면</p>
+  <div class="set-group">
+    <button type="button" class="set-row set-link" id="prefTheme"><span>테마 · 앱 아이콘 변경</span><span class="set-val" id="prefThemeVal"></span><span class="chev" aria-hidden="true">›</span></button>
+  </div>
+  <p id="friendMe" class="hint" hidden></p>
+  <div id="friendBox" hidden>
+    <p class="set-label">친구 초대</p>
+    <div class="set-group set-pad">
+      <p class="hint">친구는 가계부 없이 취미 기록·습관만 써요. 친구 기록은 내 시트 「친구 기록」 탭에 친구마다 따로 저장돼요 (시트 주인인 나는 볼 수 있어요).</p>
+      <div class="frow2"><input id="inviteName" placeholder="친구 이름 (아이디가 돼요)" maxlength="20" aria-label="초대할 친구 이름"><button type="button" id="inviteBtn" class="small primary plane-btn"><svg class="i" aria-hidden="true"><use href="#i-plane"/></svg>초대</button></div>
+      <ul id="friendList" class="pend-list"></ul>
+    </div>
+  </div>
+  <p class="set-label">고급</p>
+  <div class="set-group"><button type="button" class="set-row set-link" id="prefAdv"><span>다른 시트에 연결</span><span class="chev" aria-hidden="true">›</span></button></div>
+  <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="prefsClose">닫기</button></div>
+</dialog>
+<dialog id="pwSheet" class="sheet" aria-labelledby="pwTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <form id="pwForm">
+    <h2 id="pwTitle" style="text-align:center;margin:0 0 6px">비밀번호 변경</h2>
+    <p class="hint pw-warn">🔐 다른 사이트에서 쓰는 진짜 비밀번호 말고, <b>여기서만 쓰는 가벼운 비밀번호</b>로 정해 주세요. 이 앱은 은행처럼 강하게 지켜 주지 않아요.</p>
+    <input name="pw1" type="password" placeholder="새 비밀번호 (4자 이상)" autocomplete="new-password" minlength="4" maxlength="40" required aria-label="새 비밀번호">
+    <input name="pw2" type="password" placeholder="한 번 더" autocomplete="new-password" minlength="4" maxlength="40" required aria-label="새 비밀번호 확인" style="margin-top:8px">
+    <p id="pwErr" class="login-err" role="alert"></p>
+    <div class="row sheet-foot" style="margin-top:10px"><button type="button" id="pwCancel">취소</button><button class="primary">바꾸기</button></div>
+  </form>
+</dialog>
+<dialog id="themeSheet" class="sheet prefs" aria-labelledby="themeTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="themeTitle" class="prefs-title">테마 · 앱 아이콘</h2>
   <p class="set-label">테마</p>
   <div class="set-group set-pad"><div id="skinList" class="skin-list" role="radiogroup" aria-label="테마"></div></div>
   <p class="set-label">앱 아이콘</p>
   <div class="set-group set-pad"><div id="iconList" class="icon-list" role="radiogroup" aria-label="앱 아이콘"></div>
-    <p class="hint">바꾼 아이콘은 홈 화면의 BAB:ZIP을 지우고 사파리에서 다시 「홈 화면에 추가」하면 적용돼요.</p></div>
-  <p id="friendMe" class="hint" hidden></p>
-  <div id="friendBox" hidden>
-    <p class="set-label">친구 초대 · 접속코드</p>
-    <div class="set-group set-pad">
-      <p class="hint">친구는 가계부 없이 취미 기록·습관만 써요. 친구 기록은 내 시트 「친구 기록」 탭에 친구마다 따로 저장돼요 (시트 주인인 나는 볼 수 있어요).</p>
-      <div class="frow2"><input id="inviteName" placeholder="친구 이름 (띄어쓰기 없이)" maxlength="20" aria-label="초대할 친구 이름"><button type="button" id="inviteBtn" class="small primary">초대</button></div>
-      <ul id="friendList" class="pend-list"></ul>
-    </div>
-  </div>
-  <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="prefsClose">닫기</button></div>
+    <p class="hint">바꾼 아이콘은 홈 화면의 하트를 지우고 사파리에서 다시 「홈 화면에 추가」하면 적용돼요.</p></div>
+  <div class="row sheet-foot" style="justify-content:flex-end;margin-top:14px"><button type="button" id="themeClose">완료</button></div>
+</dialog>
+<dialog id="shareSheet" class="sheet" aria-labelledby="shareTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="shareTitle" style="text-align:center;margin:0 0 6px">초대 링크</h2>
+  <p class="hint" id="shareInfo" style="text-align:center"></p>
+  <input id="shareUrl" readonly aria-label="초대 링크">
+  <div class="row sheet-foot" style="margin-top:12px"><button type="button" id="shareCancel">취소</button><button type="button" id="shareCopy" class="primary">복사하기</button></div>
 </dialog>
 <dialog id="settings">
   <form method="dialog" id="settingsForm">

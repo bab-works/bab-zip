@@ -15,7 +15,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.ok(foot > 500 && top < 120, `name at top, settings at bottom (${top}, ${foot})`);
   await p.click('#menuSettings'); await p.waitForSelector('#prefs[open]');
   assert.equal(await p.textContent('#prefName'), '서현'); assert.equal(await p.isVisible('#prefPw'), true); assert.equal(await p.locator('#prefs .switch:has(#lockOn)').count(), 1, 'Face ID toggle in settings');
-  // 테마 5가지
+  // 테마 5가지: 설정 → 「테마 · 앱 아이콘 변경」에 들어가서
+  await p.click('#prefTheme'); await p.waitForSelector('#themeSheet[open]');
   assert.deepEqual(await p.$$eval('#skinList [data-skin]', bs => bs.map(x => x.textContent.trim())), ['1. 메인 테마', '2. 클레이모피즘', '3. iOS 27', '4. 쿠베르토', '5. 리니어']);
   const bg = () => p.evaluate(() => getComputedStyle(document.body).backgroundColor + '|' + getComputedStyle(document.querySelector('.card')).borderRadius);
   const seen = new Set();
@@ -29,7 +30,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.reload(); await p.waitForTimeout(600);
   assert.equal(await p.evaluate(() => document.documentElement.dataset.skin), 'linear', 'theme kept after reload');
   // 앱 아이콘
-  await p.click('#openSettings'); await p.waitForSelector('#prefs[open]');
+  await p.click('#openSettings'); await p.waitForSelector('#prefs[open]'); await p.click('#prefTheme'); await p.waitForSelector('#themeSheet[open]');
   assert.deepEqual(await p.$$eval('#iconList [data-icon]', bs => bs.map(x => x.dataset.icon)), ['main', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']);
   await p.click('#iconList [data-icon=c5]'); assert.equal(await p.getAttribute('link[rel=manifest]', 'href'), 'manifest-c5.webmanifest');
   await p.click('#iconList [data-icon=c1]');

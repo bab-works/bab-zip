@@ -1,6 +1,6 @@
 {
-  "name": "BAB:ZIP",
-  "short_name": "BAB:ZIP",
+  "name": "하트",
+  "short_name": "하트",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

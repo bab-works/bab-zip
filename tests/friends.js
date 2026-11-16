@@ -22,7 +22,8 @@ const ctx = {
   ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
-  Utilities: { getUuid: () => String(++uid).padStart(8, '0') + '-cccc-dddd-eeee-ffffffffffff', formatDate: d => d.toISOString().slice(0, 10) },
+  Utilities: { getUuid: () => String(++uid).padStart(8, '0') + '-cccc-dddd-eeee-ffffffffffff', formatDate: d => d.toISOString().slice(0, 10),
+    DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (a, t) => [...require('crypto').createHash('sha256').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
 };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'owner-pw';"), ctx);
@@ -76,6 +77,24 @@ post(MJ, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261116, done: fa
 assert.equal(get(JH, 'habits').habits.length, 0, 'habits are per code');
 assert.equal(post(JH, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261116, done: true }).ok, false, 'cannot check someone else’s habit');
 post(MJ, { action: 'habitDelete', habitId: 'h1234abcd' }); assert.equal(get(MJ, 'habits').habits.length, 0);
+
+// 로그인: 주인은 이름 + 시트 비밀번호, 친구는 짧은 초대 링크(비밀번호 없음)로 들어와서 비밀번호를 정한 뒤 이름 + 비밀번호
+assert.equal(post(undefined, { action: 'login', name: '나리', password: OWNER }).token, OWNER);
+assert.equal(post(undefined, { action: 'login', name: '남', password: OWNER }).ok, false, 'owner name must match');
+assert.match(post(undefined, { action: 'login', name: '나리', password: 'x' }).error, /맞지 않아요/);
+const mjInv = get(OWNER, 'me').friends.find(f => f.name === '민지').invite; assert.match(mjInv, /^i[0-9a-f]{9}$/);
+assert.notEqual(mjInv, MJ, 'invite id is not the access code');
+const red = post(undefined, { action: 'redeem', invite: mjInv }); assert.deepEqual([red.token, red.name, red.hasPassword], [MJ, '민지', false]);
+assert.equal(post(undefined, { action: 'redeem', invite: 'i000000000' }).ok, false);
+assert.equal(post(undefined, { action: 'login', name: '민지', password: MJ }).ok, false, 'access code alone is not a password');
+assert.equal(post(MJ, { action: 'setPassword', password: 'cat1' }).ok, true);
+assert.equal(post(undefined, { action: 'login', name: '민지', password: 'cat1' }).token, MJ);
+assert.equal(tabs['친구'].d.some(r => r.includes('cat1')), false, 'password stored hashed');
+assert.equal(post(MJ, { action: 'setPassword', password: 'ab' }).ok, false, 'too short');
+// 주인 비밀번호 바꾸기 → 새 토큰으로만
+const np = post(OWNER, { action: 'setPassword', password: 'newpw1' }); assert.equal(np.token, 'newpw1');
+assert.equal(get(OWNER, 'me').ok, false); assert.equal(get('newpw1', 'me').role, 'owner');
+assert.equal(post('newpw1', { action: 'setPassword', password: OWNER }).ok, true); // 원래대로
 
 // 초대 취소 → 그 코드는 더 못 씀
 post(OWNER, { action: 'uninvite', code: JH }); assert.equal(get(JH, 'lists').ok, false);
