@@ -581,7 +581,7 @@
   .skin-prev { width:100%; aspect-ratio:3/4; border-radius:12px; padding:8px 6px; display:flex; flex-direction:column; gap:5px; background:var(--pb); border:1px solid rgba(0,0,0,.06); }
   .skin-prev i { display:block; height:16px; border-radius:var(--pr); background:var(--pc); box-shadow:var(--ps); }
   .skin-prev i:nth-child(2) { width:70%; } .skin-prev b { margin-top:auto; align-self:flex-end; width:16px; height:16px; border-radius:50%; background:var(--pa); }
-  .icon-list { display:flex; gap:14px; } .icon-list img { width:60px; height:60px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .icon-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); gap:10px; } .icon-list img { width:60px; height:60px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.12); }
 
   /* ═════ 테마 2~5 (1번 메인 테마는 위의 기본 그대로) ═════ */
   /* 2. 클레이모피즘: 크림 파스텔, 말랑한 3D 볼륨(바깥 그림자 + 이중 안쪽 빛), 큰 둥근 모서리 */

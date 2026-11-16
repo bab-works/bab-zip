@@ -30,7 +30,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.equal(await p.evaluate(() => document.documentElement.dataset.skin), 'linear', 'theme kept after reload');
   // 앱 아이콘
   await p.click('#openSettings'); await p.waitForSelector('#prefs[open]');
-  assert.deepEqual(await p.$$eval('#iconList [data-icon]', bs => bs.map(x => x.dataset.icon)), ['main', 'clay', 'glass']);
+  assert.deepEqual(await p.$$eval('#iconList [data-icon]', bs => bs.map(x => x.dataset.icon)), ['main', 'clay', 'glass', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7']);
+  await p.click('#iconList [data-icon=c5]'); assert.equal(await p.getAttribute('link[rel=manifest]', 'href'), 'manifest-c5.webmanifest');
   await p.click('#iconList [data-icon=clay]');
   assert.equal(await p.getAttribute('link[rel=apple-touch-icon]', 'href'), 'icon-clay-180.png');
   assert.equal(await p.getAttribute('link[rel=manifest]', 'href'), 'manifest-clay.webmanifest');
