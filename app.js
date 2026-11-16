@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v76'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v77'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -925,8 +925,8 @@ function renderSkins() {
 }
 $('#skinList').addEventListener('click', e => { const k = e.target.closest('[data-skin]')?.dataset.skin; if (k) { setSkin(k); toast(`「${SKINS.find(x => x[0] === k)[1]}」로 바꿨어요`); } });
 // 앱 아이콘 3가지: 사파리 「홈 화면에 추가」가 읽는 아이콘 주소를 바꿈 (이미 추가한 아이콘은 지우고 다시 추가해야 바뀜)
-const ICONS = [['main', '기본', 'icon-180.png', 'icon-192.png'], ['clay', '클레이', 'icon-clay-180.png', 'icon-clay-192.png'], ['glass', '글래스', 'icon-glass-180.png', 'icon-glass-192.png'],
-  ...['부자', '하늘', '아앙', '씨익', '소시지', '그루터기', '파르페'].map((n, i) => [`c${i + 1}`, n, `icon-c${i + 1}-180.png`, `icon-c${i + 1}-192.png`])];
+const ICONS = [['main', '우사기', 'icon-180.png', 'icon-192.png'], ['clay', '클레이', 'icon-clay-180.png', 'icon-clay-192.png'], ['glass', '글래스', 'icon-glass-180.png', 'icon-glass-192.png'],
+  ...['썬구리 우사기', '짭몽가', '쿠리', '하치와레', '소시지쿠리', '랏코', '랏코 귀여워 ㅠ'].map((n, i) => [`c${i + 1}`, n, `icon-c${i + 1}-180.png`, `icon-c${i + 1}-192.png`])];
 function setIcon(k) {
   const c = ICONS.find(x => x[0] === k) || ICONS[0]; store.set('appIcon', c[0]);
   $('link[rel=apple-touch-icon]').href = c[2]; $('link[rel=icon]').href = c[3];
