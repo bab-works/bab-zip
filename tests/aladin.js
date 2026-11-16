@@ -41,4 +41,10 @@ assert.deepEqual(vm.runInContext('bookSearch_("페스트")', ctx), [{ title: '�
   const g = JSON.parse(JSON.stringify(vm.runInContext('boardSearch_("스플렌더")', ctx)));
   assert.deepEqual(g.map(x => x.name), ['스플렌더', '스플렌더 + 확장']);
   assert.equal(g[0].image, 'https://cdnfile.koreaboardgames.com/upload/thumb/%EC%8A%A4%ED%94%8C%EB%A0%8C%EB%8D%94.jpg'); assert.equal(g[0].price, 65000); }
+// 영화: 키노라이츠 검색 화면에 이스케이프돼 실린 결과 → 영화 먼저, 포스터 없어도 됨
+{ const it = (id, t, ty, img, y) => `{\\"content\\":{\\"id\\":\\"${id}\\",\\"titleKr\\":\\"${t}\\",\\"contentTypes\\":[\\"${ty}\\"],\\"posterImage\\":${img ? `{\\"id\\":\\"9\\",\\"pathUrl\\":\\"${img}\\"` : 'null'},\\"x\\":1,\\"openYear\\":${y ? `\\"${y}\\"` : 'null'}}}`;
+  const page = 'self.__next_f.push([1,"' + [it(1, '위키드', '예능', 'https://f/a.jpg', '2016'), it(2, '위키드', '영화', 'https://f/b.jpg', '2024'), it(3, '위키드 2', '영화', '', '')].join(',') + '"])';
+  ctx.UrlFetchApp.fetch = u => { assert.match(u, /^https:\/\/kinolights\.com\/search\?keyword=/); return { getContentText: () => page }; };
+  const m = JSON.parse(JSON.stringify(vm.runInContext('movieSearch_("위키드")', ctx)));
+  assert.deepEqual(m.map(x => [x.title, x.type, x.year, x.image]), [['위키드', '영화', '2024', 'https://f/b.jpg'], ['위키드 2', '영화', '', ''], ['위키드', '예능', '2016', 'https://f/a.jpg']]); }
 console.log('ALADIN OK');

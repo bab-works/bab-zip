@@ -330,6 +330,17 @@ function boardSearch_(q) {
     .sort((a, b) => (flat(b.name) === k) - (flat(a.name) === k) || flat(b.name).startsWith(k) - flat(a.name).startsWith(k)).slice(0, 6); // 이름이 딱 맞는 것 먼저
 }
 
+// 영화: 키노라이츠 공개 검색 화면(robots 허용)에 함께 실려 오는 결과 → [제목, 종류, 개봉 연도, 포스터]. 영화 먼저
+// shortcut: 키노라이츠 화면 구조가 바뀌면 빈 목록이 됨, 그때는 정규식만 고치기
+function movieSearch_(q) {
+  q = String(q || '').trim().slice(0, 40);
+  if (q.length < 1) return [];
+  const html = UrlFetchApp.fetch('https://kinolights.com/search?keyword=' + encodeURIComponent(q), { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }).getContentText().replace(/\\"/g, '"');
+  const re = /\{"content":\{"id":"(\d+)","titleKr":"([^"]*)","contentTypes":\[([^\]]*)\],"posterImage":(?:null|\{"id":"\d+","pathUrl":"([^"]*)")[\s\S]*?"openYear":(?:"(\d+)"|null)/g, out = [], seen = {};
+  let m; while ((m = re.exec(html)) && out.length < 20) if (!seen[m[1]]) { seen[m[1]] = 1; out.push({ title: m[2], type: m[3].replace(/"/g, '').replace(/,/g, '·'), year: m[5] || '', image: m[4] || '' }); }
+  return out.sort((a, b) => (b.type === '영화') - (a.type === '영화')).slice(0, 8);
+}
+
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
 // shortcut: 알라딘 화면 구조가 바뀌면 빈 목록이 됨, 그때는 TTB API 키(무료)로 바꾸기
 function bookSearch_(q) {
@@ -681,10 +692,11 @@ function doGet(e) {
       if (me.role === 'owner') ensureInvites_();
       return out_({ ok: true, role: me.role, name: me.name, people: people_(), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
-    if (me.role === 'friend' && !['escape', 'book', 'board', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
+    if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
+    if (e.parameter.what === 'movie') return out_({ ok: true, movies: cached_('QM:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => movieSearch_(e.parameter.q)) }); // 키노라이츠 검색
     if (e.parameter.what === 'book') return out_({ ok: true, books: cached_('QB:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => bookSearch_(e.parameter.q)) }); // 알라딘 검색 (시트 안 건드림)
     const fresh = e.parameter.fresh === '1';
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트

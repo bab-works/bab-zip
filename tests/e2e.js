@@ -430,7 +430,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok(await p.isVisible('nav') && await p.isVisible('#monthRow') && await p.isVisible('#v-home'));
   // 13) 영화·연극 저장
   await go('영화'); await p.click('#lViews [data-v=list]');
-  await p.click('#fab'); await p.fill('#lForm [name=title]', '파묘'); await p.fill('#lForm [name=director]', '장재현');
+  await p.click('#fab'); await p.click('[data-add=manual]'); await p.fill('#lForm [name=title]', '파묘'); await p.fill('#lForm [name=director]', '장재현');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(extraTabs['영화 기록'].d[1][1], '파묘'); assert.ok(extraTabs['영화 기록'].d[1][8], 'movie id');
   await go('연극·뮤지컬'); await p.click('#lViews [data-v=list]');
