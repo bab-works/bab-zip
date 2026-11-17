@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v88'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v89'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1300,7 +1300,7 @@ function renderLists() {
     return;
   }
   $('#lList').innerHTML = a.map(i => { const [t, sub, right] = LIST_ROW[curList](i);
-    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}${i.shared ? `<span class="badge shared-badge">${esc(i.shared)} 기록</span>` : ''}${i.pub ? '<span class="pub-mark" title="친구 집에 공개" aria-label="친구 집에 공개">🏡</span>' : ''}</span><small>${esc(sub)}</small>${othersLine(i)}</div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
+    return `<li data-id="${esc(i.id)}">${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="em" aria-hidden="true">${LIST_ICON[curList]}</span>`}<div><span>${esc(t)}${i.shared ? `<span class="badge shared-badge">${esc(i.shared)} 기록</span>` : ''}${i.pub ? '<span class="pub-mark" title="친구 공개" aria-label="친구 공개"><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg></span>' : ''}</span><small>${esc(sub)}</small>${othersLine(i)}</div>${right ? `<b class="move" style="font-size:13px">${esc(right)}</b>` : ''}</li>`; }).join('')
     || `<li class="empty">${q ? '검색 결과가 없어요' : '아직 기록이 없어요 · ＋ 버튼으로 추가하세요'}</li>`;
   if (selecting) paintSel();
 }
@@ -1422,21 +1422,21 @@ $('#findList').addEventListener('click', e => {
     const item = { id: crypto.randomUUID(), title: b.title, memo: b.year ? b.year + '년' : '', ...(b.image ? { image: b.image } : {}) };
     (lists.movieWant = lists.movieWant || []).push(item); store.set('lists', lists);
     btn.disabled = true; btn.textContent = '✓ 담음';
-    queue({ action: 'listSave', list: 'movieWant', item }).then(ok => ok && toast(`「${b.title}」 위시리스트에 담았어요`));
+    saveNew('movieWant', item).then(ok => ok && toast(`「${b.title}」 위시리스트에 담았어요`));
     return curList === 'movieWant' && renderLists();
   }
   if (btn.dataset.to === 'boardWant') {
     const item = { id: crypto.randomUUID(), name: b.name, memo: b.price ? `${b.price.toLocaleString('ko-KR')}원` : '', ...(b.image ? { image: b.image } : {}) };
     (lists.boardWant = lists.boardWant || []).push(item); store.set('lists', lists);
     btn.disabled = true; btn.textContent = '✓ 담음';
-    queue({ action: 'listSave', list: 'boardWant', item }).then(ok => ok && toast(`「${b.name}」 위시리스트에 담았어요`));
+    saveNew('boardWant', item).then(ok => ok && toast(`「${b.name}」 위시리스트에 담았어요`));
     return curList === 'boardWant' && renderLists();
   }
   if (btn.dataset.to === 'escapeWant') { // 가고 싶은 방탈출은 바로 저장
     const item = { id: crypto.randomUUID(), theme: b.theme, shop: b.shop, area: b.area || '', memo: '', ...(b.image ? { image: b.image } : {}) };
     (lists.escapeWant = lists.escapeWant || []).push(item); store.set('lists', lists);
     btn.disabled = true; btn.textContent = '✓ 담음';
-    queue({ action: 'listSave', list: 'escapeWant', item }).then(ok => ok && toast(`「${b.theme}」 위시리스트에 담았어요`));
+    saveNew('escapeWant', item).then(ok => ok && toast(`「${b.theme}」 위시리스트에 담았어요`));
     return curList === 'escapeWant' && renderLists();
   }
   if (btn.dataset.to === 'escape') { $('#bookFind').close(); return openItem(null, { theme: b.theme, shop: b.shop, area: b.area || '', ...(b.image ? { image: b.image } : {}) }); } // 날짜·결과는 직접
@@ -1447,7 +1447,7 @@ $('#findList').addEventListener('click', e => {
   arr.push(item); store.set('lists', lists);
   btn.disabled = true; btn.textContent = '✓ 추가됨';
   const name = FIND_TO.find(x => x[0] === to)[1];
-  queue({ action: 'listSave', list: to, item }).then(ok => ok && toast(`「${b.title}」 ${name}에 추가했어요`));
+  saveNew(to, item).then(ok => ok && toast(`「${b.title}」 ${name}에 추가했어요`));
   if (curList === to) renderLists();
 });
 $('#findManual').addEventListener('click', () => { $('#bookFind').close(); openItem(); });
@@ -2005,7 +2005,7 @@ function openItem(it, pre) {
   $('#lForm .pub-pill')?.remove();
   if (HOUSE_LISTS.includes(curList)) { // 친구가 내 집에 놀러 오면 보이는 작품 (맨 위에서 바로 켜고 끔)
     const sw = document.createElement('label'); sw.className = 'pub-row pub-pill full'; sw.title = '친구가 내 집에 놀러 오면 보여요 · 함께한 사람은 안 보여요';
-    sw.innerHTML = `<span>🏡 친구 집에 공개</span><input type="checkbox" name="__pub" role="switch">`;
+    sw.innerHTML = `<span><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg>친구 공개</span><input type="checkbox" name="__pub" role="switch" aria-label="친구 공개">`;
     $('#lTitle').after(sw); sw.querySelector('input').checked = it ? !!it.pub : store.get('pubDefault', true);
   }
   $('#lForm').dataset.id = it?.id || '';
@@ -2072,9 +2072,9 @@ function paintSel() {
   $('#lList').querySelectorAll('li[data-id]').forEach(li => { li.classList.toggle('sel', selected.has(li.dataset.id)); li.classList.toggle('locked', selecting && String(li.dataset.id).startsWith('s:')); });
   const n = selected.size, mine = L(curList).filter(i => !i.shared);
   $('#selCount').textContent = `${n}개 선택`; $('#selAll').textContent = n && n === mine.length ? '선택 해제' : '전체 선택';
-  const st = stateFields(curList), act = (k, ic, t, show = true) => show ? `<button type="button" data-act="${k}" ${n ? '' : 'disabled'}><span>${ic}</span>${t}</button>` : '';
-  $('#selActs').innerHTML = act('pub', '🏡', '공개', HOUSE_LISTS.includes(curList)) + act('unpub', '🔒', '비공개', HOUSE_LISTS.includes(curList))
-    + act('state', '🏷️', '상태 변경', st.length > 0) + act('move', '↪️', '옮기기', !!BOOK_LISTS[curList]) + act('del', '🗑️', '삭제');
+  const st = stateFields(curList), act = (k, ic, t, show = true) => show ? `<button type="button" data-act="${k}" ${n ? '' : 'disabled'}><svg class="i" aria-hidden="true"><use href="#${ic}"/></svg>${t}</button>` : '';
+  $('#selActs').innerHTML = act('pub', 'i-s-friends', '친구 공개', HOUSE_LISTS.includes(curList)) + act('unpub', 'i-lock', '비공개', HOUSE_LISTS.includes(curList))
+    + act('state', 'i-tag', '상태 변경', st.length > 0) + act('move', 'i-move', '옮기기', !!BOOK_LISTS[curList]) + act('del', 'i-trash', '삭제');
 }
 $('#lSelect').addEventListener('click', () => setSelecting(true));
 $('#selDone').addEventListener('click', () => setSelecting(false));
@@ -2304,8 +2304,19 @@ if (invite) {
 else lockNow();
 // 앱을 켜면 처음엔 「오늘」 (설정 → 시작 화면에서 가계부·마지막 화면으로 바꿀 수 있음). ?sec= 바로가기는 그대로
 // ── 친구 탭: 친구 신청·수락, 친구 집 놀러 가기 (친구가 공개한 작품이 방마다 선반에) ──
-const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play'];
-const ROOMS = [['book', '📚 책장', 'title', 'buy'], ['escape', '🔐 방탈출', 'theme', 'escapeWant'], ['board', '🎲 보드게임', 'name', 'boardWant'], ['movie', '🎬 영화', 'title', 'movieWant'], ['play', '🎭 공연', 'title', 'playWant']];
+const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play', 'buy', 'escapeWant', 'boardWant', 'movieWant', 'playWant'];
+// 검색 결과에서 바로 담는 것처럼 입력 창을 거치지 않는 새 기록도 「새 기록은 친구 집에 공개」 설정을 따름
+const saveNew = (list, item) => {
+  const pub = HOUSE_LISTS.includes(list) && store.get('pubDefault', true);
+  if (pub) item.pub = true;
+  const send = { ...item }; delete send.pub;
+  const p = queue({ action: 'listSave', list, item: send });
+  if (pub) p.then(ok => ok && queue({ action: 'setPub', list, id: item.id, on: true }));
+  return p;
+};
+// [목록, 방 이름, 제목 칸, 담을 위시리스트, 아이콘]
+const ROOMS = [['book', '책장', 'title', 'buy', 'book'], ['escape', '방탈출', 'theme', 'escapeWant', 'escape'], ['board', '보드게임', 'name', 'boardWant', 'board'], ['movie', '영화', 'title', 'movieWant', 'movie'], ['play', '공연', 'title', 'playWant', 'play'],
+  ['buy', '읽고 싶은 책', 'title', 'buy', 'book'], ['escapeWant', '가고 싶은 방탈출', 'theme', 'escapeWant', 'escape'], ['boardWant', '해 보고 싶은 보드게임', 'name', 'boardWant', 'board'], ['movieWant', '보고 싶은 영화', 'title', 'movieWant', 'movie'], ['playWant', '보고 싶은 공연', 'title', 'playWant', 'play']];
 const iconImg = k => (ICONS.find(x => x[0] === k) || ICONS[0])[2];
 const social = () => me.social || { friends: [], incoming: [], outgoing: [], house: {} };
 const roofColor = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360} 62% 62%)`;
@@ -2359,7 +2370,7 @@ async function visitHouse(name) {
   const d = $('#house'), f = social().friends.find(x => x.name === name) || {}; visiting = null;
   $('#houseTitle').textContent = `${name}네 집`;
   $('#houseEnter').innerHTML = houseSvg(name, f.icon);
-  const hero = h => `${houseSvg(name, h.icon)}<div><b>${esc(name)}</b><p>${esc(h.intro || '문패에 아직 소개가 없어요')}</p><div class="house-stats">${h.items ? ROOMS.filter(([k]) => h.items[k]?.length).map(([k, t]) => `<span>${t.split(' ')[1]} ${h.items[k].length}</span>`).join('') : ''}</div></div>`;
+  const hero = h => `${houseSvg(name, h.icon)}<div><b>${esc(name)}</b><p>${esc(h.intro || '문패에 아직 소개가 없어요')}</p><div class="house-stats">${h.items ? ROOMS.filter(([k]) => h.items[k]?.length).map(([k, t]) => `<span>${t} ${h.items[k].length}</span>`).join('') : ''}</div></div>`;
   $('#houseHero').innerHTML = hero(f); $('#houseRooms').innerHTML = '<p class="house-empty">문 두드리는 중…</p>';
   d.classList.remove('open'); d.showModal(); d.scrollTop = 0;
   requestAnimationFrame(() => d.classList.add('open'));
@@ -2368,7 +2379,7 @@ async function visitHouse(name) {
     if (!r.house) throw new Error(r.error || '시트의 Code.gs를 새 버전으로 배포해 주세요');
     visiting = r.house; $('#houseHero').innerHTML = hero(visiting);
     const rooms = ROOMS.filter(([k]) => visiting.items[k]?.length);
-    $('#houseRooms').innerHTML = rooms.length ? rooms.map(([k, t, key]) => `<section class="card room"><h2><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${t.split(' ').slice(1).join(' ')} <small>${visiting.items[k].length}</small></h2><div class="shelf">${visiting.items[k].map((i, n) =>
+    $('#houseRooms').innerHTML = rooms.length ? rooms.map(([k, t, key, , ic]) => `<section class="card room"><h2><svg class="i" aria-hidden="true"><use href="#i-s-${ic}"/></svg>${t} <small>${visiting.items[k].length}</small></h2><div class="shelf">${visiting.items[k].map((i, n) =>
       `<button type="button" class="work" data-k="${k}" data-n="${n}">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'em',textContent:'${LIST_ICON[k]}'}))">` : `<span class="em">${LIST_ICON[k]}</span>`}<b>${esc(i[key])}</b><small>${esc(i.rating || i.stars || '')}</small></button>`).join('')}</div></section>`).join('')
       : `<div class="card house-empty">아직 ${esc(name)}님이 공개한 작품이 없어요<br>조금 뒤에 다시 놀러 와요 🙂</div>`;
   } catch (e) { $('#houseRooms').innerHTML = `<div class="card house-empty">문이 안 열려요 · ${esc(String(e.message).replace(/^입력값 오류: /, ''))}</div>`; }
@@ -2382,7 +2393,7 @@ $('#houseRooms').addEventListener('click', async e => {
   if (L(want).some(x => x[key] === i[key])) return toast('이미 위시리스트에 있어요');
   const item = { id: crypto.randomUUID(), [key]: i[key], memo: `${visiting.name}님 집에서`, ...(i.author ? { author: i.author } : {}), ...(i.shop ? { shop: i.shop } : {}), ...(i.image ? { image: i.image } : {}) };
   (lists[want] = lists[want] || []).push(item); store.set('lists', lists);
-  queue({ action: 'listSave', list: want, item }).then(ok => ok && toast(`「${i[key]}」 위시리스트에 담았어요`));
+  saveNew(want, item).then(ok => ok && toast(`「${i[key]}」 위시리스트에 담았어요`));
 });
 
 // ── 공지사항 (notices.js): 공지 · 홈 화면 추가 방법 · Q&A · 개선 중 · 제보하기 ──

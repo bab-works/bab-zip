@@ -298,7 +298,7 @@ function listOp_(me, o) {
   return o.action === 'listSave' ? listSave_(o.list, o.item) : listDelete_(o.list, o.id);
 }
 // 친구 집 구경: 친구가 공개한 기록만 (함께한 사람·비용은 빼고)
-const HOUSE_LISTS_ = ['book', 'escape', 'board', 'movie', 'play'];
+const HOUSE_LISTS_ = ['book', 'escape', 'board', 'movie', 'play', 'buy', 'escapeWant', 'boardWant', 'movieWant', 'playWant'];
 function house_(me, name) {
   const folks = folks_(), t = Object.keys(folks).find(x => folks[x] === String(name || ''));
   if (!t || !friendKeys_(keyOf_(me), rels_(), folks).includes(t)) throw new Error('입력값 오류: 친구가 된 사람의 집만 놀러 갈 수 있어요');

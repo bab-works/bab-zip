@@ -38,7 +38,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.equal(await p.textContent('#houseTitle'), '서현네 집'); assert.match(await p.textContent('#houseRooms'), /책장[\s\S]*페스트[\s\S]*영화[\s\S]*파묘/);
   assert.doesNotMatch(await p.textContent('#houseRooms'), /방탈출/, 'empty rooms hidden');
   await p.click('#houseRooms .work[data-k=book]'); await p.waitForTimeout(400);
-  assert.deepEqual([posts.at(-1).list, posts.at(-1).item.title, posts.at(-1).item.memo], ['buy', '페스트', '서현님 집에서']);
+  const wl = posts.find(o => o.action === 'listSave' && o.list === 'buy'); assert.deepEqual([wl.item.title, wl.item.memo, wl.item.pub], ['페스트', '서현님 집에서', undefined]);
+  assert.deepEqual(posts.at(-1), { action: 'setPub', list: 'buy', id: wl.item.id, on: true, token: 'f0123456789a' }, 'new wishlist item follows default-public');
   await p.waitForTimeout(1300); await p.screenshot({ path: require('os').tmpdir() + '/house.png' });
   for (const k of ['clay', 'ios', 'linear']) { await p.evaluate(k => document.documentElement.dataset.skin = k, k); await p.waitForTimeout(200); await p.screenshot({ path: require('os').tmpdir() + `/house-${k}.png` }); }
   await p.evaluate(() => setSkin(skin()));
@@ -50,11 +51,13 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#lList li:has-text("오시리스")'); await p.waitForSelector('#lItem[open]');
   assert.equal(await p.inputValue('#lForm [name=theme]'), '오시리스'); assert.equal(await p.inputValue('#lForm [name=with]'), '서현');
   assert.equal(await p.isChecked('#lForm [name=__pub]'), true, 'new records start public'); await p.click('#lForm button.primary'); await p.waitForTimeout(500);
-  const save = posts.find(o => o.action === 'listSave' && o.list === 'escape'), pub = posts.find(o => o.action === 'setPub');
+  const save = posts.find(o => o.action === 'listSave' && o.list === 'escape'), pub = posts.find(o => o.action === 'setPub' && o.list === 'escape');
   assert.ok(save && !save.item.id.startsWith('s:') && save.item.others === undefined, 'saved as my own record');
   assert.deepEqual([pub.list, pub.id, pub.on], ['escape', save.item.id, true]);
   const rows = await p.locator('#lList li:has-text("오시리스")').count(); assert.equal(rows, 1, 'merged into one row');
-  assert.match(await p.textContent('#lList li:has-text("오시리스")'), /🏡[\s\S]*👥 서현 😍/);
+  assert.equal(await p.locator('#lList li:has-text("오시리스") .pub-mark svg').count(), 1, 'public mark is an icon'); assert.match(await p.textContent('#lList li:has-text("오시리스")'), /👥 서현 😍/);
+  // 화면을 열 때 붙는 enter 애니메이션이 친구 집 입장 화면(고정 위치)과 섞이면 안 됨 (커졌다 줄어드는 버그)
+  assert.notEqual(await p.$eval('#v-lists', e => getComputedStyle(e).position), 'fixed');
   // 4) 선택해서 한 번에: 전체 선택 → 공개 / 상태 변경 / 삭제
   await p.click('#lSelect'); assert.equal(await p.isVisible('#selBar'), true);
   await p.click('#selAll'); assert.match(await p.textContent('#selCount'), /^2개 선택/, 'shared items not selectable');
@@ -70,6 +73,12 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]');
   assert.equal(await p.evaluate(() => $('#lTitle').nextElementSibling.classList.contains('pub-pill')), true); assert.equal(await p.isChecked('#lForm [name=__pub]'), true);
   await p.click('#lCancel'); await p.waitForSelector('#lItem', { state: 'hidden' }); await p.evaluate(() => store.set('pubDefault', false)); await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]'); assert.equal(await p.isChecked('#lForm [name=__pub]'), false); await p.click('#lCancel'); await p.waitForSelector('#lItem', { state: 'hidden' });
+  // 선택 막대는 화면 위에 고정
+  await p.click('#lSelect'); assert.ok((await p.locator('#selBar').boundingBox()).y < 100, 'select bar pinned at top'); await p.screenshot({ path: require('os').tmpdir() + '/seltop.png' }); await p.click('#selDone');
+  // 위시리스트도 친구 공개 (입력 창 맨 위 「친구 공개」 아이콘 스위치)
+  await p.click('#lNav [data-list=escapeWant]'); await p.waitForTimeout(200); await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]');
+  await p.screenshot({ path: require('os').tmpdir() + '/pill.png' });  assert.match(await p.textContent('#lForm .pub-pill'), /^친구 공개$/); assert.equal(await p.locator('#lForm .pub-pill svg').count(), 1);
+  await p.click('#lCancel'); await p.waitForSelector('#lItem', { state: 'hidden' });
   // 6) 책: 선택해서 위시리스트로 옮기기
   await p.evaluate(() => { lists.book = [{ id: 'k1', title: '데미안', author: '헤세', status: '읽는중' }, { id: 'k2', title: '변신', status: '읽는중' }]; setSection('book'); });
   await p.waitForTimeout(400); await p.click('#lSelect'); await p.click('#selAll'); await p.click('[data-act=move]');
