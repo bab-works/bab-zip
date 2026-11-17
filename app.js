@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v89'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v90'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1252,7 +1252,7 @@ function renderStats(k, a) {
     h = `<button type="button" class="goal" id="goalSet" aria-label="올해 독서 목표 ${goal ? goal + '권 중 ' + done + '권' : '정하기'}">
       <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="tr"/><circle cx="32" cy="32" r="26" class="pg" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"/></svg>
       <b>${done}${goal ? `<small>/${goal}</small>` : ''}</b></button>
-      <div><b>${y}년 독서 목표</b><small>${goal ? (done >= goal ? '목표 달성! 🎉' : `${goal - done}권 남았어요 · 고리를 눌러 바꾸기`) : '고리를 눌러 올해 몇 권 읽을지 정해요'}</small></div>`;
+      <div><b>${y}년 독서 목표</b><small>${goal ? (done >= goal ? '목표 달성 🎉' : `${goal - done}권 남았어요 · 고리를 눌러 바꾸기`) : '고리를 눌러 올해 몇 권 읽을지 정해요'}</small></div>`;
   } else if (RATE_KEY[k] && k !== 'book' && a.some(i => i[RATE_KEY[k]])) {
     const cnt = RATE.map(([e]) => a.filter(i => i[RATE_KEY[k]] === e).length), max = Math.max(...cnt);
     h = `<div class="rdist" role="img" aria-label="내 평가 분포 ${RATE.map(([e, l], n) => l.slice(e.length + 1) + ' ' + cnt[n]).join(', ')}">${RATE.map(([e], n) =>
@@ -1946,7 +1946,7 @@ document.addEventListener('error', e => {
 // 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
 let lEditing = null, lFromShared = null;
 // 서로 느낀 게 다르니까: 친구가 태그한 기록에 내 별점·리뷰를 따로 남김 → 내 기록이 생기고 둘이 한 줄로 합쳐 보임
-const othersLine = i => i.others?.length ? `<small class="others">👥 ${i.others.map(o => `${esc(o.name)} ${esc(o.rating || '–')}`).join(' · ')}</small>` : '';
+const othersLine = i => i.others?.length ? `<small class="others"><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg> ${i.others.map(o => `${esc(o.name)} ${esc(o.rating || '–')}`).join(' · ')}</small>` : '';
 async function rateShared(it) {
   if (!RATE_KEY[curList] && !LIST_FIELDS[curList].some(f => f[0] === 'review')) return toast(`${it.shared}님의 기록이에요`);
   if (!await ask(`${it.shared}님이 남긴 기록이에요.\n내 별점과 리뷰를 따로 남길까요?\n(둘의 평가가 한 줄에 함께 보여요)`, { ok: '내 평가 남기기' })) return;
@@ -2088,7 +2088,7 @@ $('#selActs').addEventListener('click', async e => {
   const list = curList, items = L(list).filter(i => selected.has(i.id) && !i.shared), n = items.length, key = LIST_FIELDS[list][0][0];
   if (k === 'pub' || k === 'unpub') {
     const on = k === 'pub'; items.forEach(i => { i.pub = on; }); store.set('lists', lists);
-    queue({ action: 'setPub', list, ids: items.map(i => i.id), on }).then(ok => ok && toast(`${n}개를 ${on ? '친구 집에 공개했어요 🏡' : '비공개로 바꿨어요'}`));
+    queue({ action: 'setPub', list, ids: items.map(i => i.id), on }).then(ok => ok && toast(`${n}개를 ${on ? '친구 공개로 바꿨어요' : '비공개로 바꿨어요'}`));
   } else if (k === 'del') {
     if (!await ask(`선택한 ${n}개 기록을 시트에서 삭제할까요?`, { ok: `${n}개 삭제`, danger: true })) return;
     lists[list] = L(list).filter(i => !selected.has(i.id) || i.shared); store.set('lists', lists);
@@ -2407,7 +2407,7 @@ function renderNotice() {
   $('#nBody').innerHTML = nTab === 'news' ? list.map(n => `<div class="card">${noticeHTML(n, !seen || NOTICES.findIndex(x => x.id === seen) > NOTICES.indexOf(n) || !NOTICES.some(x => x.id === seen))}</div>`).join('')
     : nTab === 'guide' ? g(/android/i.test(navigator.userAgent) ? 'android' : 'ios') + g(/android/i.test(navigator.userAgent) ? 'ios' : 'android')
     : nTab === 'faq' ? `<div class="card">${FAQ.map(([q, a]) => `<details class="faq"><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div>`
-    : `<div class="card"><h2>지금 고치고 있어요 🛠️</h2><p class="hint">시간이 조금 걸리는 것들이에요. 끝나면 공지로 알려드릴게요.</p>${ROADMAP.map(([ic, t, d]) => `<div class="road"><span>${ic}</span><div><b>${esc(t)}</b><p>${esc(d)}</p></div></div>`).join('')}</div>`;
+    : `<div class="card"><h2>지금 고치고 있어요</h2><p class="hint">시간이 조금 걸리는 것들이에요. 끝나면 공지로 알려드릴게요.</p>${ROADMAP.map(([ic, t, d]) => `<div class="road"><span>${ic}</span><div><b>${esc(t)}</b><p>${esc(d)}</p></div></div>`).join('')}</div>`;
   $('#nVer').textContent = '앱 버전 ' + APP_VERSION.replace('gagyebu-', '');
   store.set('noticeSeen', NOTICES[0].id); paintNoticeDot();
 }
@@ -2418,7 +2418,7 @@ $('#reportForm').addEventListener('submit', async e => {
   if (!t) return $('#reportText').focus();
   if (!cfg.token) return toast('로그인한 뒤에 보낼 수 있어요');
   const btn = e.target.querySelector('button'); btn.disabled = true;
-  try { const r = await api({ action: 'report', text: t, ver: APP_VERSION, ua: navigator.userAgent }); if (!r.ok) throw new Error(r.error); $('#reportText').value = ''; toast('제보 고마워요! 꼼꼼히 보고 고칠게요 🙏'); }
+  try { const r = await api({ action: 'report', text: t, ver: APP_VERSION, ua: navigator.userAgent }); if (!r.ok) throw new Error(r.error); $('#reportText').value = ''; toast('제보 고마워요. 확인하고 고칠게요'); }
   catch (err) { toast('못 보냈어요 · ' + String(err.message).replace(/^입력값 오류: /, '')); }
   finally { btn.disabled = false; }
 });

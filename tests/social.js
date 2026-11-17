@@ -47,7 +47,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   // 3) 방탈출: 친구 평가가 내 줄에 함께 / 친구 기록 → 내 평가 남기기 → 한 줄로 합쳐짐 + 공개 켜기
   await p.evaluate(() => setSection('escape')); await p.waitForTimeout(500);
   if (await p.locator('#lViews [data-v=list]').count()) await p.click('#lViews [data-v=list]');
-  assert.match(await p.textContent('#v-lists'), /👥 서현 😫/);
+  assert.match(await p.textContent('#v-lists'), /서현 😫/);
   await p.click('#lList li:has-text("오시리스")'); await p.waitForSelector('#lItem[open]');
   assert.equal(await p.inputValue('#lForm [name=theme]'), '오시리스'); assert.equal(await p.inputValue('#lForm [name=with]'), '서현');
   assert.equal(await p.isChecked('#lForm [name=__pub]'), true, 'new records start public'); await p.click('#lForm button.primary'); await p.waitForTimeout(500);
@@ -55,7 +55,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.ok(save && !save.item.id.startsWith('s:') && save.item.others === undefined, 'saved as my own record');
   assert.deepEqual([pub.list, pub.id, pub.on], ['escape', save.item.id, true]);
   const rows = await p.locator('#lList li:has-text("오시리스")').count(); assert.equal(rows, 1, 'merged into one row');
-  assert.equal(await p.locator('#lList li:has-text("오시리스") .pub-mark svg').count(), 1, 'public mark is an icon'); assert.match(await p.textContent('#lList li:has-text("오시리스")'), /👥 서현 😍/);
+  assert.equal(await p.locator('#lList li:has-text("오시리스") .pub-mark svg').count(), 1, 'public mark is an icon'); assert.match(await p.textContent('#lList li:has-text("오시리스")'), /서현 😍/);
   // 화면을 열 때 붙는 enter 애니메이션이 친구 집 입장 화면(고정 위치)과 섞이면 안 됨 (커졌다 줄어드는 버그)
   assert.notEqual(await p.$eval('#v-lists', e => getComputedStyle(e).position), 'fixed');
   // 4) 선택해서 한 번에: 전체 선택 → 공개 / 상태 변경 / 삭제

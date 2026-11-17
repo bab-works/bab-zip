@@ -546,7 +546,7 @@
   .town { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
   .house { display:grid; justify-items:center; gap:2px; padding:14px 8px 12px; border-radius:20px; background:var(--glass); box-shadow:var(--shadow); border:0; color:var(--fg); font:inherit; cursor:pointer; transition:transform .3s var(--spring); }
   .house:active { transform:scale(.95); } .house svg.hs { width:96px; } .house small { color:var(--muted); font-size:.72rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pub-mark { margin-left:4px; font-size:.8em; } li small.others { display:block; color:var(--accent); font-weight:600; }
+  .pub-mark { margin-left:4px; font-size:.8em; } li small.others { display:block; color:var(--accent); font-weight:600; } li small.others svg.i { width:14px; height:14px; vertical-align:-2px; }
   .pub-pill { display:flex; align-items:center; gap:8px; margin:2px auto 0; padding:8px 8px 8px 14px; border-radius:99px; background:var(--fill); font-size:.86rem; font-weight:700; width:min(100%, 260px); cursor:pointer; }
   .pub-row.pub-pill span { flex:1; display:flex; align-items:center; gap:6px; } .pub-pill input:not(:checked) { background:rgba(120,120,128,.32); } .pub-pill svg.i, .pub-mark svg.i { width:18px; height:18px; color:var(--accent); }
   .pub-mark svg.i { width:14px; height:14px; vertical-align:-2px; }
@@ -986,7 +986,7 @@
     <div class="seg ntabs" role="tablist" aria-label="공지사항 보기"><button type="button" data-nt="news" aria-pressed="true">공지</button><button type="button" data-nt="guide">설치 방법</button><button type="button" data-nt="faq">Q&amp;A</button><button type="button" data-nt="road">개선 중</button></div>
     <div id="nBody"></div>
     <form id="reportForm" class="card report">
-      <h2>🙌 제보하기</h2>
+      <h2>제보하기</h2>
       <p class="hint">안 되는 것, 헷갈리는 것, 있었으면 하는 기능 무엇이든 좋아요. 어떤 화면에서 그랬는지 같이 적어 주시면 더 빨리 고칠 수 있어요.</p>
       <textarea id="reportText" rows="3" maxlength="1000" placeholder="예) 방탈출 검색에서 ○○ 테마가 안 나와요" aria-label="제보 내용"></textarea>
       <button class="primary" style="width:100%">보내기</button>
@@ -1237,7 +1237,7 @@
   <p class="set-label">화면</p>
   <div class="set-group">
     <label class="set-row"><span class="set-grow">시작 화면<small>앱을 켜면 처음 보이는 화면</small></span><select id="startSec" class="start-sel" aria-label="시작 화면"><option value="home">오늘</option><option value="money" class="owner-opt">가계부</option><option value="last">마지막에 보던 화면</option></select></label>
-    <label class="set-row switch"><span class="set-grow">새 기록은 친구 집에 공개<small>새로 기록할 때 「🏡 친구 집에 공개」가 켜진 채로 시작해요</small></span><input type="checkbox" id="pubDefault"><i aria-hidden="true"></i></label>
+    <label class="set-row switch"><span class="set-grow">새 기록은 친구 집에 공개<small>새로 기록할 때 「친구 공개」가 켜진 채로 시작해요</small></span><input type="checkbox" id="pubDefault"><i aria-hidden="true"></i></label>
     <button type="button" class="set-row set-link" id="prefTheme"><span>테마 · 앱 아이콘 변경</span><span class="set-val" id="prefThemeVal"></span><span class="chev" aria-hidden="true">›</span></button>
   </div>
   <p id="friendMe" class="hint" hidden></p>
