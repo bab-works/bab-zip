@@ -1,0 +1,55 @@
+# apps-script/Code.gs가 main에 올라오면 구글 Apps Script에 자동 배포 (앱이 쓰는 배포 주소 그대로, 새 버전으로)
+# 필요한 저장소 비밀값(Settings → Secrets and variables → Actions):
+#   CLASPRC_JSON  clasp login으로 만든 ~/.clasprc.json 내용
+#   SCRIPT_ID     Apps Script 프로젝트 설정의 「스크립트 ID」
+#   APP_TOKEN     앱 비밀번호 (Code.gs의 TOKEN 자리에 배포할 때만 넣음, 저장소엔 안 올라감)
+name: Code.gs 자동 배포
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/Code.gs']
+  workflow_dispatch:
+concurrency: deploy-gas
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 비밀값 확인
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: |
+          for v in CLASPRC_JSON SCRIPT_ID APP_TOKEN; do
+            if [ -z "${!v}" ]; then echo "::error::저장소 비밀값 $v 가 없어요"; exit 1; fi
+          done
+      - run: npm install -g @google/clasp@2.4.2
+      - name: 로그인 정보
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+      - name: 지금 배포된 프로젝트 받기 (appsscript.json 등 설정은 그대로 둠)
+        env:
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+        run: |
+          mkdir gas && cd gas
+          printf '{"scriptId":"%s"}' "$SCRIPT_ID" > .clasp.json
+          clasp pull
+          ls
+      - name: 새 Code.gs 넣기 (비밀번호 포함)
+        env:
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: node apps-script/deploy/put-code.js apps-script/Code.gs gas
+      - name: 올리고 배포 (앱이 쓰는 배포 주소를 새 버전으로)
+        run: |
+          DEPLOY_ID=$(grep -oE "script.google.com/macros/s/[A-Za-z0-9_-]+/exec" app.js | head -1 | cut -d/ -f4)
+          if [ -z "$DEPLOY_ID" ]; then echo "::error::app.js에서 배포 주소를 못 찾았어요"; exit 1; fi
+          cd gas
+          clasp push -f
+          clasp deploy -i "$DEPLOY_ID" -d "github ${GITHUB_SHA::7}"
