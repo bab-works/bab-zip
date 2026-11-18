@@ -1,5 +1,12 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v94'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v95'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+// 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
+document.addEventListener('pointerdown', () => {
+  document.documentElement.classList.add('pointer-focus');
+}, true);
+document.addEventListener('keydown', e => {
+  if (!e.metaKey && !e.ctrlKey && !e.altKey) document.documentElement.classList.remove('pointer-focus');
+}, true);
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const accountKeys = ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec', 'bookGoal', 'splitAcct', 'lastPay', 'payRecent', 'pubDefault', 'habitColors', 'pushSent'];

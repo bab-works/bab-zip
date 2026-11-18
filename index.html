@@ -54,7 +54,7 @@
   input[type=date], input[type=month] { -webkit-appearance:none; appearance:none; min-height:46px; text-align:left; }
   input::-webkit-date-and-time-value { text-align:left; }
   h2:focus { outline:none; }
-  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  :is(input, select, textarea, button, summary, a[href], [tabindex]):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   /* 움직임: 빠르게 반응하고 부드럽게 멈추는 곡선 하나로 통일 */
   :root { --ease:cubic-bezier(.2,.8,.2,1); --ease-out:cubic-bezier(.16,1,.3,1); --ease-in:cubic-bezier(.4,0,1,1); }
   button { border:0; border-radius:999px; padding:10px 16px; background:var(--fill); cursor:pointer;
@@ -521,7 +521,7 @@
   #reload.ok { color:var(--in); animation:popIn .3s var(--ease-out); }
   /* 토스트: 화면 양옆 16px까지 넓게 쓰고(예전엔 가운데부터 시작해서 반쪽 폭에 갇혀 4줄로 꺾였음), 글은 읽기 좋은 줄 간격 */
   #toast { position:fixed; left:0; right:0; margin:0 auto; width:max-content; max-width:min(calc(100vw - 32px), 460px); bottom:calc(84px + env(safe-area-inset-bottom)); z-index:10;
-    background:rgba(25,31,40,.94); -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); color:#fff; padding:12px 18px; border-radius:16px;
+    background:var(--fg); color:var(--bg); padding:12px 18px; border-radius:16px;
     font-size:0.882rem; font-weight:600; line-height:1.5; text-align:center; word-break:keep-all; overflow-wrap:anywhere; box-shadow:0 8px 24px rgba(0,0,0,.18);
     opacity:0; pointer-events:none; transform:translateY(12px); transition:opacity .25s var(--ease), transform .35s var(--ease-out); }
   #toast.show { opacity:1; transform:none; } #toast { white-space:pre-line; }
@@ -619,7 +619,7 @@
   .ptr svg.i { width:22px; height:22px; } .ptr.on { opacity:1; } .ptr.ready { color:#fff; background:var(--accent); }
   .ptr.spin { opacity:1; transform:translateY(8px); transition:transform .3s var(--spring); } .ptr.spin svg { animation:spin .8s linear infinite; }
   #toast.act { display:flex; align-items:center; gap:12px; pointer-events:auto; } #toast.act:not(.show) { pointer-events:none; }
-  #toast button { flex:none; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.18); color:#7db3ff; font-weight:700; font-size:0.824rem; }
+  #toast button { flex:none; padding:6px 12px; border-radius:999px; background:var(--bg); color:var(--fg); box-shadow:none; font-weight:700; font-size:0.824rem; }
   .lmove { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-radius:14px; background:var(--fill); }
   .lmove span { color:var(--muted); font-size:0.765rem; margin-right:auto; } .lmove[hidden] { display:none; }
   .home-quick { display:flex; padding:0; gap:0; overflow:hidden; } .home-quick > button { background:none; color:inherit; padding:16px 18px; border-radius:0; box-shadow:none; }
@@ -870,6 +870,11 @@
   html[data-skin="cuberto"] .card:active { transform:none; }
   :root[data-skin="linear"] { --muted:#a5abb5; --line:rgba(255,255,255,.16); }
   @media (prefers-reduced-motion:reduce) { dialog#house.open .house-body { animation:none; } }
+  /* 글자를 쓰는 칸에는 입력 위치를 표시하고, 버튼은 누르는 효과만 보여 준다. */
+  html.pointer-focus :is(button, summary, a[href], select, [role="button"], [role="switch"], .wcol, input[type="checkbox"], input[type="radio"]):focus,
+  html.pointer-focus :is(.rate-pick, .seg, .switch) input:focus + :is(span, i) { outline:none; }
+  #toast button:focus-visible { outline-color:var(--bg); }
+  @media (forced-colors:active) { #toast button:focus-visible { outline-color:Highlight; } }
 </style>
 </head>
 <body>

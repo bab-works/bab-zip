@@ -17,7 +17,7 @@ async function run() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
     const posts = [];
     await page.route('https://script.google.com/**', route => {
       if (route.request().method() === 'POST') posts.push(route.request().postDataJSON());
@@ -26,16 +26,20 @@ async function run() {
     const base = 'http://127.0.0.1:' + server.address().port;
     await page.goto(base + '/#token=f00000000001');
     await page.waitForFunction(() => me.role === 'friend');
+    await page.tap('#reload');
     await page.evaluate(() => { window.answers = Promise.all([ask('하나'), ask('둘')]); });
     for (const theme of ['main', 'clay', 'ios', 'cuberto', 'linear']) {
       await page.evaluate(k => setSkin(k), theme);
       assert.equal(await page.locator('#ask').evaluate(d => getComputedStyle(d).borderBottomLeftRadius), '24px');
     }
+    assert.equal(await page.locator('#askNo').evaluate(b => document.activeElement === b && getComputedStyle(b).outlineStyle === 'none'), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#askOk').evaluate(b => document.activeElement === b && getComputedStyle(b).outlineStyle === 'solid'), true);
     await page.click('#askOk');
     await page.waitForFunction(() => document.querySelector('#askMsg').textContent === '둘');
     await page.click('#askNo');
     assert.deepEqual(await page.evaluate(() => window.answers), [true, false]);
-    await page.evaluate(() => { setSection('book'); openItem(); toast('저장 안내'); });
+    await page.evaluate(() => { setSection('book'); openItem(); toast('저장 안내', 10000, () => {}); });
     assert.equal(await page.locator('#lItem #toast').isVisible(), true);
     assert.equal(await page.isChecked('[name=__pub]'), false);
     for (const width of [320, 390, 430]) {
@@ -43,6 +47,10 @@ async function run() {
       for (const skin of ['main', 'clay', 'ios', 'cuberto', 'linear']) {
         await page.evaluate(k => setSkin(k), skin);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        const colors = await page.locator('#toast').evaluate(el => [
+          getComputedStyle(el).backgroundColor, getComputedStyle(el.querySelector('button')).color,
+        ]);
+        assert.equal(colors[0], colors[1], skin + ' toast uses the active theme');
       }
     }
     await page.click('#lCancel');
