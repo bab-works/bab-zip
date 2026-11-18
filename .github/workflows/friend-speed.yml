@@ -1,0 +1,33 @@
+name: 친구 조회 속도 측정
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/friend-speed.yml', 'migration/speed.mjs']
+permissions:
+  contents: read
+  checks: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.measure.outputs.result }}
+      baseline: ${{ steps.measure.outputs.baseline }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: measure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRIDGE: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
+        run: node migration/speed.mjs
+  report:
+    needs: measure
+    runs-on: ubuntu-latest
+    name: 'ms · me/lists/habits · D1 ${{ needs.measure.outputs.result }} · GAS ${{ needs.measure.outputs.baseline }}'
+    steps:
+      - run: echo '조회 측정 완료'
