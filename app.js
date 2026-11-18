@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v93'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v94'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const accountKeys = ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec', 'bookGoal', 'splitAcct', 'lastPay', 'payRecent', 'pubDefault', 'habitColors', 'pushSent'];
