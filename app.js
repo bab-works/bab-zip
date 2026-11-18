@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v97'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v98'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -2609,7 +2609,7 @@ function setBrag(on) {
 }
 $('#bragBtn').addEventListener('click', () => { setBrag(!brag); $('#menu').close(); toast(brag ? '자랑하기 모드: 금액과 거래 내용을 가렸어요' : '자랑하기 모드를 껐어요'); });
 $('#bragBadge').addEventListener('click', async () => { if (await ask('자랑하기 모드를 끌까요? 금액이 다시 보여요', { ok: '끄기' })) setBrag(false); });
-// ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 시트(구글 드라이브 OCR)가 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
+// ── 사진으로 입력: 카드 문자·결제 내역 캡처·영수증 사진 → 기기에서 글자를 읽음 → 거래 후보 → 확인 후 저장 ──
 // 이미 시트에 있는 거래(같은 날 같은 금액)와 사진 안에서 겹치는 건 체크를 빼 둠
 const ruleFor = s => { s = (s || '').toLowerCase(); return s ? data.meta.rules.find(r => r[0] && s.includes(r[0].toLowerCase())) : null; };
 function parseOcr(text, today) {
@@ -2665,8 +2665,8 @@ function renderPhoto(text) {
     <input type="date" name="date" value="${r.date}" aria-label="날짜"><b class="${r.type === '지출' ? 'out' : r.type === '수입' ? 'in' : 'refund'}" style="font-size:0.765rem">${r.type}</b>${r.dup ? `<small>${r.dup}</small>` : ''}</li>`).join('');
   $('#phSave').disabled = !phRows.length;
 }
-// 사진은 긴 변 1600px JPEG로 줄여서 보냄 (빠르고 OCR엔 충분)
-async function shrink(file) {
+// 사진 픽셀은 인식할 동안만 메모리의 캔버스에 둔다.
+async function photoCanvas(file) {
   const img = new Image(), url = URL.createObjectURL(file);
   try {
     img.src = url;
@@ -2679,27 +2679,62 @@ async function shrink(file) {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const jpeg = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-    if (!jpeg) throw new Error();
-    return jpeg;
+    return canvas;
   } catch {
     throw new Error('사진을 열 수 없어요. JPG·PNG 또는 화면 캡처로 다시 시도해 주세요.');
   } finally { URL.revokeObjectURL(url); }
 }
+async function readPhoto(file) {
+  const canvas = await photoCanvas(file);
+  let worker;
+  try {
+    const base = new URL('ocr/', document.baseURI);
+    worker = new Worker(new URL('worker.min.js', base));
+    // 전용 워커 하나가 순서대로 실행한다. 모델 로딩 실패·시간 초과 때도 종료한다.
+    const run = (action, payload, transfer = []) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('OCR timeout')), 90000);
+      worker.onerror = e => { clearTimeout(timer); reject(new Error(e.message)); };
+      worker.onmessage = ({ data }) => {
+        if (data.jobId !== action || data.status === 'progress') return;
+        clearTimeout(timer);
+        if (data.status === 'resolve') resolve(data.data);
+        else reject(new Error('OCR failed'));
+      };
+      worker.postMessage({ workerId: 'receipt', jobId: action, action, payload }, transfer);
+    });
+    await run('load', { options: { lstmOnly: true, corePath: new URL('tesseract-core-lstm.wasm.js', base).href } });
+    await run('loadLanguage', { langs: 'kor', options: { langPath: base.href, gzip: true, cacheMethod: 'none', lstmOnly: true } });
+    await run('initialize', { langs: 'kor', oem: 1, config: {} });
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const image = new Uint8Array(await blob.arrayBuffer());
+    const result = await run('recognize', { image, options: {}, output: { text: true } }, [image.buffer]);
+    return result.text;
+  } catch {
+    throw new Error('이 기기에서 사진을 읽지 못했어요. 처음 사용할 때는 인터넷에 연결해 주세요. 사진에서 복사한 글자로도 거래를 찾을 수 있어요.');
+  } finally {
+    canvas.width = canvas.height = 0;
+    worker?.terminate();
+  }
+}
 $('#phParse').addEventListener('click', () => renderPhoto($('#phRaw').value));
 $('#photoIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
-  if (!f) return;
-  busy(true); toast('사진을 읽는 중이에요…');
+  if (!f || e.target.disabled) return;
+  const picker = e.target;
+  picker.disabled = true;
+  busy(true); toast('이 기기에서 사진을 읽고 있어요…');
   try {
-    const r = await call({ action: 'ocr', image: await shrink(f) });
-    if (r.text == null) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
-    renderPhoto(r.text); $('#photoSheet').showModal();
+    renderPhoto(await readPhoto(f)); $('#photoSheet').showModal();
   } catch (err) {
     renderPhoto('');
     $('#phInfo').textContent = err.message;
     $('#photoSheet').showModal();
-  } finally { busy(false); }
+  } finally { picker.disabled = false; busy(false); }
+});
+$('#photoSheet').addEventListener('close', () => {
+  phRows = [];
+  $('#phRaw').value = '';
+  $('#phList').replaceChildren();
 });
 $('#phClose').addEventListener('click', () => $('#photoSheet').close());
 $('#phSave').addEventListener('click', () => {

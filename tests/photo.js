@@ -1,16 +1,16 @@
 // 사진으로 입력: 글자 → 거래 후보 (은행 앱 목록·영수증), 이미 있는 거래는 체크 해제, 고른 것만 저장
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path'), assert = require('assert');
 http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8786, async () => {
-  const b = await chromium.launch(), ctx = await b.newContext(), p = await ctx.newPage(); p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
+  const b = await chromium.launch(), ctx = await b.newContext({ serviceWorkers: 'block' }), p = await ctx.newPage(); p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
   await ctx.addInitScript(() => void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })));
   const today = await p.evaluate(() => 0) || new Date(Date.now() + 9 * 36e5).toISOString().slice(0, 10);
   const meta = { cats: [['식비', '배달'], ['카페·간식', '카페'], ['기타', ''], ['수입', '급여']], budgets: {}, payments: [], rules: [['스타벅스', '지출', '카페·간식', '카페'], ['쿠팡이츠', '지출', '식비', '배달']], recurring: [] };
   const items = [{ id: 'old', date: today, time: '', type: '지출', major: '식비', minor: '배달', content: '쿠팡이츠', pay: '', amount: 18900, memo: '' }];
   const ocrText = `${today.replace(/-/g, '.')} (오늘)\n스타벅스 강남점\n-4,500원\n쿠팡이츠\n-18,900원\n스타벅스 강남점\n-4,500원\n급여 입금\n+2,500,000원\n잔액 1,234,567원`;
   const posts = [];
-  let denyOcr = false;
+
   await p.route('https://script.google.com/**', rt => { const q = rt.request();
-    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); posts.push(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify(o.action === 'ocr' ? (denyOcr ? { ok: false, error: '사진 인식 권한이 필요해요' } : { ok: true, text: ocrText }) : { ok: true, wrote: true }) }); }
+    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); posts.push(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, wrote: true }) }); }
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, items, full: true, meta }) }); });
   await p.goto('http://localhost:8786/'); await p.waitForTimeout(800);
   // 파서: 은행 앱 목록 / 영수증 / 카드 문자
@@ -30,21 +30,35 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.mouse.click(20, 300); await p.waitForTimeout(400); assert.equal(await p.isHidden('#addMenu'), true, 'tap outside closes');
   const chooser = p.waitForEvent('filechooser'); await p.click('#fab'); await p.click('#addMenu [data-add=photo]'); await chooser; // 사진 고르기 창이 열림
   // 화면: 사진 → 후보 4건, 시트에 있는 쿠팡이츠·사진 안 두 번째 스타벅스는 체크 해제
-  await p.setInputFiles('#photoIn', { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
-  await p.waitForSelector('#photoSheet[open]');
+  const png = await p.evaluate(async () => {
+    await document.fonts.ready;
+    const c = document.createElement('canvas'); c.width = 800; c.height = 190;
+    const g = c.getContext('2d'); g.fillStyle = 'white'; g.fillRect(0, 0, 800, 190);
+    g.fillStyle = 'black'; g.font = '48px "Pretendard Variable", sans-serif';
+    g.fillText('테스트 카페', 30, 68); g.fillText('합계 7,500원', 30, 145);
+    return c.toDataURL().split(',')[1];
+  });
+  await p.setInputFiles('#photoIn', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await p.waitForSelector('#photoSheet[open]', {timeout:60000});
+  assert.match(await p.inputValue('#phRaw'), /7,?500/);
+  assert.equal(posts.length, 0, 'no remote OCR request');
+  assert.equal(await p.inputValue('#phList [name=amount]'), '7500');
+  await p.locator('#phTextBox').evaluate(d => d.open = true);
+  await p.fill('#phRaw', ocrText); await p.click('#phParse');
   assert.equal(await p.locator('#phList li').count(), 4);
   assert.deepEqual(await p.$$eval('#phList li', ls => ls.map(l => l.querySelector('[type=checkbox]').checked)), [true, false, false, true]);
-  assert.equal(posts[0].action, 'ocr'); assert.ok(posts[0].image.length > 10);
+
   await p.click('#phSave'); await p.waitForTimeout(800);
   const saved = posts.filter(o => o.action === 'save').map(o => o.item);
   assert.deepEqual(saved.map(i => [i.content, i.amount, i.type, i.major, i.minor, i.date]), [['스타벅스 강남점', 4500, '지출', '카페·간식', '카페', today], ['급여 입금', 2500000, '수입', '수입', '', today]]);
-  denyOcr = true;
-  await p.setInputFiles('#photoIn', { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
-  await p.waitForSelector('#photoSheet[open]');
-  assert.match(await p.textContent('#phInfo'), /인식 권한/);
+  assert.equal(await p.inputValue('#phRaw'), '');
   assert.equal(await p.locator('#phList li').count(), 0);
-  await p.click('#phClose');
-  await p.waitForSelector('#photoSheet', { state: 'hidden' });
+  await ctx.route('**/kor.traineddata.gz', route => route.abort());
+  await p.setInputFiles('#photoIn', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await p.waitForSelector('#photoSheet[open]');
+  assert.match(await p.textContent('#phInfo'), /이 기기에서 사진을 읽지 못했어요/);
+  assert.equal(posts.length, saved.length, 'model failure does not upload the image');
+  await p.click('#phClose'); await p.waitForSelector('#photoSheet', { state: 'hidden' });
   await p.setInputFiles('#photoIn', { name: 'broken.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('invalid') });
   await p.waitForSelector('#photoSheet[open]');
   assert.match(await p.textContent('#phInfo'), /사진을 열 수 없어요/);

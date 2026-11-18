@@ -1,0 +1,1 @@
+Self-hosted, lazy-loaded Korean OCR assets from npm. Tesseract.js 6.0.1 (browser worker), tesseract.js-core 6.1.2 (portable LSTM WebAssembly build), and @tesseract.js-data/kor 1.0.0 (4.0.0_best_int model). The engine, core and Korean tessdata are Apache-2.0 licensed. Bundled license notices accompany the distributions.

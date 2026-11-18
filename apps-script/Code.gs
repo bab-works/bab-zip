@@ -77,43 +77,6 @@ function deleteTx_(id) {
   if (idx >= 0) sh.deleteRow(idx + 2);
 }
 
-// 사진 → 글자: 구글 드라이브에 문서로 올리면서 OCR(한국어) → 글만 꺼내고 파일은 바로 휴지통으로
-// 처음 한 번 함수 목록에서 allowPhoto를 실행해 드라이브 권한을 허용해야 해요
-function ocr_(b64) {
-  if (!b64 || b64.length > 8e6) throw new Error('사진이 없거나 너무 커요');
-  const img = Utilities.base64Decode(String(b64).replace(/^data:[^,]+,/, ''));
-  // 「서비스 ＋ Drive API」를 추가했으면 그걸로 (권한을 알아서 챙김). 직접 토큰을 쓰는 방식은 권한 부족으로 막히는 경우가 있었음
-  const auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
-  if (typeof Drive !== 'undefined' && Drive.Files) {
-    const blob = Utilities.newBlob(img, 'image/jpeg', 'haet-ocr.jpg'), name = '하트 사진 인식 (자동 삭제)', doc = 'application/vnd.google-apps.document';
-    const f = Drive.Files.create ? Drive.Files.create({ name, mimeType: doc }, blob, { ocrLanguage: 'ko' }) // Drive API v3
-      : Drive.Files.insert({ title: name, mimeType: doc }, blob, { convert: true, ocr: true, ocrLanguage: 'ko' }); // v2
-    return readPhotoText_(f.id, auth);
-  }
-  const bd = 'babzip' + Date.now();
-  const head = Utilities.newBlob('--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'BABZIP 사진 인식 (자동 삭제)', mimeType: 'application/vnd.google-apps.document' }) + '\r\n--' + bd + '\r\nContent-Type: image/jpeg\r\n\r\n').getBytes();
-  const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ko', { method: 'post', headers: auth, muteHttpExceptions: true,
-    contentType: 'multipart/related; boundary=' + bd, payload: head.concat(img).concat(Utilities.newBlob('\r\n--' + bd + '--').getBytes()) });
-  if (r.getResponseCode() >= 300) { // 진짜 이유를 그대로 보여 줌 (예전엔 403을 전부 권한 문제로 안내해서 헷갈렸음)
-    const t = r.getContentText();
-    if (/accessNotConfigured|has not been used|is disabled|SERVICE_DISABLED/.test(t)) throw new Error('Apps Script 왼쪽 「서비스 ＋」에서 Drive API를 추가한 뒤 새 버전으로 배포해 주세요');
-    if (/insufficient|scope/i.test(t)) throw new Error('Apps Script에서 allowPhoto를 실행해 권한을 허용한 뒤 새 버전으로 배포해 주세요');
-    throw new Error('드라이브 응답 ' + r.getResponseCode() + ' ' + t.replace(/\s+/g, ' ').slice(0, 160));
-  }
-  const id = JSON.parse(r.getContentText()).id;
-  return readPhotoText_(id, auth);
-}
-function readPhotoText_(id, auth) {
-  try { return UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: auth }).getContentText(); }
-  finally { DriveApp.getFileById(id).setTrashed(true); }
-}
-// 권한 허용 + 실제로 사진 인식이 되는지 확인 (실행 로그에 결과가 나옴)
-function allowPhoto() {
-  DriveApp.getStorageUsed();
-  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-  try { ocr_(png); Logger.log('✅ 사진 인식 준비 끝 · 이제 새 버전으로 배포하면 앱에서 돼요'); } catch (e) { Logger.log('❌ ' + e.message); }
-}
-
 // ── 방탈출 테마 검색: 전국방탈출(roomescape.co.kr) 공개 테마 페이지(사이트맵·robots 허용)를 천천히 읽어 「방탈출 테마 목록」 탭에 모아 둠 ──
 // 처음 한 번 함수 목록에서 escapeIndex를 실행해요. 한 번에 4분씩 읽고, 남으면 1분 뒤 저절로 이어서, 다 끝나면 매주 새 테마만 추가해요
 const ESC_TAB_ = '방탈출 테마 목록';
@@ -828,10 +791,7 @@ function doPost(e) {
   if (b.action === 'login' || b.action === 'redeem') { // 로그인은 토큰 없이
     try { return out_({ ok: true, ...withLock_(() => b.action === 'login' ? login_(b) : redeem_(b)) }); } catch (err) { return out_({ ok: false, error: err.message }); }
   }
-  if (b.action === 'ocr') { // 사진 글자 읽기 (시트는 안 건드림)
-    if (!who_(b.token)) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
-    try { return out_({ ok: true, text: ocr_(b.image) }); } catch (err) { return out_({ ok: false, error: '사진 인식 실패: ' + err.message }); }
-  }
+  if (b.action === 'ocr') return out_({ ok: false, error: '사진은 이제 기기에서 읽어요. 앱을 새로고침해 주세요.' });
   return writeOp_(b);
 }
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
