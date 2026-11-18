@@ -28,7 +28,11 @@ assert.deepEqual(vm.runInContext('bookSearch_("페스트")', ctx), [{ title: '�
 // Drive API 서비스가 있으면 그걸로: 문서로 만들고 → 글자 읽고 → 휴지통
 { let made = null, trashed = '';
   Object.assign(ctx, { Drive: { Files: { create: (meta, blob, opt) => { made = { meta, opt }; return { id: 'D1' }; } } },
-    DocumentApp: { openById: id => ({ getBody: () => ({ getText: () => id === 'D1' ? '쿠팡이츠 18,900원' : '' }) }) },
+    UrlFetchApp: { fetch: (url, options) => {
+      assert.equal(url, 'https://www.googleapis.com/drive/v3/files/D1/export?mimeType=text/plain');
+      assert.equal(options.headers.Authorization, 'Bearer tok');
+      return { getContentText: () => '쿠팡이츠 18,900원' };
+    } },
     DriveApp: { getFileById: id => ({ setTrashed: v => { trashed = v && id; } }) } });
   ctx.Utilities.newBlob = (b, t, n) => ({ bytes: b, type: t, name: n, getBytes: () => b });
   assert.equal(vm.runInContext('ocr_("aGVsbG8=")', ctx), '쿠팡이츠 18,900원');
