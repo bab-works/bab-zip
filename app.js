@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v98'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v99'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -2482,6 +2482,9 @@ $('#houseRooms').addEventListener('click', async e => {
 // ── 공지사항 (notices.js): 공지 · 홈 화면 추가 방법 · Q&A · 개선 중 · 제보하기 ──
 const verNum = v => +(String(v).match(/v(\d+)/)?.[1] || 0);
 const noticeHTML = (n, isNew) => `<article class="notice${isNew ? ' new' : ''}"><div class="meta"><span class="ntag${n.pin ? ' pin' : ''}">${esc(n.tag)}</span>${esc(n.date)}</div><h3>${esc(n.title)}</h3><ul>${n.body.map(x => `<li>${esc(x)}</li>`).join('')}</ul></article>`;
+// 삭제한 공지를 이미 읽은 사람에게 예전 공지가 새 글로 표시되지 않게 한다.
+const previousNotice = { n98: 'n97', n96: 'n95' }[store.get('noticeSeen', '')];
+if (previousNotice) store.set('noticeSeen', previousNotice);
 let nTab = 'news';
 function renderNotice() {
   const seen = store.get('noticeSeen', ''), list = [...NOTICES].sort((a, b) => (b.pin || 0) - (a.pin || 0));
