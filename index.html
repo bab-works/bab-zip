@@ -943,7 +943,7 @@
 
 <main>
   <section id="v-home">
-    <input type="file" id="photoIn" accept="image/png,image/jpeg,image/heic,image/webp" hidden>
+    <input type="file" id="photoIn" accept="image/*" hidden>
     <button type="button" id="recapBanner" class="recap-banner" hidden>🎉 올해의 하트 결산이 나왔어요<span>보기 ›</span></button>
     <div id="report" class="card report" hidden></div>
     <div class="card hero" data-card="hero" data-label="이번 달 요약">
@@ -1242,7 +1242,10 @@
   <h2 id="phTitle" style="text-align:center;margin:0">사진에서 찾은 거래</h2>
   <p id="phInfo" class="hint" style="text-align:center"></p>
   <ul id="phList" class="ph-list"></ul>
-  <details class="raw"><summary>읽은 글자 보기</summary><pre id="phRaw" class="hint" style="white-space:pre-wrap"></pre></details>
+  <details class="raw" id="phTextBox"><summary>사진 글자 확인·수정</summary>
+    <label>사진에서 복사한 글자나 읽은 내용을 넣어 주세요<textarea id="phRaw" rows="4"></textarea></label>
+    <button type="button" id="phParse">거래 다시 찾기</button>
+  </details>
   <div class="row sheet-foot" style="margin-top:10px"><button type="button" id="phClose">닫기</button><button type="button" id="phSave" class="primary">선택한 거래 저장</button></div>
 </dialog>
 <dialog id="habitAdd" class="sheet" aria-labelledby="haTitle">

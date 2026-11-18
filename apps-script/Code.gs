@@ -83,13 +83,14 @@ function ocr_(b64) {
   if (!b64 || b64.length > 8e6) throw new Error('사진이 없거나 너무 커요');
   const img = Utilities.base64Decode(String(b64).replace(/^data:[^,]+,/, ''));
   // 「서비스 ＋ Drive API」를 추가했으면 그걸로 (권한을 알아서 챙김). 직접 토큰을 쓰는 방식은 권한 부족으로 막히는 경우가 있었음
+  const auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
   if (typeof Drive !== 'undefined' && Drive.Files) {
     const blob = Utilities.newBlob(img, 'image/jpeg', 'haet-ocr.jpg'), name = '하트 사진 인식 (자동 삭제)', doc = 'application/vnd.google-apps.document';
     const f = Drive.Files.create ? Drive.Files.create({ name, mimeType: doc }, blob, { ocrLanguage: 'ko' }) // Drive API v3
-      : Drive.Files.insert({ title: name, mimeType: doc }, blob, { ocr: true, ocrLanguage: 'ko' }); // v2
-    try { return DocumentApp.openById(f.id).getBody().getText(); } finally { DriveApp.getFileById(f.id).setTrashed(true); }
+      : Drive.Files.insert({ title: name, mimeType: doc }, blob, { convert: true, ocr: true, ocrLanguage: 'ko' }); // v2
+    return readPhotoText_(f.id, auth);
   }
-  const bd = 'babzip' + Date.now(), auth = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  const bd = 'babzip' + Date.now();
   const head = Utilities.newBlob('--' + bd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify({ name: 'BABZIP 사진 인식 (자동 삭제)', mimeType: 'application/vnd.google-apps.document' }) + '\r\n--' + bd + '\r\nContent-Type: image/jpeg\r\n\r\n').getBytes();
   const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ko', { method: 'post', headers: auth, muteHttpExceptions: true,
     contentType: 'multipart/related; boundary=' + bd, payload: head.concat(img).concat(Utilities.newBlob('\r\n--' + bd + '--').getBytes()) });
@@ -100,6 +101,9 @@ function ocr_(b64) {
     throw new Error('드라이브 응답 ' + r.getResponseCode() + ' ' + t.replace(/\s+/g, ' ').slice(0, 160));
   }
   const id = JSON.parse(r.getContentText()).id;
+  return readPhotoText_(id, auth);
+}
+function readPhotoText_(id, auth) {
   try { return UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: auth }).getContentText(); }
   finally { DriveApp.getFileById(id).setTrashed(true); }
 }

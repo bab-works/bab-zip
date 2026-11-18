@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v95'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v96'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -2657,21 +2657,36 @@ function renderPhoto(text) {
     seen.add(key);
     return { ...r, dup };
   });
-  $('#phRaw').textContent = text;
-  $('#phInfo').textContent = phRows.length ? `${phRows.length}건 찾음 · 겹치는 ${phRows.filter(r => r.dup).length}건은 빼 두었어요 · 고칠 곳은 바로 고쳐요` : '거래를 찾지 못했어요 · 「읽은 글자 보기」를 확인해 보세요';
+  $('#phRaw').value = text;
+  $('#phTextBox').open = !phRows.length;
+  $('#phInfo').textContent = phRows.length ? `${phRows.length}건 찾음 · 겹치는 ${phRows.filter(r => r.dup).length}건은 빼 두었어요 · 고칠 곳은 바로 고쳐요` : '거래를 찾지 못했어요 · 사진의 상호와 금액을 확인하거나 복사한 글자를 넣어 주세요';
   $('#phList').innerHTML = phRows.map((r, k) => `<li class="${r.dup ? 'dup' : ''}" data-k="${k}"><input type="checkbox" aria-label="저장" ${r.dup ? '' : 'checked'}>
     <input type="text" name="content" value="${esc(r.content)}" aria-label="내용" placeholder="내용"><input type="number" name="amount" inputmode="numeric" value="${r.amount}" aria-label="금액">
     <input type="date" name="date" value="${r.date}" aria-label="날짜"><b class="${r.type === '지출' ? 'out' : r.type === '수입' ? 'in' : 'refund'}" style="font-size:0.765rem">${r.type}</b>${r.dup ? `<small>${r.dup}</small>` : ''}</li>`).join('');
   $('#phSave').disabled = !phRows.length;
 }
 // 사진은 긴 변 1600px JPEG로 줄여서 보냄 (빠르고 OCR엔 충분)
-const shrink = file => new Promise((res, rej) => {
-  const img = new Image(); img.onerror = () => rej(new Error('사진을 열 수 없어요'));
-  img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
-    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', 0.85).split(',')[1]); };
-  img.src = URL.createObjectURL(file);
-});
+async function shrink(file) {
+  const img = new Image(), url = URL.createObjectURL(file);
+  try {
+    img.src = url;
+    await img.decode();
+    const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const jpeg = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    if (!jpeg) throw new Error();
+    return jpeg;
+  } catch {
+    throw new Error('사진을 열 수 없어요. JPG·PNG 또는 화면 캡처로 다시 시도해 주세요.');
+  } finally { URL.revokeObjectURL(url); }
+}
+$('#phParse').addEventListener('click', () => renderPhoto($('#phRaw').value));
 $('#photoIn').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
@@ -2680,7 +2695,11 @@ $('#photoIn').addEventListener('change', async e => {
     const r = await call({ action: 'ocr', image: await shrink(f) });
     if (r.text == null) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
     renderPhoto(r.text); $('#photoSheet').showModal();
-  } catch (err) { toast(err.message); } finally { busy(false); }
+  } catch (err) {
+    renderPhoto('');
+    $('#phInfo').textContent = err.message;
+    $('#photoSheet').showModal();
+  } finally { busy(false); }
 });
 $('#phClose').addEventListener('click', () => $('#photoSheet').close());
 $('#phSave').addEventListener('click', () => {

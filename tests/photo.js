@@ -8,8 +8,9 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const items = [{ id: 'old', date: today, time: '', type: '지출', major: '식비', minor: '배달', content: '쿠팡이츠', pay: '', amount: 18900, memo: '' }];
   const ocrText = `${today.replace(/-/g, '.')} (오늘)\n스타벅스 강남점\n-4,500원\n쿠팡이츠\n-18,900원\n스타벅스 강남점\n-4,500원\n급여 입금\n+2,500,000원\n잔액 1,234,567원`;
   const posts = [];
+  let denyOcr = false;
   await p.route('https://script.google.com/**', rt => { const q = rt.request();
-    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); posts.push(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify(o.action === 'ocr' ? { ok: true, text: ocrText } : { ok: true, wrote: true }) }); }
+    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); posts.push(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify(o.action === 'ocr' ? (denyOcr ? { ok: false, error: '사진 인식 권한이 필요해요' } : { ok: true, text: ocrText }) : { ok: true, wrote: true }) }); }
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, items, full: true, meta }) }); });
   await p.goto('http://localhost:8786/'); await p.waitForTimeout(800);
   // 파서: 은행 앱 목록 / 영수증 / 카드 문자
@@ -37,6 +38,23 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#phSave'); await p.waitForTimeout(800);
   const saved = posts.filter(o => o.action === 'save').map(o => o.item);
   assert.deepEqual(saved.map(i => [i.content, i.amount, i.type, i.major, i.minor, i.date]), [['스타벅스 강남점', 4500, '지출', '카페·간식', '카페', today], ['급여 입금', 2500000, '수입', '수입', '', today]]);
+  denyOcr = true;
+  await p.setInputFiles('#photoIn', { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64') });
+  await p.waitForSelector('#photoSheet[open]');
+  assert.match(await p.textContent('#phInfo'), /인식 권한/);
+  assert.equal(await p.locator('#phList li').count(), 0);
+  await p.click('#phClose');
+  await p.waitForSelector('#photoSheet', { state: 'hidden' });
+  await p.setInputFiles('#photoIn', { name: 'broken.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('invalid') });
+  await p.waitForSelector('#photoSheet[open]');
+  assert.match(await p.textContent('#phInfo'), /사진을 열 수 없어요/);
+  assert.equal(await p.isDisabled('#phSave'), true);
+  await p.fill('#phRaw', '테스트 카페 7,500원');
+  await p.click('#phParse');
+  assert.equal(await p.inputValue('#phList [name=amount]'), '7500');
+  await p.click('#phSave');
+  await p.waitForFunction(() => !pending.length);
+  assert.equal(posts.filter(o => o.action === 'save').at(-1).item.amount, 7500);
   // 자랑하기 모드: 금액 가림 → 새로고침해도 유지 → 배지로 끔
   await p.click('#menuBtn'); await p.waitForTimeout(500); await p.click('#bragBtn'); await p.waitForTimeout(700);
   assert.equal(await p.textContent('#exp'), '••,•••원'); assert.equal(await p.isVisible('#bragBadge'), true);
