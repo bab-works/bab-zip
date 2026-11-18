@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v90'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v91'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -459,6 +459,7 @@ function renderList() {
     return `<li class="day-h"><span>${mm}월 ${dd}일 ${WEEK[new Date(yy, mm - 1, dd).getDay()]}요일</span>
       <span>${ds.inc ? `<span class="in" style="display:inline">+${won(ds.inc)}</span> ` : ''}${ds.exp ? `-${won(ds.exp)}` : ''}</span></li>` + txRow(i, true);
   }).join('') || '<li class="empty">조건에 맞는 내역이 없어요</li>';
+  paintSplit();
 }
 
 function renderRec() {
@@ -552,6 +553,7 @@ function renderCal() {
   $('#dayTitle').textContent = `${sm}월 ${sd}일 ${WEEK[new Date(y, sm - 1, sd).getDay()]}요일`;
   $('#daySum').innerHTML = list.length ? `${list.length}건 · 수입 <b class="in">${won(ds.inc)}</b> · 지출 <b class="out">${won(ds.exp)}</b>` : '';
   $('#dayList').innerHTML = list.map(i => txRow(i, true)).join('') || '<li class="empty">이날 기록이 없어요</li>';
+  paintSplit(); // N빵 고르는 중이면 다른 날로 가도 고른 건 그대로 (여러 날 합쳐 나누기)
 }
 // 이번 달 누적 지출(선) vs 지난달 누적(회색 면): 같은 날짜 기준으로 비교
 function renderTrend(src, m, y, mo, days, today) {
@@ -751,6 +753,7 @@ function movePill(nav) {
 }
 addEventListener('resize', () => document.querySelectorAll('nav').forEach(movePill));
 ['#list', '#dayList', '#recent', '#catList'].forEach(s => $(s).addEventListener('click', e => {
+  if (splitUl && e.currentTarget === splitUl) return; // N빵 고르는 중엔 편집 창 대신 선택 (아래 N빵 코드)
   const id = e.target.closest('li[data-id]')?.dataset.id;
   const it = id && data.items.find(i => i.id === id);
   if (it) openEntry(it);
@@ -828,6 +831,7 @@ $('#recList').addEventListener('click', async e => {
 // ── 공통 ──
 let curView = 'home';
 function show(v) {
+  if (splitUl && !(v === 'cal' && splitUl.id === 'dayList') && !(v === 'list' && splitUl.id === 'list')) endSplit();
   curView = v;
   document.querySelectorAll('nav button').forEach(b => b.dataset.view === v ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   ['home', 'cal', 'list', 'rec'].forEach(x => { $('#v-' + x).hidden = x !== v; });
@@ -1516,6 +1520,7 @@ async function refreshLists() {
 }
 function setSection(k) {
   if (selecting) setSelecting(false);
+  if (splitUl) endSplit();
   sec = k;
   document.body.classList.remove('white'); // 독서 커버플로우에서만 흰 바탕 (renderLists가 다시 켬)
   document.body.classList.remove('searching');
@@ -2438,6 +2443,81 @@ function showUpdate() {
 }
 $('#updOk').addEventListener('click', () => $('#updSheet').close());
 $('#updMore').addEventListener('click', () => { $('#updSheet').close(); nTab = 'news'; setSection('notice'); });
+
+// ── N빵: 달력·내역에서 거래를 골라(누르거나 옆으로 쓸어 여러 개) 사람 수로 나누고, 항목 + 계좌 + 보낼 금액을 바로 복사 ──
+// 계좌는 공개 저장소에 두지 않으려고 이 기기에만 저장 (처음 한 번 물어봄)
+var splitUl = null, splitN = 2, splitDrag = null, splitDragged = false; // var: 위쪽 renderCal이 이 코드보다 먼저 불려도 오류 없게
+const splitIds = new Set();
+const splitItems = () => data.items.filter(i => splitIds.has(i.id)).sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+const splitTotal = () => splitItems().reduce((t, i) => t + net(i), 0);
+const splitPer = (total, n) => Math.ceil(total / n / 10) * 10; // 10원 단위 올림 (보내는 사람이 몇 원씩 덜 내지 않게)
+function splitText(acct) {
+  const items = splitItems(), total = splitTotal(), per = splitPer(total, splitN), md = d => `${+d.slice(5, 7)}/${+d.slice(8)}`;
+  return [`[N빵 정산] ${splitN}명`, ...items.map(i => `· ${md(i.date)} ${i.content || i.minor || i.major} ${won(net(i))}`),
+    `합계 ${won(total)} ÷ ${splitN}명`, `1인당 ${won(per)}`, '', acct, `${won(per)} 보내주세요`].join('\n');
+}
+function paintSplit() {
+  if (!splitUl) return;
+  splitUl.querySelectorAll('li[data-id]').forEach(li => li.classList.toggle('sel', splitIds.has(li.dataset.id)));
+  const total = splitTotal();
+  $('#splitCount').textContent = `${splitIds.size}개 · ${won(total)}`; $('#splitN').textContent = `${splitN}명`;
+  $('#splitGo').disabled = !splitIds.size || total <= 0;
+  $('#splitGo').textContent = splitIds.size && total > 0 ? `1인당 ${won(splitPer(total, splitN))} · 나누고 복사하기` : '나누고 복사하기';
+}
+function startSplit(ul) {
+  endSplit(); splitUl = ul; splitIds.clear(); ul.classList.add('picking'); document.body.classList.add('splitting');
+  ul.closest('.card').before($('#splitBar')); $('#splitBar').hidden = false; paintSplit();
+}
+function endSplit() {
+  if (splitUl) splitUl.classList.remove('picking'), splitUl.querySelectorAll('li.sel').forEach(li => li.classList.remove('sel'));
+  splitUl = null; splitIds.clear(); document.body.classList.remove('splitting'); $('#splitBar').hidden = true;
+}
+document.querySelectorAll('[data-split]').forEach(b => b.addEventListener('click', () => startSplit($(b.dataset.split))));
+$('#splitCancel').addEventListener('click', endSplit);
+$('#splitBar').addEventListener('click', e => { const d = +e.target.closest('[data-n]')?.dataset.n; if (d) { splitN = Math.min(30, Math.max(2, splitN + d)); paintSplit(); } });
+['#list', '#dayList'].forEach(s => {
+  const ul = $(s);
+  ul.addEventListener('click', e => {
+    if (splitUl !== ul) return;
+    if (splitDragged) { splitDragged = false; return; } // 쓸어서 고른 직후의 클릭은 무시
+    const id = e.target.closest('li[data-id]')?.dataset.id; if (!id) return;
+    splitIds.has(id) ? splitIds.delete(id) : splitIds.add(id); paintSplit();
+  });
+  // 옆으로 쓸기 시작하면 그 뒤로 손가락이 지나간 줄을 모두 (처음 줄이 선택돼 있었으면 모두 해제)
+  ul.addEventListener('pointerdown', e => { if (splitUl === ul) splitDrag = { x: e.clientX, y: e.clientY, on: null }; });
+  ul.addEventListener('pointermove', e => {
+    if (!splitDrag || splitUl !== ul) return;
+    if (splitDrag.on == null) {
+      if (Math.abs(e.clientX - splitDrag.x) < 12 || Math.abs(e.clientX - splitDrag.x) < Math.abs(e.clientY - splitDrag.y)) return;
+      const first = document.elementFromPoint(splitDrag.x, splitDrag.y)?.closest('li[data-id]');
+      splitDrag.on = !(first && splitIds.has(first.dataset.id)); splitDragged = true;
+      if (first) splitDrag.on ? splitIds.add(first.dataset.id) : splitIds.delete(first.dataset.id);
+    }
+    const li = document.elementFromPoint(e.clientX, e.clientY)?.closest('li[data-id]');
+    if (li && ul.contains(li)) { splitDrag.on ? splitIds.add(li.dataset.id) : splitIds.delete(li.dataset.id); paintSplit(); }
+  });
+  const stop = () => { splitDrag = null; };
+  ul.addEventListener('pointerup', stop); ul.addEventListener('pointercancel', stop);
+});
+const askAcct = async () => {
+  const v = await ask('정산 받을 계좌를 적어 주세요\n(이 기기에만 저장돼요)', { input: store.get('splitAcct', '') || '은행 계좌번호 이름', ok: '저장' });
+  if (v == null || !v.trim()) return '';
+  store.set('splitAcct', v.trim()); return v.trim();
+};
+async function copySplit(text) {
+  try { await navigator.clipboard.writeText(text); toast('정산 글을 복사했어요 · 단톡방에 붙여넣으면 돼요'); return true; }
+  catch (e) { toast('자동 복사가 막혔어요 · 「복사하기」를 눌러 주세요'); return false; }
+}
+$('#splitGo').addEventListener('click', async () => {
+  let acct = store.get('splitAcct', '');
+  if (!acct && !(acct = await askAcct())) return;
+  const text = splitText(acct), n = splitIds.size;
+  $('#splitText').value = text; $('#splitInfo').textContent = `${n}개 · ${splitN}명`;
+  $('#splitSheet').showModal(); copySplit(text);
+});
+$('#splitCopy').addEventListener('click', () => copySplit($('#splitText').value).then(ok => ok && $('#splitSheet').close()));
+$('#splitAcct').addEventListener('click', async () => { const a = await askAcct(); if (a) { $('#splitText').value = splitText(a); copySplit($('#splitText').value); } });
+$('#splitSheet').addEventListener('close', () => { if (splitUl) endSplit(); });
 
 { const st = store.get('startSec', 'home'), want = st === 'last' ? store.get('sec', 'home') : st;
   if (!new URLSearchParams(location.search).get('sec')) setSection(SECTIONS[want] && !(want === 'money' && isFriend()) ? want : 'home'); }

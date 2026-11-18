@@ -565,6 +565,14 @@
   .sel-top { display:flex; align-items:center; justify-content:space-between; gap:8px; } .sel-top b { font-size:.9rem; }
   .sel-acts { display:flex; gap:6px; overflow-x:auto; } .sel-acts button { flex:1 0 auto; display:grid; justify-items:center; gap:2px; padding:8px 10px; font-size:.74rem; border-radius:14px; }
   .sel-acts button svg.i { width:20px; height:20px; } .sel-acts button:disabled { opacity:.4; }
+  /* N빵: 고르기는 목록 선택과 같은 동그라미. 옆으로 쓸면 여러 개 (세로 스크롤은 그대로) */
+  ul.picking li[data-id] { position:relative; padding-left:38px; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:pan-y; }
+  ul.picking li[data-id]::before { content:''; position:absolute; left:6px; top:50%; translate:0 -50%; width:22px; height:22px; border-radius:50%; border:2px solid var(--muted); box-sizing:border-box; background:var(--glass); z-index:1; transition:background .15s, border-color .15s; }
+  ul.picking li.sel::before { border-color:var(--accent); background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/14px no-repeat; }
+  ul.picking li.sel { background:var(--accent-soft); border-radius:12px; }
+  .split-bar .split-n { display:flex; align-items:center; gap:6px; } .split-bar .split-n b { min-width:2.6em; text-align:center; } .split-bar #splitGo { width:100%; }
+  body.splitting .split-btn, body.splitting #dayAdd { visibility:hidden; }
+  #splitText { width:100%; font:inherit; font-size:.88rem; line-height:1.55; resize:none; }
   .pick-list { display:grid; gap:8px; } .pick-list button { width:100%; padding:14px; font-weight:600; }
   .pub-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 2px; } .pub-row span { display:grid; } .pub-row small { color:var(--muted); font-size:.72rem; }
   .pub-row input { width:46px; height:28px; appearance:none; -webkit-appearance:none; border-radius:99px; background:var(--fill); position:relative; flex:none; transition:background .2s; margin:0; }
@@ -954,14 +962,14 @@
       <div id="calTrend" class="trend"></div>
     </div>
     <div class="card">
-      <div class="row"><h2 id="dayTitle" style="margin:0"></h2><button id="dayAdd" class="small primary">＋ 이날 추가</button></div>
+      <div class="row"><h2 id="dayTitle" style="margin:0"></h2><div class="row" style="gap:6px"><button type="button" class="small split-btn" data-split="#dayList">N빵</button><button id="dayAdd" class="small primary">＋ 이날 추가</button></div></div>
       <p id="daySum" class="hint"></p>
       <ul id="dayList" class="tx"></ul>
     </div>
   </section>
 
   <section id="v-list" hidden>
-    <p id="listInfo" class="hint" style="padding:0 4px"></p>
+    <div class="sel-head"><p id="listInfo" class="hint" style="padding:0 4px;margin:0"></p><button type="button" class="small split-btn" data-split="#list">N빵</button></div>
     <div class="card"><ul id="list" class="tx"></ul></div>
   </section>
 
@@ -1290,6 +1298,18 @@
   <p class="hint" id="updVer" style="text-align:center;margin:4px 0 12px"></p>
   <div id="updList" class="upd-list"></div>
   <div class="row sheet-foot" style="margin-top:12px"><button type="button" id="updMore">공지사항 보기</button><button type="button" id="updOk" class="primary">확인</button></div>
+</dialog>
+<div id="splitBar" class="sel-bar split-bar" hidden role="toolbar" aria-label="N빵 계산">
+  <div class="sel-top"><button type="button" id="splitCancel" class="small">취소</button><b id="splitCount">0개 · 0원</b><span class="split-n"><button type="button" class="small" data-n="-1" aria-label="한 명 빼기">−</button><b id="splitN">2명</b><button type="button" class="small" data-n="1" aria-label="한 명 더하기">＋</button></span></div>
+  <p class="hint" style="margin:0">나눌 거래를 누르거나, 옆으로 쓸어서 여러 개를 한 번에 골라요</p>
+  <button type="button" id="splitGo" class="primary" disabled>나누고 복사하기</button>
+</div>
+<dialog id="splitSheet" class="sheet" aria-labelledby="splitTitle">
+  <div class="sheet-grab" aria-hidden="true"><span></span></div>
+  <h2 id="splitTitle" style="text-align:center;margin:0 0 4px">N빵 정산</h2>
+  <p class="hint" id="splitInfo" style="text-align:center;margin:0 0 10px"></p>
+  <textarea id="splitText" rows="10" readonly aria-label="보낼 정산 글"></textarea>
+  <div class="row sheet-foot" style="margin-top:12px"><button type="button" id="splitAcct">계좌 바꾸기</button><button type="button" id="splitCopy" class="primary">복사하기</button></div>
 </dialog>
 <dialog id="pickSheet" class="sheet" aria-labelledby="pickTitle">
   <div class="sheet-grab" aria-hidden="true"><span></span></div>
