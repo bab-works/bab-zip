@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v91'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v92'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
 const store = {
@@ -1596,8 +1596,9 @@ function renderHabits(month = hF.open) {
     const n = due.filter(h => h.done.includes(stampOf(ds))).length;
     const cls = [ds === today && 'today', ds > today && 'future', wd === 0 && 'sun', wd === 6 && 'sat'].filter(Boolean).join(' ');
     html += `<button type="button" data-d="${ds}" class="${cls}" aria-pressed="${ds === hDay}" ${ds > today ? 'disabled' : ''} aria-label="${mo}월 ${d}일 ${n}/${due.length} 완료">
-      <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${due.length && ds <= today ? `<span class="hdots" aria-hidden="true">${due.map(h =>
-        `<i class="${h.done.includes(stampOf(ds)) ? 'on' : ''}" style="--c:${esc(hColor(h))}"></i>`).join('')}</span>` : ''}</button>`;
+      <span class="d">${month || d !== 1 ? d : +ds.slice(5, 7) + '/' + d}</span>${!due.length || ds > today ? '' : due.length <= 4 ? `<span class="hdots" aria-hidden="true">${due.map(h =>
+        `<i class="${h.done.includes(stampOf(ds)) ? 'on' : ''}" style="--c:${esc(hColor(h))}"></i>`).join('')}</span>`
+        : `<span class="hbar${n === due.length ? ' full' : ''}" aria-hidden="true"><i style="width:${Math.round(n / due.length * 100)}%"></i></span>`}</button>`; // 습관이 많으면 점 대신 막대 (칸 밖으로 안 넘침)
   }
   $('#hGrid').innerHTML = html + (month ? tail : '');
   hF.week = month && hDay.startsWith(hMon) ? Math.floor((first + +hDay.slice(8) - 1) / 7) : 0;
@@ -1614,7 +1615,28 @@ function renderHabits(month = hF.open) {
     : `<li class="empty">${habits.length ? '이날은 할 습관이 없어요' : '틱틱 습관을 불러오는 중이에요'}</li>`);
   const rest = habits.length - due.length;
   $('#hRest').textContent = rest ? `이날 쉬는 습관 ${rest}개` : '';
+  renderHabitEach(today);
 }
+// 습관별 달력: 습관마다 한 달을 작은 칸으로 (한 칸 = 하루). 색 = 한 날, 회색 = 할 날인데 안 함, 빗금 = 쉬는 날
+function renderHabitEach(today) {
+  const { mo, first, days } = monthGrid(hMon);
+  $('#hEachTitle').textContent = `${mo}월 습관별 기록`;
+  $('#hEach').innerHTML = habits.map(h => {
+    let done = 0, due = 0;
+    const cells = Array(first).fill('<i class="pad"></i>').concat(range(1, days).map(d => {
+      const ds = `${hMon}-${pad2(d)}`;
+      if (ds > today) return '<i class="later"></i>';
+      if (!dueOn(h, ds)) return '<i class="rest"></i>';
+      due++; if (h.done.includes(stampOf(ds))) { done++; return '<i class="on"></i>'; }
+      return '<i></i>';
+    })).join('');
+    return `<button type="button" class="h1" data-hd="${esc(h.id)}" style="--c:${esc(hColor(h))}" aria-label="${esc(h.name)} ${mo}월 ${done}일 완료">
+      <span class="h1-head"><span class="hic" aria-hidden="true">${esc(hIcon(h))}</span><b>${esc(h.name)}</b><small>${done}/${due}</small></span>
+      <span class="h1-grid" aria-hidden="true">${cells}</span></button>`;
+  }).join('');
+  $('#hEachCard').hidden = !habits.length;
+}
+$('#hEach').addEventListener('click', e => { const h = habits.find(x => x.id === e.target.closest('[data-hd]')?.dataset.hd); if (h) openHabit(h); });
 async function refreshHabits() {
   if (!cfg.token) return sec === 'money' ? render() : sec === 'habit' ? renderHabits() : renderLists(); // 연결 전엔 시트에 묻지 않음 (오류 대신 시작 화면)
   try {

@@ -475,6 +475,18 @@
   .hgrid button[aria-pressed="true"] { background:var(--accent); }
   .hgrid button[aria-pressed="true"] .d { color:#fff !important; }
   /* 습관마다 자기 색 점: 한 날은 색칠, 안 한 날은 빈 테두리 */
+  .hbar { display:block; width:70%; height:5px; border-radius:3px; background:var(--line); overflow:hidden; } .hbar i { display:block; height:100%; border-radius:3px; background:var(--accent); }
+  .hbar.full i { background:var(--refund); } .hgrid button[aria-pressed="true"] .hbar { background:rgba(255,255,255,.35); } .hgrid button[aria-pressed="true"] .hbar i { background:#fff; }
+  /* 습관별 달력 (한 줄에 둘, 좁으면 하나) */
+  .h-each { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:18px 16px; }
+  .h1 { display:grid; gap:8px; padding:0; background:none; border:0; color:inherit; font:inherit; text-align:left; cursor:pointer; min-width:0; }
+  html[data-skin] .h1 { box-shadow:none !important; background:none !important; border-radius:0 !important; }
+  .h1-head { display:flex; align-items:center; gap:6px; min-width:0; } .h1-head .hic { width:26px; height:26px; font-size:.9rem; flex:none; border-radius:50%; display:grid; place-items:center; background:color-mix(in srgb, var(--c) 28%, transparent); }
+  .h1-head b { flex:1; min-width:0; font-size:.86rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .h1-head small { color:var(--muted); font-size:.72rem; flex:none; }
+  .h1-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+  .h1-grid i { aspect-ratio:1; border-radius:4px; background:var(--fill); } .h1-grid i.on { background:var(--c); }
+  .h1-grid i.later, .h1-grid i.pad { background:transparent; } .h1-grid i.later { box-shadow:inset 0 0 0 1px var(--line); }
+  .h1-grid i.rest { background:repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 5px); }
   .hdots { display:flex; gap:3px; } .hdots i { width:11px; height:11px; border-radius:50%; box-shadow:inset 0 0 0 1.5px var(--line); }
   .hdots i.on { background:var(--c); box-shadow:none; }
   .hgrid button[aria-pressed="true"] .hdots i { box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5); } .hgrid button[aria-pressed="true"] .hdots i.on { box-shadow:0 0 0 1.5px #fff; }
@@ -1011,6 +1023,7 @@
     <p id="hInfo" class="hint" style="padding:0 6px"></p>
     <ul id="hList" class="hlist"></ul>
     <p id="hRest" class="hint" style="text-align:center"></p>
+    <div class="card" id="hEachCard" hidden><h2 id="hEachTitle"></h2><div id="hEach" class="h-each"></div></div>
   </section>
 
   <section id="v-lists" hidden>
