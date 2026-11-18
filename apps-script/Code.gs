@@ -734,6 +734,108 @@ function summary_() {
   return { ok: true, date: today, today: day, month, budget, left: budget - month };
 }
 
+// Deployment injects the bridge credentials. Copies of this script default to Sheets.
+const FRIEND_WORKER_ = '';
+const FRIEND_BRIDGE_ = '';
+const friendMode_ = () => PropertiesService.getScriptProperties().getProperty('FRIEND_MODE');
+const waitFriends_ = () => ({ok:false,retry:true,error:'친구 서버를 전환하고 있어요. 잠시 후 다시 시도해 주세요.'});
+function workerCall_(request, owner) {
+  const body = Object.assign({}, request);
+  if (owner) delete body.token;
+  try {
+    const r = UrlFetchApp.fetch(FRIEND_WORKER_, {method:'post',contentType:'application/json',payload:JSON.stringify(body),
+      headers:owner ? {Authorization:'Bearer '+FRIEND_BRIDGE_} : {},muteHttpExceptions:true,followRedirects:false});
+    if (r.getResponseCode() === 200) return JSON.parse(r.getContentText());
+  } catch (_) {}
+  return {ok:false,retry:true,error:'친구 서버에 연결하지 못했어요'};
+}
+function workerRequired_(b) {
+  const r = workerCall_(b,true);
+  if (!r.ok) throw new Error(r.retry ? '친구 서버 연결을 다시 시도해 주세요' : '입력값 오류: '+r.error);
+  return r;
+}
+function friendControl_(b) {
+  if (!FRIEND_BRIDGE_ || b.proof !== FRIEND_BRIDGE_ || !authOk_(b.token)) return {ok:false};
+  if(b.command==='baseline' && !['freeze','worker'].includes(friendMode_())) {
+    const sample=friends_()[0];
+    if(!sample) return {ok:true,sample:false};
+    if(!['me','lists','habits'].includes(b.what)) return {ok:false};
+    const data=JSON.parse(doGet({parameter:{token:sample.code,what:b.what}}).getContent());
+    return {ok:data.ok,sample:true};
+  }
+  return withLock_(()=>{
+    const props=PropertiesService.getScriptProperties(), mode=friendMode_() || 'sheets';
+    if (b.command==='status') return {ok:true,mode};
+    if (b.command==='freeze' && mode==='sheets') {
+      installProjectionTriggers_();
+      props.setProperty('FRIEND_MODE','freeze');
+    } else if (b.command==='resumeSheets' && mode==='freeze') props.setProperty('FRIEND_MODE','sheets');
+    else if (b.command==='activate' && mode==='freeze') {
+      const state=workerRequired_({action:'cutoverStatus'});
+      if (!state.active) return {ok:false};
+      props.setProperty('FRIEND_MODE','worker');
+    } else return {ok:false};
+    return {ok:true,mode:friendMode_()};
+  });
+}
+function ownerListsWithTags_() {
+  const extra=workerRequired_({what:'ownerOverlay'}), lists={};
+  for(const k of Object.keys(LISTS)) {
+    lists[k]=listRead_(k);
+    const published=new Set(extra.publications.filter(p=>p.list===k).map(p=>p.id));
+    for(const item of lists[k]) if(published.has(item.id)) item.pub=true;
+    for(const {item,from,name} of extra.tags.filter(t=>t.list===k)) {
+      const hit=lists[k].find(x=>sameWork_(k,x,item));
+      if(hit) (hit.others || (hit.others=[])).push({name,rating:item.rating||item.stars||'',review:item.review||''});
+      else lists[k].push({...item,id:'s:'+from+':'+item.id,shared:name});
+    }
+  }
+  return {ok:true,lists,people:extra.people};
+}
+function refreshOwnerProjection_() {
+  const ctx=workerRequired_({what:'projectionContext'});
+  const published=new Set(ctx.publications.map(p=>JSON.stringify([p.list,p.id]))), records=[];
+  for(const k of Object.keys(LISTS)) {
+    for(const item of listRead_(k)) {
+      const tag=ctx.people.some(name=>tagged_(item,name));
+      if (!tag && !published.has(JSON.stringify([k,item.id]))) continue;
+      if (!tag) {delete item.with; delete item.quotes; delete item.cost;}
+      records.push({list:k,item});
+    }
+  }
+  workerRequired_({action:'replaceProjection',records});
+}
+function repairFriendProjection_() {
+  if (friendMode_()==='worker') withLock_(()=>refreshOwnerProjection_());
+}
+function editedFriendProjection_(e) {
+  if(friendMode_()!=='worker' || !e || !e.range || !Object.values(LISTS).some(c=>c.tab===e.range.getSheet().getName())) return;
+  withLock_(()=>{workerRequired_({action:'replaceProjection',records:[]});refreshOwnerProjection_();});
+}
+function installProjectionTriggers_() {
+  const names=ScriptApp.getProjectTriggers().map(t=>t.getHandlerFunction());
+  if(!names.includes('editedFriendProjection_')) ScriptApp.newTrigger('editedFriendProjection_').forSpreadsheet(ss_()).onEdit().create();
+  if(!names.includes('repairFriendProjection_')) ScriptApp.newTrigger('repairFriendProjection_').timeBased().everyHours(1).create();
+}
+const friendActions_=['invite','uninvite','setName','setPassword','setHouse','setPub','report','friendRequest','friendAccept','friendRemove','listSave','listDelete','bulk','habitAdd','habitCheck','habitDelete'];
+function bridgeWrite_(b, owner) {
+  if(b.what || !friendActions_.includes(b.action)) return {ok:false,error:'입력값 오류: 허용되지 않은 동작'};
+  if(!owner) return workerCall_(b,false);
+  if(['listSave','listDelete','bulk','setPub'].includes(b.action)) {
+    // Hide the old projection before changing originals. A failed rebuild remains private and can be retried.
+    workerRequired_({action:'replaceProjection',records:[]});
+    if(b.action==='setPub') workerRequired_(b);
+    else for(const op of (b.action==='bulk'?b.ops:[b])) listOp_({role:'owner'},op);
+    SpreadsheetApp.flush();
+    refreshOwnerProjection_();
+    return {ok:true,wrote:true};
+  }
+  if(b.action==='setPassword') return {ok:true,wrote:true,...setPassword_({role:'owner'},b)};
+  const r=workerCall_(b,true);
+  if(r.ok && b.action==='setName') PropertiesService.getScriptProperties().setProperty('OWNER_NAME',r.name);
+  return r;
+}
+
 function doGet(e) {
   if (e.parameter.op) { // 저장 작업을 GET으로 받은 경우
     let b;
@@ -741,7 +843,23 @@ function doGet(e) {
     b.token = e.parameter.token;
     return writeOp_(b);
   }
-  const me = who_(e.parameter.token);
+  const mode=friendMode_(), owner=authOk_(e.parameter.token), what=e.parameter.what;
+  if(mode==='freeze' && (!owner || ['me','lists','house'].includes(what))) return out_(waitFriends_());
+  let me;
+  if(mode==='worker') {
+    if(!owner && ['book','board','movie','escape'].includes(what)) {
+      const identity=workerCall_({what:'me',token:e.parameter.token},false);
+      if(!identity.ok) return out_(identity);
+      me={role:'friend',name:identity.name};
+    } else if(!owner || ['me','house'].includes(what)) {
+      if(!['me','house','lists','habits'].includes(what)) return out_({ok:false,error:'친구 코드로는 볼 수 없어요'});
+      const r=workerCall_({what,token:e.parameter.token,name:e.parameter.name},owner);
+      if(r.ok && !owner && what==='me') r.workerUrl=FRIEND_WORKER_;
+      return out_(r);
+    } else if(what==='lists') {
+      try{return out_(withLock_(()=>ownerListsWithTags_()));}catch(_){return out_(waitFriends_());}
+    } else me={role:'owner',name:ownerName_(),code:''};
+  } else me=who_(e.parameter.token);
   if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   try {
     if (e.parameter.what === 'me') {
@@ -788,6 +906,31 @@ function doGet(e) {
 function doPost(e) {
   let b;
   try { b = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '잘못된 요청' }); }
+  if(b.action==='friendCutover') {
+    try{return out_(friendControl_(b));}catch(_){return out_({ok:false,error:'전환 설정을 확인해 주세요'});}
+  }
+  if(['login','redeem'].includes(b.action) && friendMode_()==='worker') {
+    const name=String(b.name||'').trim(), ownerName=ownerName_();
+    if(b.action==='login' && name && (ownerName===name || (!ownerName && authOk_(b.password)))) {
+      const cache=cache_(), key='fail:'+name, failures=Number(cache && cache.get(key) || 0);
+      if(failures>=10) return out_({ok:false,error:'너무 많이 틀렸어요 · 10분 뒤에 다시 해 주세요'});
+      if(!authOk_(b.password)) {
+        if(cache) cache.put(key,String(failures+1),600);
+        return out_({ok:false,error:'아이디 또는 비밀번호가 맞지 않아요'});
+      }
+      if(!ownerName){
+        const r=workerCall_({action:'setName',name},true);
+        if(!r.ok) return out_(r);
+        PropertiesService.getScriptProperties().setProperty('OWNER_NAME',name);
+      }
+      if(cache) cache.remove(key);
+      return out_({ok:true,role:'owner',token:b.password,name});
+    }
+    const r=workerCall_(b,false);
+    if(r.ok) r.workerUrl=FRIEND_WORKER_;
+    return out_(r);
+  }
+  if(['login','redeem'].includes(b.action) && friendMode_()==='freeze') return out_(waitFriends_());
   if (b.action === 'login' || b.action === 'redeem') { // 로그인은 토큰 없이
     try { return out_({ ok: true, ...withLock_(() => b.action === 'login' ? login_(b) : redeem_(b)) }); } catch (err) { return out_({ ok: false, error: err.message }); }
   }
@@ -796,12 +939,19 @@ function doPost(e) {
 }
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
 function writeOp_(b) {
+  const owner=authOk_(b.token);
+  const sheetOwner=owner && ['save','delete','recSave','recDelete','budget','habitCheck'].includes(b.action);
+  if(!sheetOwner && ['freeze','worker'].includes(friendMode_())) {
+    try{return out_(withLock_(()=>friendMode_()==='worker'?bridgeWrite_(b,owner):waitFriends_()));}
+    catch(err){return out_({ok:false,retry:!String(err.message).startsWith('입력값 오류'),error:String(err.message)});}
+  }
   const me = who_(b.token);
   if (!me) return out_({ ok: false, error: '비밀번호가 맞지 않습니다' });
   if (me.role === 'friend' && OWNER_ONLY_.includes(b.action)) return out_({ ok: false, error: '입력값 오류: 친구 코드로는 할 수 없어요' });
   let res = {};
   try {
     withLock_(() => {
+      if(!sheetOwner && ['freeze','worker'].includes(friendMode_())) throw new Error('친구 서버 전환 중 · 다시 시도해 주세요');
       if (b.action === 'setName') res = setName_(me, b);
       else if (/^friend(Request|Accept|Remove)$/.test(b.action)) res = { social: friendOp_(me, b) };
       else if (b.action === 'setHouse') setHouse_(me, b);

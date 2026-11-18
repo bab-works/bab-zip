@@ -29,9 +29,6 @@ try {
     .split(";")
     .filter((s) => s.trim()))
     await db.prepare(stmt).run();
-  await db
-    .prepare("INSERT INTO accounts(id,name) VALUES('owner','테스트주인')")
-    .run();
   const request = async (body, token) => {
     const res = await mf.dispatchFetch("http://localhost/", {
       method: "POST",
@@ -45,10 +42,67 @@ try {
     assert.equal(result.ok, true, result.error);
     return result;
   };
+  await db
+    .prepare(
+      await readFile(new URL("migrations/0002_cutover.sql", root), "utf8"),
+    )
+    .run();
+  for (const t of [
+    "accounts",
+    "records",
+    "publications",
+    "relations",
+    "houses",
+    "habits",
+    "habit_days",
+    "reports",
+  ])
+    await db
+      .prepare("CREATE TABLE stage_" + t + " AS SELECT * FROM " + t)
+      .run();
+  await db.prepare("CREATE TABLE stage_verified(id INTEGER)").run();
+  await db
+    .prepare(
+      "INSERT INTO stage_accounts(id,name,created) VALUES('owner','테스트주인','test')",
+    )
+    .run();
+  assert.equal(
+    (await request({ action: "promoteSnapshot" }, bridge)).ok,
+    false,
+  );
+  await db.prepare("INSERT INTO stage_verified VALUES(1)").run();
+  assert.equal((await request({ action: "promoteSnapshot" })).ok, false);
+  assert.equal(
+    (await call({ action: "promoteSnapshot" }, bridge)).active,
+    true,
+  );
+  assert.equal(
+    (await call({ action: "promoteSnapshot" }, bridge)).active,
+    true,
+  );
   const invite = (name) => call({ action: "invite", name }, bridge);
   const a = await invite("가"),
     b = await invite("나"),
     outsider = await invite("다");
+  assert.equal(
+    (await request({ what: "projectionContext" }, a.code)).ok,
+    false,
+  );
+  await call(
+    {
+      action: "replaceProjection",
+      records: [
+        {
+          list: "movie",
+          item: { id: "owner-test", title: "가상", with: "가" },
+        },
+      ],
+    },
+    bridge,
+  );
+  assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 1);
+  await call({ action: "replaceProjection", records: [] }, bridge);
+  assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 0);
   const login = (name, password) => ({ action: "login", name, password });
   assert.equal((await call(login("가", first))).token, a.code);
   await call({ action: "setPassword", password }, a.code);

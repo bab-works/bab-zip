@@ -135,4 +135,20 @@ assert.equal(post('newpw1', { action: 'setPassword', password: OWNER }).ok, true
 
 // 초대 취소 → 그 코드는 더 못 씀
 post(OWNER, { action: 'uninvite', code: JH }); assert.equal(get(JH, 'lists').ok, false);
+props.FRIEND_MODE='freeze';
+assert.equal(post(MJ,{action:'listDelete',list:'book',id:'test'}).retry,true);
+props.FRIEND_MODE='worker';
+const forwarded=[];
+ctx.UrlFetchApp={fetch:(_,options)=>{
+ const body=JSON.parse(options.payload); forwarded.push({body,headers:options.headers});
+ return {getResponseCode:()=>200,getContentText:()=>JSON.stringify({ok:true,wrote:true,role:'friend',name:'가짜'})};
+}};
+assert.equal(get(MJ,'me').role,'friend');
+assert.equal(post(MJ,{action:'listSave',list:'book',item:{id:'test'}}).ok,true);
+assert.equal(forwarded.at(-1).body.token,MJ);
+assert.equal(get(MJ,'summary').ok,false);
+assert.equal(post(MJ,{action:'promoteSnapshot'}).ok,false);
+post(OWNER,{action:'invite',name:'가짜'});
+assert.equal(forwarded.at(-1).body.token,undefined);
+assert.ok(forwarded.at(-1).headers.Authorization);
 console.log('FRIENDS OK');

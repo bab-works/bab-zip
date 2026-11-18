@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v101'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v102'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -248,7 +248,16 @@ function toast(t, ms = 3500, undo) {
 // ── 시트 통신 ──
 // 저장(POST)이 아이폰에서 「Load failed」로 끊기는 경우가 있어, 그러면 같은 작업을 GET(?op=)으로 다시 보냄
 // 저장 작업은 모두 id로 덮어쓰는 방식이라 두 번 들어가도 중복이 생기지 않음. 한 번 GET이 통하면 다음부터 GET 먼저
+const DIRECT_FRIEND_SERVER = true;
+function directFriendUrl(body, qs) {
+  if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || me.role !== 'friend') return '';
+  const what = new URLSearchParams(qs).get('what');
+  if (!body && !['me','lists','house','habits'].includes(what)) return '';
+  return /^https:\/\/bab-zip-friends\.[a-z0-9-]+\.workers\.dev\/?$/.test(me.workerUrl || '') ? me.workerUrl : '';
+}
 async function api(body, qs = '') {
+  const direct = directFriendUrl(body, qs);
+  if (direct) return call(body, qs, direct);
   if (!body) return call('', qs);
   const viaGet = () => call('', '&op=' + encodeURIComponent(JSON.stringify(body))).then(r => {
     if (!r.wrote) throw new Error('시트 쪽 코드가 예전 버전이에요 · Code.gs를 새 버전으로 배포해 주세요');
@@ -262,13 +271,15 @@ async function api(body, qs = '') {
     catch (e2) { throw Object.assign(new Error(`${e.message} · GET으로도 실패: ${e2.message}`), { unreached: e2.unreached, rejected: e2.rejected }); }
   }
 }
-async function call(body, qs = '') {
+async function call(body, qs = '', direct = '') {
   if (!cfg.url || !cfg.token) throw new Error('아직 내 시트에 연결하지 않았어요');
   // 45초 넘게 답이 없으면 끊고 알려 줌 (안 그러면 아이폰이 「Load failed」만 남김)
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
   let res, text;
   try {
-    res = body
+    res = direct ? await fetch(direct, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({...(body || Object.fromEntries(new URLSearchParams(qs))),token:cfg.token}), signal:ctl.signal})
+      : body
       // text/plain 이어야 Apps Script가 CORS 사전요청 없이 받음
       ? await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, token: cfg.token }), signal: ctl.signal })
       : await fetch(cfg.url + '?token=' + encodeURIComponent(cfg.token) + qs, { signal: ctl.signal });
@@ -279,6 +290,7 @@ async function call(body, qs = '') {
   let r;
   try { r = JSON.parse(text); } catch { throw new Error(`시트가 알 수 없는 응답을 보냈어요 (HTTP ${res.status}) ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}`); }
   if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호/.test(r.error) });
+  if(direct && r.role==='friend') r.workerUrl=direct;
   return r;
 }
 // 보내기는 한 번에 하나만: 동시에 두 번 돌면 아직 안 보낸 작업이 목록에서 지워질 수 있음
@@ -994,7 +1006,7 @@ async function loggedIn(r, url = cfg.url || SHEET_URL) {
   const changing = cfg.token && (cfg.token !== r.token || cfg.url !== url);
   if (!switchConnection({ url, token: r.token }, pending)) throw new Error('이전 계정의 저장 대기를 먼저 처리해 주세요');
   if (changing) { location.replace(location.pathname); return; }
-  me = { token: r.token, role: r.role, name: r.name, people: [], friends: [] }; store.set('me', me);
+  me = { token: r.token, role: r.role, workerUrl:r.workerUrl || '', name: r.name, people: [], friends: [] }; store.set('me', me);
   ss.set('unlockedAt', Date.now()); // 방금 로그인했으면 Face ID 다시 안 물음
   $('#login').close();
   // 웰컴 스크린이 시트 불러오기를 가려 줌: 다 불러올 때까지(최대 15초) 기다렸다가 넘김
@@ -1827,10 +1839,12 @@ const menuOrder = () => { const o = store.get('menuOrder', []).filter(k => SECTI
 async function loadMe() {
   if (!cfg.token) return;
   try {
+    const token=cfg.token, url=cfg.url;
     const r = await api(null, '&what=me');
+    if(cfg.token!==token || cfg.url!==url) return;
     loadedAt.me = Date.now();
     if (!r.role) return; // 예전 Code.gs
-    me = { token: cfg.token, role: r.role, name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
+    me = { token: cfg.token, role: r.role, workerUrl:r.workerUrl || '', name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
   } catch (e) { return; }
   applyRole();
 }

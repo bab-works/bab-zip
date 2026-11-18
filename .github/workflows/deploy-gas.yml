@@ -45,7 +45,12 @@ jobs:
       - name: 새 Code.gs 넣기 (비밀번호 포함)
         env:
           APP_TOKEN: ${{ secrets.APP_TOKEN }}
-        run: node apps-script/deploy/put-code.js apps-script/Code.gs gas
+          FRIEND_BRIDGE_SECRET: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$FRIEND_BRIDGE_SECRET"
+          node apps-script/deploy/put-code.js apps-script/Code.gs gas
       - name: 올리고 배포 (앱이 쓰는 배포 주소를 새 버전으로)
         run: |
           DEPLOY_ID=$(grep -oE "script.google.com/macros/s/[A-Za-z0-9_-]+/exec" app.js | head -1 | cut -d/ -f4)

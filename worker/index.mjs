@@ -74,6 +74,33 @@ async function dispatch(env, b, authorization) {
   // Apps Script authenticates the owner before making a server-to-server request.
   const service =
     !!env.BRIDGE_SECRET && authorization === "Bearer " + env.BRIDGE_SECRET;
+  if (action === "cutoverStatus" || action === "promoteSnapshot") {
+    check(service);
+    const active = !!(await sql(
+      "SELECT id FROM friend_cutover WHERE id=1",
+    ).first());
+    if (action === "cutoverStatus" || active) return { active };
+    check(await sql("SELECT id FROM stage_verified WHERE id=1").first());
+    const tables = [
+      "accounts",
+      "records",
+      "publications",
+      "relations",
+      "houses",
+      "habits",
+      "habit_days",
+      "reports",
+    ];
+    const batch = [sql("INSERT INTO friend_cutover VALUES(1)")];
+    for (const t of tables) {
+      check(!(await sql("SELECT 1 FROM " + t + " LIMIT 1").first()));
+      batch.push(sql("INSERT INTO " + t + " SELECT * FROM stage_" + t));
+    }
+    for (const t of ["verified", "login_limits", ...tables.slice().reverse()])
+      batch.push(sql("DROP TABLE IF EXISTS stage_" + t));
+    await env.DB.batch(batch);
+    return { active: true };
+  }
   const me = service
     ? await sql("SELECT id,name FROM accounts WHERE id='owner'").first()
     : await sql(
@@ -104,6 +131,55 @@ async function dispatch(env, b, authorization) {
         (await sql("SELECT name FROM accounts WHERE id='owner'").first())
           ?.name || "",
     };
+  }
+  if (["ownerOverlay", "projectionContext"].includes(b.what)) {
+    check(service);
+    const people = (await network()).map((f) => f.name);
+    const publications = await rows(
+      "SELECT list,id FROM publications WHERE person='owner'",
+    );
+    if (b.what === "projectionContext") return { people, publications };
+    const tags = [];
+    for (const r of await rows(
+      `SELECT r.person,r.list,r.item,a.name FROM records r JOIN accounts a ON a.id=r.person
+      WHERE r.person<>'owner' AND instr(json_extract(r.item,'$.with'),?)>0 ORDER BY r.rowid`,
+      me.name,
+    )) {
+      const item = JSON.parse(r.item);
+      if (
+        String(item.with || "")
+          .split(separator)
+          .includes(me.name)
+      )
+        tags.push({ item, list: r.list, from: r.person, name: r.name });
+    }
+    return { people: [me.name, ...people], publications, tags };
+  }
+  if (action === "replaceProjection") {
+    check(service && Array.isArray(b.records));
+    const batch = [sql("DELETE FROM records WHERE person='owner'")];
+    let chunk = [],
+      size = 0;
+    const insert = () =>
+      sql(
+        `INSERT INTO records(person,list,id,item) SELECT 'owner',json_extract(value,'$.list'),
+      json_extract(value,'$.item.id'),json_extract(value,'$.item') FROM json_each(?)`,
+        JSON.stringify(chunk),
+      );
+    for (const r of b.records) {
+      check(titles.has(r.list) && validId(r.item?.id));
+      const n = JSON.stringify(r).length;
+      if (chunk.length && size + n > 120000) {
+        batch.push(insert());
+        chunk = [];
+        size = 0;
+      }
+      chunk.push(r);
+      size += n;
+    }
+    if (chunk.length) batch.push(insert());
+    await env.DB.batch(batch);
+    return { wrote: true };
   }
   if (!action) {
     if (b.what === "me") {

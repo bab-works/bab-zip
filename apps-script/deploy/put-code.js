@@ -11,3 +11,12 @@ const target = ['Code.js', 'Code.gs'].map(f => path.join(dir, f)).find(f => fs.e
 if (!target) throw new Error('받아온 프로젝트에 Code 파일이 없어요: ' + fs.readdirSync(dir).join(', '));
 fs.writeFileSync(target, out);
 console.log('Code 파일 교체:', path.basename(target), `(${out.length}자)`);
+if (process.env.FRIEND_BRIDGE_SECRET) {
+  (async()=>{
+    const {workerUrl}=await import('./worker-url.mjs');
+    const url=await workerUrl(process.env.CF_ACCOUNT,process.env.CF_TOKEN);
+    const source=out.replace("const FRIEND_WORKER_ = '';",()=> 'const FRIEND_WORKER_ = '+JSON.stringify(url)+';')
+      .replace("const FRIEND_BRIDGE_ = '';",()=> 'const FRIEND_BRIDGE_ = '+JSON.stringify(process.env.FRIEND_BRIDGE_SECRET)+';');
+    fs.writeFileSync(target,source);
+  })().catch(()=>{console.error('친구 Worker 배포 설정 확인 필요');process.exitCode=1;});
+}

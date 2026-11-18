@@ -1,0 +1,1 @@
+CREATE TABLE friend_cutover (id INTEGER PRIMARY KEY CHECK(id=1));

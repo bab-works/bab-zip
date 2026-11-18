@@ -18,7 +18,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
       const body = /what=me/.test(u) ? { ok: true, role, name: role === 'owner' ? '나리' : '민지', people: ['나리', '민지', '준호'], friends: role === 'owner' ? friends : undefined }
         : /what=lists/.test(u) ? { ok: true, people: ['나리', '민지', '준호'], lists: { book: [], buy: [], wish: [], escape: [{ id: 's:owner:e9', theme: '오시리스', shop: '서울이스케이프룸', with: '민지', shared: '나리' }] } }
         : /what=habits/.test(u) ? { ok: true, habits: [] }
-        : role === 'friend' ? { ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' } : { ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } };
+        : /what=book/.test(u) ? {ok:true,books:[]} : role === 'friend' ? { ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' } : { ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } };
       rt.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     });
     await p.goto('http://localhost:8788/'); await p.waitForTimeout(1200);
@@ -73,4 +73,19 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const link = await o.p.inputValue('#shareUrl'); assert.match(link, /#i=iabcdef0123(&s=|$)/); assert.doesNotMatch(link, /token|fbbbb/, 'no password/code in the link');
   await o.p.click('#shareCancel'); await o.p.waitForTimeout(300);
   assert.match(await o.p.textContent('#friendList'), /준호/);
+  // Existing session, direct guest traffic. Searches still go through the configured Sheet.
+  const worker='https://bab-zip-friends.test.workers.dev', direct=[];
+  await p.route(worker+'/**', rt=>{
+    const payload=rt.request().postDataJSON(); direct.push(payload);
+    rt.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,wrote:true,role:'friend'})});
+  });
+  await p.evaluate(async url=>{
+    cfg.url=SHEET_URL; me={role:'friend',token:cfg.token,workerUrl:url};
+    await api(null,'&what=lists');
+    await api({action:'habitCheck',habitId:'htest',stamp:'20260101',done:true});
+    await api(null,'&what=book&q=test');
+    if(directFriendUrl(null,'&what=summary')) throw Error('ledger routing');
+  },worker);
+  assert.deepEqual(direct.map(r=>r.what||r.action),['lists','habitCheck']);
+  assert.ok(gets.some(url=>url.includes('what=book')));
   console.log('FRIEND APP OK'); await b.close(); process.exit(0); });

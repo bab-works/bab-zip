@@ -1,9 +1,6 @@
 name: 친구 데이터 이전 (3단계)
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['migration/**', '.github/workflows/migrate-friends.yml']
 permissions:
   contents: read
 concurrency:
