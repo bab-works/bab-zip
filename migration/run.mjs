@@ -40,7 +40,7 @@ function contentKey(files) {
   );
 }
 
-async function snapshot() {
+export async function snapshot(benchmark) {
   const rc = JSON.parse(env.CLASPRC_JSON),
     cfg = rc.oauth2ClientSettings;
   checked(
@@ -88,7 +88,7 @@ async function snapshot() {
   const proof = randomBytes(32).toString("hex"),
     expires = Date.now() + 12 * 60_000;
   const helper = (
-    await readFile(new URL("./export.gs", import.meta.url), "utf8")
+    await readFile(new URL(benchmark ? "./speed.gs" : "./export.gs", import.meta.url), "utf8")
   )
     .replace("__EXPIRY__", String(expires))
     .replace(
@@ -108,6 +108,17 @@ async function snapshot() {
     "function doGet(e) {",
     "function snapshotUnusedGet_(e) {",
   );
+  if (benchmark) {
+    // The isolated web app accepts only the read-only comparison call; production routing stays on D1.
+    const begin=script.source.indexOf("function snapshotUnusedGet_(e) {");
+    const end=script.source.indexOf("function snapshotUnusedPost_(e) {",begin);
+    checked(begin>=0 && end>begin,"기존 조회 함수 확인 필요");
+    const legacy=replaceOnce(script.source.slice(begin,end),"const mode=friendMode_()","const mode='sheets'");
+    script.source = script.source.slice(0,begin) + legacy + script.source.slice(end);
+    checked(script.source.includes("if (changed) r.setValues(v);"),"기존 시트 ID 처리 확인 필요");
+    script.source=script.source.replaceAll("if (changed) r.setValues(v);","/* Read-only benchmark. */");
+    script.source=script.source.replaceAll("SpreadsheetApp.getActiveSpreadsheet()", "exportSheet_()");
+  }
   const manifest = temp.find(
     (f) => f.name === "appsscript" && f.type === "JSON",
   );
@@ -120,7 +131,7 @@ async function snapshot() {
     name: "TemporaryFriendSnapshot",
     type: "SERVER_JS",
     source:
-      "function doPost(e){return exportFriendsOnce_(e); }\nfunction exportSheet_(){return SpreadsheetApp.openById(" +
+      "function doPost(e){return "+(benchmark?"benchmarkRead_":"exportFriendsOnce_")+"(e); }\nfunction exportSheet_(){return SpreadsheetApp.openById(" +
       JSON.stringify(parentId) +
       ");}\n" +
       helper,
@@ -165,6 +176,7 @@ async function snapshot() {
       "내보내기 주소 확인 필요",
     );
     phase = "주인 인증 및 시트 읽기";
+    if(benchmark) return await benchmark(url,proof);
     let data;
     for (let i = 0; i < 4; i++) {
       const r = await fetch(url, {
@@ -265,7 +277,7 @@ async function main() {
   ].join("\n");
   await appendFile(env.GITHUB_STEP_SUMMARY, summary + "\n");
 }
-main().catch((e) => {
+if (import.meta.main) main().catch((e) => {
   console.error(
     "::error::실패 단계 — " +
       phase +

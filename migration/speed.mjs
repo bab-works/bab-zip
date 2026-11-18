@@ -1,7 +1,8 @@
 import { appendFile } from 'node:fs/promises';
 import { workerUrl } from '../apps-script/deploy/worker-url.mjs';
 
-const {CF_ACCOUNT,CF_TOKEN,BRIDGE,GH_TOKEN,GITHUB_REPOSITORY}=process.env;
+import { snapshot } from './run.mjs';
+const {CF_ACCOUNT,CF_TOKEN,BRIDGE,APP_TOKEN}=process.env;
 const keys=['me','lists','habits'];
 async function run() {
   const url=await workerUrl(CF_ACCOUNT,CF_TOKEN);
@@ -14,23 +15,35 @@ async function run() {
   }
   const owner=await post({what:'me'},{Authorization:'Bearer '+BRIDGE});
   const friend=owner.friends?.[0];
-  const samples={};
-  for(const key of keys) {
-    samples[key]=[];
-    if (!friend) continue;
-    for(let i=0;i<3;i++) {
-      const start=performance.now();
-      const data=await post({what:key,token:friend.code});
-      if(key==='me' ? data.role!=='friend' : !data[key]) throw Error();
-      samples[key].push(Math.round(performance.now()-start));
+  if(!friend) throw Error();
+  const samples={}, backup={};
+  await snapshot(async (endpoint,proof)=>{
+    async function old(what) {
+      const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'text/plain'},redirect:'manual',
+        body:JSON.stringify({what,guest:friend.code,ownerToken:APP_TOKEN,proof})});
+      const target=r.headers.get('location');
+      if(!target || new URL(target).origin!=='https://script.googleusercontent.com') throw Error();
+      const data=await (await fetch(target,{redirect:'error'})).json();
+      if(!data.ok) throw Error();
     }
-  }
-  // Pull only numerical timings from the completed cutover check, if the API supplies its summary.
-  const res=await fetch('https://api.github.com/repos/'+GITHUB_REPOSITORY+'/check-runs/134847048136',{headers:{Authorization:'Bearer '+GH_TOKEN,'User-Agent':'friend-speed'}});
-  const output=res.ok ? (await res.json()).output : {};
-  const match=[output?.summary,output?.text].join(' ').match(/\{"me":\[[\d,]*\],"lists":\[[\d,]*\],"habits":\[[\d,]*\]\}/);
-  const format=data=>keys.map(k=>data[k].join(',')||'empty').join('/');
-  await appendFile(process.env.GITHUB_OUTPUT,'result='+format(samples)+'\nbaseline='+(match?format(JSON.parse(match[0])):'summary')+'\n');
-  await appendFile(process.env.GITHUB_STEP_SUMMARY,'운영 Worker 응답 시간(ms) '+format(samples)+'\n');
+    async function current(what){
+      const data=await post({what,token:friend.code});
+      if(what==='me'?data.role!=='friend':!data[what]) throw Error();
+    }
+    for(const what of keys){
+      samples[what]=[];backup[what]=[];
+      for(let i=0;i<3;i++) {
+        const pair=[[old,backup],[current,samples]];
+        for(const [read,times] of i%2?pair.reverse():pair){
+          const start=performance.now();
+          await read(what);
+          times[what].push(Math.round(performance.now()-start));
+        }
+      }
+    }
+  });
+  const format=data=>keys.map(k=>data[k].join(',')).join('/');
+  await appendFile(process.env.GITHUB_OUTPUT,'result='+format(samples)+'\nbaseline='+format(backup)+'\n');
+  await appendFile(process.env.GITHUB_STEP_SUMMARY,'같은 실행기의 재측정(ms) / 내 정보·취미 목록·습관 순서\n\n시트 '+format(backup)+'\n\nWorker '+format(samples)+'\n');
 }
 run().catch(()=>{console.error('조회 측정 실패');process.exitCode=1;});
