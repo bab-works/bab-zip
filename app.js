@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v96'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v97'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -2402,19 +2402,19 @@ const ROOMS = [['book', '책장', 'title', 'buy', 'book'], ['escape', '방탈출
   ['buy', '읽고 싶은 책', 'title', 'buy', 'book'], ['escapeWant', '가고 싶은 방탈출', 'theme', 'escapeWant', 'escape'], ['boardWant', '해 보고 싶은 보드게임', 'name', 'boardWant', 'board'], ['movieWant', '보고 싶은 영화', 'title', 'movieWant', 'movie'], ['playWant', '보고 싶은 공연', 'title', 'playWant', 'play']];
 const iconImg = k => (ICONS.find(x => x[0] === k) || ICONS[0])[2];
 const social = () => me.social || { friends: [], incoming: [], outgoing: [], house: {} };
-const roofColor = n => `hsl(${[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 360} 62% 62%)`;
-const houseSvg = (n, icon) => `<svg class="hs" viewBox="0 0 120 104" aria-hidden="true"><path d="M8 50 60 8l52 42" fill="${roofColor(n)}" stroke="${roofColor(n)}" stroke-width="10" stroke-linejoin="round"/>
-  <rect x="20" y="46" width="80" height="54" rx="6" fill="var(--glass)" stroke="var(--line)" stroke-width="2"/><rect x="50" y="68" width="20" height="32" rx="3" fill="${roofColor(n)}" opacity=".85"/>
-  <clipPath id="w-${esc(n)}"><circle cx="60" cy="40" r="13"/></clipPath><circle cx="60" cy="40" r="15" fill="#fff"/><image href="${iconImg(icon)}" x="47" y="27" width="26" height="26" clip-path="url(#w-${esc(n)})"/></svg>`;
+const houseArt = icon => `<span class="house-art" aria-hidden="true">
+  <img class="house-building" src="friend-house.webp" alt="">
+  <img class="house-avatar" src="${iconImg(icon)}" alt="">
+</span>`;
 function saveHouse() { if (cfg.token) queue({ action: 'setHouse', icon: store.get('appIcon', 'main'), intro: social().house?.intro || '' }); }
 function renderSocial() {
   const s = social(), mine = HOUSE_LISTS.reduce((a, k) => a + L(k).filter(i => i.pub && !i.shared).length, 0);
-  $('#myHouse').innerHTML = `${houseSvg(me.name || '나', store.get('appIcon', 'main'))}<div><b>${esc(me.name || '나')}네 집</b><small>공개한 작품 ${mine}개 · 기록을 고칠 때 「🏡 친구 집에 공개」를 켜면 여기 놓여요</small>
+  $('#myHouse').innerHTML = `${houseArt(store.get('appIcon', 'main'))}<div><b>${esc(me.name || '나')}네 집</b><small>공개한 작품 ${mine}개 · 기록을 고칠 때 「🏡 친구 집에 공개」를 켜면 여기 놓여요</small>
     <input id="houseIntro" maxlength="60" placeholder="문패에 쓸 한 줄 소개" value="${esc(s.house?.intro || '')}" aria-label="내 집 한 줄 소개"></div>`;
   $('#frIn').innerHTML = s.incoming.length ? '<h2>받은 친구 신청</h2>' + s.incoming.map(n => `<li><span>${esc(n)}</span><div class="row"><button type="button" class="small" data-fr="friendRemove" data-n="${esc(n)}">거절</button><button type="button" class="small primary" data-fr="friendAccept" data-n="${esc(n)}">수락</button></div></li>`).join('') : '';
   $('#frMine').innerHTML = s.friends.length ? `<h2>내 친구 ${s.friends.length}명</h2>` + s.friends.map(f => `<li><span class="fr-who"><i class="fr-av" style="background-image:url('${iconImg(f.icon)}')"></i>${esc(f.name)}</span>${f.name === s.ownerName ? '<small>초대해 준 친구</small>' : !isFriend() ? '<small>내가 초대한 친구 · 삭제는 설정에서</small>' : `<button type="button" class="small" data-fr="friendRemove" data-unfriend="1" data-n="${esc(f.name)}">친구 끊기</button>`}</li>`).join('') : '';
   $('#frOut').innerHTML = s.outgoing.map(n => `<li><span>${esc(n)} <small>수락 기다리는 중</small></span><button type="button" class="small" data-fr="friendRemove" data-n="${esc(n)}">취소</button></li>`).join('');
-  $('#town').innerHTML = s.friends.length ? s.friends.map(f => `<button type="button" class="house" data-house="${esc(f.name)}">${houseSvg(f.name, f.icon)}<b>${esc(f.name)}네 집</b><small>${esc(f.intro || '놀러 가기')}</small></button>`).join('')
+  $('#town').innerHTML = s.friends.length ? s.friends.map(f => `<button type="button" class="house" data-house="${esc(f.name)}">${houseArt(f.icon)}<b>${esc(f.name)}네 집</b><small>${esc(f.intro || '놀러 가기')}</small></button>`).join('')
     : '<p class="hint" style="grid-column:1/-1;text-align:center">아직 친구가 없어요 · 위에 친구 이름(아이디)을 넣어 신청해 보세요</p>';
 }
 async function socialOp(action, name) {
@@ -2452,8 +2452,8 @@ let visiting = null;
 async function visitHouse(name) {
   const d = $('#house'), f = social().friends.find(x => x.name === name) || {}; visiting = null;
   $('#houseTitle').textContent = `${name}네 집`;
-  $('#houseEnter').innerHTML = houseSvg(name, f.icon);
-  const hero = h => `${houseSvg(name, h.icon)}<div><b>${esc(name)}</b><p>${esc(h.intro || '문패에 아직 소개가 없어요')}</p><div class="house-stats">${h.items ? ROOMS.filter(([k]) => h.items[k]?.length).map(([k, t]) => `<span>${t} ${h.items[k].length}</span>`).join('') : ''}</div></div>`;
+  $('#houseEnter').innerHTML = houseArt(f.icon);
+  const hero = h => `${houseArt(h.icon)}<div><b>${esc(name)}</b><p>${esc(h.intro || '문패에 아직 소개가 없어요')}</p><div class="house-stats">${h.items ? ROOMS.filter(([k]) => h.items[k]?.length).map(([k, t]) => `<span>${t} ${h.items[k].length}</span>`).join('') : ''}</div></div>`;
   $('#houseHero').innerHTML = hero(f); $('#houseRooms').innerHTML = '<p class="house-empty">문 두드리는 중…</p>';
   d.classList.remove('open'); d.showModal(); d.scrollTop = 0;
   requestAnimationFrame(() => d.classList.add('open'));

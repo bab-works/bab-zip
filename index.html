@@ -546,7 +546,10 @@
   .upd-hero { font-size:2.4rem; text-align:center; animation:pop .6s var(--spring); } @keyframes pop { from { transform:scale(.3); opacity:0; } }
   .upd-list { display:grid; gap:10px; max-height:46vh; overflow:auto; } .upd-list .notice { background:var(--fill); border-radius:14px; padding:12px 14px; }
   /* 친구 탭: 집 · 동네 · 놀러 가기 */
-  .my-house { display:flex; gap:14px; align-items:center; } .my-house svg.hs { width:84px; flex:none; } .my-house > div { flex:1; min-width:0; display:grid; gap:4px; }
+  .house-art { display:inline-block; position:relative; aspect-ratio:1; max-width:100%; }
+  .house-building { display:block; width:100%; height:100%; object-fit:contain; }
+  .house-avatar { position:absolute; right:0; bottom:0; width:24%; aspect-ratio:1; border-radius:50%; background:var(--glass); border:2px solid var(--glass); }
+  .my-house { display:flex; gap:14px; align-items:center; } .my-house .house-art { width:84px; flex:none; } .my-house > div { flex:1; min-width:0; display:grid; gap:4px; }
   .my-house small { color:var(--muted); font-size:.76rem; line-height:1.4; } .my-house input { margin-top:4px; }
   .fr-add { display:flex; gap:8px; } .fr-add input { flex:1; min-width:0; }
   .fr-list { list-style:none; margin:8px 0 0; padding:0; } .fr-list h2 { font-size:.9rem; margin:6px 0; }
@@ -557,7 +560,7 @@
   .town-title { margin:18px 6px 8px; font-size:1rem; }
   .town { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
   .house { display:grid; justify-items:center; gap:2px; padding:14px 8px 12px; border-radius:20px; background:var(--glass); box-shadow:var(--shadow); border:0; color:var(--fg); font:inherit; cursor:pointer; transition:transform .3s var(--spring); }
-  .house:active { transform:scale(.95); } .house svg.hs { width:96px; } .house small { color:var(--muted); font-size:.72rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .house:active { transform:scale(.95); } .house .house-art { width:96px; } .house small { color:var(--muted); font-size:.72rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pub-mark { margin-left:4px; font-size:.8em; } li small.others { display:block; color:var(--accent); font-weight:600; } li small.others svg.i { width:14px; height:14px; vertical-align:-2px; }
   .pub-pill { display:flex; align-items:center; gap:8px; margin:2px auto 0; padding:8px 8px 8px 14px; border-radius:99px; background:var(--fill); font-size:.86rem; font-weight:700; width:min(100%, 260px); cursor:pointer; }
   .pub-row.pub-pill span { flex:1; display:flex; align-items:center; gap:6px; } .pub-pill input:not(:checked) { background:rgba(120,120,128,.32); } .pub-pill svg.i, .pub-mark svg.i { width:18px; height:18px; color:var(--accent); }
@@ -596,7 +599,7 @@
   .house-top { position:sticky; top:0; z-index:2; display:flex; gap:6px; align-items:center; padding:calc(env(safe-area-inset-top) + 10px) 12px 8px; background:var(--bg); }
   .house-top h2 { margin:0; font-size:1.35rem; font-weight:800; letter-spacing:-.02em; }
   .house-body { padding:4px 16px calc(env(safe-area-inset-bottom) + 28px); display:grid; gap:14px; }
-  .house-hero { display:flex; gap:14px; align-items:center; } .house-hero svg.hs { width:76px; flex:none; }
+  .house-hero { display:flex; gap:14px; align-items:center; } .house-hero .house-art { width:76px; flex:none; }
   .house-hero b { font-size:1.05rem; } .house-hero p { margin:3px 0 8px; color:var(--muted); font-size:.85rem; line-height:1.45; word-break:keep-all; }
   .house-stats { display:flex; flex-wrap:wrap; gap:6px; } .house-stats span { padding:4px 10px; border-radius:99px; background:var(--accent-soft); color:var(--accent); font-size:.74rem; font-weight:700; }
   .room h2 { display:flex; align-items:center; gap:8px; margin:0 0 10px; font-size:1rem; } .room h2 svg.i { width:20px; height:20px; color:var(--accent); } .room h2 small { color:var(--muted); font-weight:600; }
@@ -608,8 +611,8 @@
   .work b { font-size:.78rem; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:keep-all; } .work small { font-size:.85rem; min-height:1em; }
   .house-empty { text-align:center; padding:28px 12px; color:var(--muted); line-height:1.6; }
   .h-enter { position:fixed; inset:0; z-index:5; display:grid; place-items:center; background:var(--bg); pointer-events:none; }
-  .h-enter svg.hs { width:120px; }
-  dialog#house.open .h-enter { animation:enterFade .7s var(--ease-out) .25s forwards; } dialog#house.open .h-enter svg { animation:enterZoom .8s var(--ease-out) .15s forwards; transform-origin:50% 80%; }
+  .h-enter .house-art { width:120px; }
+  dialog#house.open .h-enter { animation:enterFade .7s var(--ease-out) .25s forwards; } dialog#house.open .h-enter .house-art { animation:enterZoom .8s var(--ease-out) .15s forwards; transform-origin:50% 80%; }
   @keyframes enterZoom { to { transform:scale(9); } } @keyframes enterFade { to { opacity:0; visibility:hidden; } }
   dialog#house.open .house-body { animation:houseIn .6s var(--ease-out) .45s both; } @keyframes houseIn { from { opacity:0; transform:translateY(14px); } }
   @media (prefers-reduced-motion: reduce) { .h-enter { display:none; } dialog#house.open .house-body { animation:none; } }
