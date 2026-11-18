@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "bab-zip-friends",
+  "devDependencies": {
+    "wrangler": "4.50.0",
+    "miniflare": "4.20251118.1"
+  }
+}

@@ -1,0 +1,54 @@
+name: 친구 Worker 배포
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', 'tests/worker.mjs', '.github/workflows/deploy-friends.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: friends-worker-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node ../tests/worker.mjs
+      - name: 설정 확인
+        env:
+          DB_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRIDGE_SECRET: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
+          FIRST_PASSWORD: ${{ secrets.FRIENDS_FIRST_PASSWORD }}
+        run: |
+          node --input-type=module <<'JS'
+          import {writeFileSync} from 'node:fs';
+          const e=process.env;
+          if (!e.API_TOKEN || !e.ACCOUNT || !/^[a-f\d-]{36}$/i.test(e.DB_ID || '') || !e.FIRST_PASSWORD || !(e.BRIDGE_SECRET?.length>=32)) throw Error('GitHub Actions secrets 설정을 확인하세요');
+          writeFileSync('wrangler.json',JSON.stringify({
+            name:'bab-zip-friends',main:'index.mjs',compatibility_date:'2025-11-18',workers_dev:true,
+            observability:{enabled:false},preview_urls:false,
+            d1_databases:[{binding:'DB',database_name:'bab-zip-friends',database_id:e.DB_ID}]
+          }));
+          JS
+      - name: D1 스키마 적용 및 배포
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRIDGE_SECRET: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
+          FIRST_PASSWORD: ${{ secrets.FRIENDS_FIRST_PASSWORD }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          npx --no-install wrangler d1 migrations apply DB --remote
+          node -e 'process.stdout.write(JSON.stringify({BRIDGE_SECRET:process.env.BRIDGE_SECRET,FIRST_PASSWORD:process.env.FIRST_PASSWORD}))' | npx --no-install wrangler secret bulk
+          npx --no-install wrangler deploy
