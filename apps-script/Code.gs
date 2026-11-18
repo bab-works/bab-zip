@@ -1,4 +1,4 @@
-// 나의 가계부 API — 「나의 가계부」 시트의 [확장 프로그램 > Apps Script]에 붙여넣고 웹 앱으로 배포하세요.
+// 나의 가계부 API — 「나의 가계부」 시트의 Apps Script. main에 올라오면 GitHub Actions가 자동 배포해요 (.github/workflows/deploy-gas.yml)
 const TOKEN = '여기에-나만-아는-비밀번호를-적으세요'; // 앱 ⚙ 설정의 "비밀번호"와 같아야 합니다
 const TYPES = ['지출', '수입', '환불', '이체'];
 // 비밀번호: setupSheet()가 만든 스크립트 속성 APP_TOKEN이 있으면 그걸, 없으면 위 TOKEN. 처음 문구 그대로면 아무도 못 들어옴
