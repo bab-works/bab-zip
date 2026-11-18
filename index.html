@@ -772,8 +772,8 @@
     --accent:#ff7a3d; --accent-soft:#ffe6d6; --in:#2f9e8f; --out:#e8553d; --refund:#2f9e8f; --warn:#f0a020;
     --shadow:10px 12px 24px rgba(214,160,125,.32), -6px -6px 16px rgba(255,255,255,.85), inset 2px 2px 3px rgba(255,255,255,.9), inset -3px -4px 8px rgba(214,160,125,.16); }
   [data-skin="clay"] body { font-weight:500; }
-  [data-skin="clay"] .card, [data-skin="clay"] dialog:not(#menu) { border-radius:30px; }
-  [data-skin="clay"] dialog:not(#menu) { border-radius:32px 32px 0 0; }
+  [data-skin="clay"] .card, [data-skin="clay"] dialog.sheet:not(#menu):not(#settings) { border-radius:30px; }
+  [data-skin="clay"] dialog.sheet:not(#menu):not(#settings) { border-radius:32px 32px 0 0; }
   [data-skin="clay"] button:not(.icon-btn):not(nav button):not(.set-row):not(.menu-list button) { box-shadow:3px 4px 8px rgba(214,160,125,.28), -2px -2px 5px rgba(255,255,255,.9), inset 1px 1px 2px rgba(255,255,255,.9); }
   [data-skin="clay"] .primary, [data-skin="clay"] #fab { background:linear-gradient(150deg, #ffa36b, #ff6a2b); color:#fff;
     box-shadow:6px 8px 18px rgba(255,106,43,.42), inset 2px 2px 4px rgba(255,255,255,.5), inset -3px -4px 8px rgba(160,50,0,.25) !important; }
@@ -801,7 +801,7 @@
   [data-skin="ios"] body, [data-skin="ios"] .topglass { background:transparent; }
   [data-skin="ios"] .card, [data-skin="ios"] nav, [data-skin="ios"] #fab, [data-skin="ios"] dialog, [data-skin="ios"] .icon-btn, [data-skin="ios"] .month-pill, [data-skin="ios"] .sbar {
     -webkit-backdrop-filter:blur(24px) saturate(1.8); backdrop-filter:blur(24px) saturate(1.8); }
-  [data-skin="ios"] .card { border-radius:26px; } [data-skin="ios"] dialog:not(#menu) { border-radius:30px 30px 0 0; }
+  [data-skin="ios"] .card { border-radius:26px; } [data-skin="ios"] dialog.sheet:not(#menu):not(#settings) { border-radius:30px 30px 0 0; }
   [data-skin="ios"] #fab { background:color-mix(in srgb, var(--accent) 88%, transparent); box-shadow:0 8px 24px rgba(10,132,255,.35), inset 0 1px 0 rgba(255,255,255,.5); }
   [data-skin="ios"] header h1 { font-weight:800; letter-spacing:-.025em; } [data-skin="ios"] .set-group { background:var(--glass); box-shadow:var(--shadow); }
   /* 더 진한 색 번짐 + 유리 위 반사광, 큰 숫자는 그러데이션 */
@@ -816,7 +816,7 @@
     --accent:#4f3dff; --accent-soft:#ecebff; --in:#4f3dff; --out:#ff3d2e; --refund:#14b86a; --warn:#ff9500;
     --shadow:0 28px 50px -28px rgba(20,20,40,.35), 0 2px 6px rgba(0,0,0,.04); }
   [data-skin="cuberto"] header h1 { font-size:2.1rem; font-weight:900; letter-spacing:-.055em; }
-  [data-skin="cuberto"] .card { border-radius:34px; } [data-skin="cuberto"] dialog:not(#menu) { border-radius:36px 36px 0 0; }
+  [data-skin="cuberto"] .card { border-radius:34px; } [data-skin="cuberto"] dialog.sheet:not(#menu):not(#settings) { border-radius:36px 36px 0 0; }
   [data-skin="cuberto"] .hero .big { font-size:2.6rem; font-weight:900; letter-spacing:-.05em; }
   [data-skin="cuberto"] h2 { font-weight:900; letter-spacing:-.03em; }
   [data-skin="cuberto"] .primary, [data-skin="cuberto"] #fab { background:#0b0b0b; color:#fff; }
@@ -838,15 +838,43 @@
     --accent:#5e6ad2; --accent-soft:rgba(94,106,210,.16); --in:#6c9cff; --out:#eb5757; --refund:#4cb782; --warn:#f2994a; --shadow:none; }
   [data-skin="linear"] body { font-size:.882rem; letter-spacing:-.005em; }
   [data-skin="linear"] .card, [data-skin="linear"] nav, [data-skin="linear"] dialog, [data-skin="linear"] .icon-btn, [data-skin="linear"] .month-pill, [data-skin="linear"] .sbar { border:1px solid var(--line); }
-  [data-skin="linear"] .card { border-radius:12px; } [data-skin="linear"] dialog:not(#menu) { border-radius:14px 14px 0 0; }
+  [data-skin="linear"] .card { border-radius:12px; } [data-skin="linear"] dialog.sheet:not(#menu):not(#settings) { border-radius:14px 14px 0 0; }
   [data-skin="linear"] button { border-radius:8px; } [data-skin="linear"] input, [data-skin="linear"] select, [data-skin="linear"] textarea { border-radius:8px; border:1px solid var(--line); }
   [data-skin="linear"] nav { border-radius:14px; } [data-skin="linear"] nav .tab-pill { border-radius:10px; background:rgba(255,255,255,.06); box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }
   [data-skin="linear"] #fab { border-radius:16px; background:var(--accent); box-shadow:0 0 0 1px rgba(255,255,255,.1), 0 8px 24px rgba(94,106,210,.35); }
   [data-skin="linear"] header h1 { font-size:1.294rem; font-weight:600; letter-spacing:-.01em; } [data-skin="linear"] h2 { font-weight:600; }
   [data-skin="linear"] .hero .big { font-weight:600; letter-spacing:-.02em; } [data-skin="linear"] .set-group { border:1px solid var(--line); background:var(--glass); }
+  #storageError, #connectionWarning { padding:12px 16px; background:var(--glass); color:var(--fg); border:2px solid var(--warn); }
+  #toast:popover-open { top:auto; border:0; }
+  html[data-skin] dialog.ask { border-radius:24px; }
+  .dash-actions { display:flex; gap:8px; margin:8px 0 14px; }
+  .dash-actions button, #dailyPick { min-height:44px; }
+  #dailyPick { width:auto; }
+  .hint, .tx small, .daily-x, .cal button small, nav button, #status { font-size:max(13px,.765rem); }
+  .pub-pill { flex-wrap:wrap; }
+  .pub-pill small { width:100%; color:var(--fg); font-weight:400; }
+  .enter { animation:pageIn .19s ease-out; }
+  @keyframes pageIn { from { opacity:.7; transform:translateY(4px); } }
+  dialog#house.open .house-body { animation:houseIn .2s ease-out both; }
+  dialog#house.open .h-enter { animation:enterFade .18s ease-out forwards; pointer-events:none; }
+  .flow-info { gap:8px; }
+  #reviewTools:has(#fReview[hidden]) { display:none; }
+  #reviewTools summary { cursor:pointer; padding:10px; font-weight:600; }
+  #fReview { border-top:1px solid var(--line); padding-top:8px; }
+  [data-skin="main"] #dashHabit { padding-block:12px; }
+  html[data-skin="clay"] button.small:not(#fab), html[data-skin="clay"] .dash-book:not(#fab) { box-shadow:none; }
+  :root[data-skin="clay"] { --muted:#795f52; }
+  html[data-skin="ios"] .card, html[data-skin="ios"] .icon-btn { backdrop-filter:none; -webkit-backdrop-filter:none; }
+  html[data-skin="cuberto"] header h1 { font-size:1.65rem; }
+  html[data-skin="cuberto"] .card { border-radius:24px; }
+  html[data-skin="cuberto"] .card:active { transform:none; }
+  :root[data-skin="linear"] { --muted:#a5abb5; --line:rgba(255,255,255,.16); }
+  @media (prefers-reduced-motion:reduce) { dialog#house.open .house-body { animation:none; } }
 </style>
 </head>
 <body>
+<p id="storageError" role="alert" hidden>기기에 저장하지 못했어요. 화면을 닫기 전에 저장 공간을 확보하고 다시 시도해 주세요.</p>
+<p id="connectionWarning" role="alert" hidden>이전 계정에 저장 대기 중인 기록이 있어요. 대기 목록을 처리한 뒤 계정을 바꿔 주세요.</p>
 <div class="topglass" aria-hidden="true"></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
@@ -922,7 +950,7 @@
     </div>
     <div class="card" data-card="daily" data-label="일별 지출">
       <h2>일별 지출</h2>
-      <div id="dailyInfo" aria-live="polite"></div>
+      <select id="dailyPick" aria-label="일별 지출 날짜"></select><div id="dailyInfo" aria-live="polite"></div>
       <div id="daily" class="daily" role="group" aria-label="일별 지출 막대"></div>
       <div id="dailyX" class="daily-x" aria-hidden="true"></div>
     </div>
@@ -987,10 +1015,11 @@
 
   <section id="v-dash" hidden>
     <div class="dash-hi"><small id="dashDate"></small><h2 id="dashHi"></h2></div>
+    <div class="dash-actions"><button data-go="book" data-new-book>독서 기록 추가</button><button data-go="friends">친구네 집 보기</button></div>
+    <div class="card" id="dashShared" hidden><h2>함께한 기록</h2><ul id="dashSharedList" class="tx dash-list"></ul></div>
     <div class="card dash-habit" id="dashHabit"></div>
     <div class="card" id="dashBook"></div>
     <div class="card"><h2>최근 기록</h2><ul id="dashRecent" class="tx dash-list"></ul></div>
-    <div class="card" id="dashShared" hidden><h2>함께한 기록</h2><ul id="dashSharedList" class="tx dash-list"></ul></div>
     <div class="card"><h2>위시리스트</h2><div id="dashWish" class="dash-wishes"></div></div>
   </section>
   <section id="v-friends" hidden>
@@ -1046,8 +1075,8 @@
       <div id="lFlow" class="flow" role="listbox" aria-label="책 표지 넘겨보기"></div>
       <div class="flow-info"><b id="fTitle"></b><small id="fSub"></small>
         <div id="fRate" class="rate" role="group" aria-label="평가"></div>
-        <form id="fReview" class="freview" hidden><input id="fReviewText" maxlength="200" placeholder="한 줄 리뷰를 남겨 보세요" aria-label="한 줄 리뷰" enterkeyhint="done">
-          <button class="primary small">저장</button></form>
+        <details id="reviewTools"><summary>한 줄 리뷰 쓰기</summary><form id="fReview" class="freview" hidden><input id="fReviewText" maxlength="200" placeholder="한 줄 리뷰를 남겨 보세요" aria-label="한 줄 리뷰" enterkeyhint="done">
+          <button class="primary small">저장</button></form></details>
         <button type="button" id="fQuotes" class="small fquotes" hidden>❝ 밑줄 문장</button></div>
     </div>
     <div id="lListCard" class="card"><ul id="lList" class="tx"></ul></div>

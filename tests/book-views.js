@@ -55,6 +55,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   assert.equal(await p.getAttribute('#fRate [data-r="😍"]', 'aria-pressed'), 'true');
   await p.click('#fRate [data-r="😍"]'); await p.waitForTimeout(300); assert.equal(posts.at(-1).item.stars, '', 'tap again clears');
   // 감상평 탭: 가운데 책의 감상평을 쓰고 저장 → 그 책만 review 칸으로
+  assert.equal(await p.isVisible('#fReview'), false); await p.click('#reviewTools summary');
   assert.equal(await p.isVisible('#fRate'), true); assert.equal(await p.isVisible('#fReview'), true, 'rating and one-line review on one screen');
   await p.fill('#fReviewText', '반전이 좋았다'); await p.click('#fReview button'); await p.waitForTimeout(400);
   assert.deepEqual(posts.at(-1), { action: 'listSave', list: 'book', item: { id: 'b4', title: '투명한 나선', review: '반전이 좋았다' }, token: 't' });

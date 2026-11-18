@@ -382,11 +382,11 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 시트에는 ★로(독서 별점 칸 규칙), 앱에는 다시 이모지로
   await p.click('#reload'); await status(/동기화됨/);
   assert.equal(await p.evaluate(() => lists.book.find(i => i.title === '=새 책').stars), '🙂');
-  // 시트가 저장을 거부하면(규칙 위반 등) 오류 페이지가 아니라 글로 돌아오고, 대기 줄을 막지 않음
+  // 시트가 저장을 거부하면(규칙 위반 등) 이유를 알리고 해당 변경을 다시 보낼 수 있도록 보관
   flushError = 'I5 셀에 입력하신 데이터는 이 셀에 설정된 데이터 확인 규칙을 위반합니다';
   await p.click('#lList li[data-id] >> nth=0'); await p.click(`#lForm label:has(input[name=stars][value="😍"])`); await p.click('#lForm button.primary');
-  await p.waitForFunction(() => /규칙을 위반/.test(document.querySelector('#toast').textContent));
-  assert.equal(await p.evaluate(() => pending.length), 0, 'rejected op is dropped, queue not blocked');
+  await p.waitForFunction(() => /규칙을 위반/.test(document.querySelector('#status').textContent));
+  assert.equal(await p.evaluate(() => pending.length), 1, 'rejected edit remains available for retry');
   flushError = null;
   assert.match(await p.textContent('#lList li >> nth=0'), /새 책/);
   // 수정

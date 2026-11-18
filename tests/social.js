@@ -3,7 +3,7 @@ const { chromium, devices } = require('playwright'), fs = require('fs'), http = 
 http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : f.endsWith('.png') ? 'image/png' : 'text/html' }); r.end(b); }); }).listen(8796, async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 13'] }), p = await ctx.newPage(), posts = [];
   p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  await ctx.addInitScript(() => { window.__askAuto = () => true; if (!localStorage.getItem('cfg')) void localStorage.setItem('startSec', '"friends"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'f0123456789a' })); });
+  await ctx.addInitScript(() => { localStorage.setItem('pubDefault','true'); window.__askAuto = () => true; if (!localStorage.getItem('cfg')) void localStorage.setItem('startSec', '"friends"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'f0123456789a' })); });
   let social = { friends: [{ name: '서현', icon: 'c3', intro: '책 좋아해요' }], incoming: ['준호'], outgoing: [], house: {}, ownerName: '서현' };
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request(), u = q.url(); let body;
@@ -77,7 +77,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#lSelect'); assert.ok((await p.locator('#selBar').boundingBox()).y < 100, 'select bar pinned at top'); await p.screenshot({ path: require('os').tmpdir() + '/seltop.png' }); await p.click('#selDone');
   // 위시리스트도 친구 공개 (입력 창 맨 위 「친구 공개」 아이콘 스위치)
   await p.click('#lNav [data-list=escapeWant]'); await p.waitForTimeout(200); await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]');
-  await p.screenshot({ path: require('os').tmpdir() + '/pill.png' });  assert.match(await p.textContent('#lForm .pub-pill'), /^친구 공개$/); assert.equal(await p.locator('#lForm .pub-pill svg').count(), 1);
+  await p.screenshot({ path: require('os').tmpdir() + '/pill.png' });  assert.match(await p.textContent('#lForm .pub-pill'), /^친구 공개/); assert.equal(await p.locator('#lForm .pub-pill svg').count(), 1);
   await p.click('#lCancel'); await p.waitForSelector('#lItem', { state: 'hidden' });
   // 6) 책: 선택해서 위시리스트로 옮기기
   await p.evaluate(() => { lists.book = [{ id: 'k1', title: '데미안', author: '헤세', status: '읽는중' }, { id: 'k2', title: '변신', status: '읽는중' }]; setSection('book'); });

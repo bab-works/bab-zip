@@ -1,14 +1,26 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v92'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v93'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
+const accountKeys = ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec', 'bookGoal', 'splitAcct', 'lastPay', 'payRecent', 'pubDefault', 'habitColors', 'pushSent'];
+let accountScope = '';
+const storageKey = k => accountScope && accountKeys.includes(k) ? accountScope + ':' + k : k;
 const store = {
-  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  get(k, d) { try { return JSON.parse(localStorage.getItem(storageKey(k))) ?? d; } catch { return d; } },
+  set(k, v) {
+    try {
+      localStorage.setItem(storageKey(k), JSON.stringify(v));
+      return true;
+    } catch {
+      document.getElementById('storageError').hidden = false;
+      return false;
+    }
+  },
 };
 // 내 시트 웹 앱 주소 (주소만으로는 읽고 쓸 수 없고 비밀번호가 함께 있어야 함) → 링크엔 비밀번호만: …/#token=비밀번호
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzZWDgLW1AFlZbCGTgzWH0uZAs660hNJOh4YHzyqXFu4kZtyzUP_VWOBzj0T5PDBtxM/exec';
 let cfg = store.get('cfg', { url: '', token: '' });
+accountScope = cfg.scope || '';
 if (!cfg.url) cfg.url = SHEET_URL;
 // 설정 링크(…/#url=웹앱URL&token=비밀번호)로 열면 연결 정보를 저장. 폰이 저장소를 지워도 이 링크로 열면 다시 연결됨
 // (홈 화면 앱은 사파리와 저장소가 따로라서, 앱 안에서도 ⚙에 링크를 붙여넣을 수 있게 함)
@@ -17,7 +29,28 @@ function cfgFrom(hash) {
   return /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url) && token ? { url, token } : null;
 }
 const fromLink = cfgFrom(location.hash.slice(1));
-if (fromLink) { cfg = fromLink; store.set('cfg', cfg); }
+function clearAccount() {
+  accountKeys.forEach(k => localStorage.removeItem(storageKey(k)));
+  sessionStorage.removeItem('unlockedAt');
+}
+function switchConnection(next, unsent = []) {
+  const changing = cfg.token && (cfg.token !== next.token || cfg.url !== next.url);
+  if (changing && (unsent.length || store.get('pending', []).length)) {
+    document.getElementById('connectionWarning').hidden = false;
+    return false;
+  }
+  if (changing) next.scope = crypto.randomUUID();
+  else if (accountScope) next.scope = accountScope;
+  if (!store.set('cfg', next)) return false;
+  if (changing) clearAccount();
+  cfg = next;
+  accountScope = next.scope || '';
+  return true;
+}
+window.addEventListener('storage', e => {
+  if (e.key === 'cfg' && e.newValue !== JSON.stringify(cfg)) location.reload();
+});
+if (fromLink && switchConnection(fromLink)) history.replaceState(null, '', location.pathname + location.search);
 navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로 지우지 않게 요청
 // 누구로 연결했나: 주인(가계부까지) / 친구(접속코드, 취미 기록·습관만). 시트에 물어보기 전엔 코드 모양(f + 11자리)으로 짐작
 let me = store.get('me', {});
@@ -62,9 +95,10 @@ const realClose = HTMLDialogElement.prototype.close;
 const closeNow = d => realClose.call(d);
 HTMLDialogElement.prototype.close = function (rv) {
   if (this.open && !this.classList.contains('closing')) this.dispatchEvent(new Event('closing')); // 닫히기 시작 (메뉴는 이때 본문을 제자리로)
-  if (!this.open || this.classList.contains('closing') || calm()) return realClose.call(this, rv);
+  if (this.classList.contains('closing')) return;
+  if (!this.open || calm()) return realClose.call(this, rv);
   this.classList.add('closing');
-  setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, +this.dataset.closeMs || 220);
+  setTimeout(() => { this.classList.remove('closing'); realClose.call(this, rv); }, +this.dataset.closeMs || parseFloat(getComputedStyle(this).animationDuration) * 1000 || 0);
 };
 // ESC·뒤로가기로 닫을 때도 같은 애니메이션
 // 로그인·잠금 화면은 ESC로도 안 닫힘
@@ -72,21 +106,28 @@ document.addEventListener('cancel', e => { if (e.target instanceof HTMLDialogEle
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 // 앱 안 확인·입력 창 (아이폰 기본 알림창 대신, 앱 디자인 그대로). 확인 → true / 입력값, 취소 → false / null
 // window.__askAuto는 자동 테스트가 대답할 때만 씀
-function ask(msg, { ok = '확인', danger = false, input = null, type = 'text' } = {}) {
+let askTail = Promise.resolve();
+function ask(msg, options) {
+  const answer = askTail.then(() => openAsk(msg, options));
+  askTail = answer.catch(() => {});
+  return answer;
+}
+function openAsk(msg, { ok = '확인', danger = false, input = null, type = 'text' } = {}) {
   if (window.__askAuto) return Promise.resolve(window.__askAuto(msg, input != null)).then(v => input != null ? (v === true ? input : v) : !!v);
   return new Promise(done => {
     const d = document.querySelector('#ask'), f = d.querySelector('form'), i = f.querySelector('input');
     d.querySelector('#askMsg').textContent = msg; i.hidden = input == null; i.type = type; i.value = input ?? '';
     const yes = f.querySelector('#askOk'); yes.textContent = ok; yes.classList.toggle('danger-fill', danger);
-    let answered = false; const finish = v => { if (answered) return; answered = true; d.close(); done(v); };
+    let result = input != null ? null : false;
+    const finish = v => { result = v; d.close(); };
     f.onsubmit = e => { e.preventDefault(); finish(input != null ? i.value : true); };
     d.querySelector('#askNo').onclick = () => finish(input != null ? null : false);
-    d.onclose = () => finish(input != null ? null : false);
+    d.onclose = () => done(result);
     d.showModal(); if (input != null) setTimeout(() => { i.focus(); i.select(); }, 50);
   });
 }
 const localISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString(); };
-const persist = () => { store.set('data2', data); store.set('pending', pending); };
+const persist = () => { store.set('pending', pending); store.set('data2', data); };
 // 동기화·저장·삭제 완료는 잠깐 뜨는 팝업으로만, 연결 문제 같은 건 상단에 남김
 let syncTimer;
 const setStatus = t => {
@@ -167,7 +208,7 @@ $('#pendList').addEventListener('click', async e => {
   const k = e.target.closest('[data-k]')?.dataset.k;
   if (k == null || !(await ask('이 항목을 시트에 보내지 않고 버릴까요?', { ok: '버리기', danger: true }))) return;
   pending.splice(+k, 1); persist(); renderPending();
-  if (!pending.length) setStatus('');
+  if (!pending.length) { setStatus(''); retry(); }
 });
 $('#pendRetry').addEventListener('click', async () => {
   $('#pendErr').textContent = '보내는 중…';
@@ -189,9 +230,12 @@ let toastTimer;
 // undo: 누르면 되돌리는 함수 → 토스트에 「되돌리기」 단추
 function toast(t, ms = 3500, undo) {
   const el = $('#toast');
+  const host = document.activeElement?.closest('dialog[open]:not(.closing)') || document.body;
+  host.append(el);
+  if (el.showPopover) { el.popover = 'manual'; el.showPopover(); }
   el.textContent = t; el.classList.add('show'); el.classList.toggle('act', !!undo);
   if (undo) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '되돌리기'; b.onclick = () => { el.classList.remove('show'); undo(); }; el.append(b); ms = Math.max(ms, 6000); }
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.classList.remove('show'); el.hidePopover?.(); }, ms);
 }
 
 // ── 시트 통신 ──
@@ -237,10 +281,9 @@ async function sendPending() {
   while (pending.length) {
     try { await api(pending[0]); }
     catch (e) {
-      // 시트가 내용 자체를 거부한 작업은 버림 (계속 막히지 않게). 네트워크·비밀번호 문제는 대기
-      if (!e.rejected) { showError(e, `저장 대기 ${pending.length}건`); return false; }
-      if (pending[0].action === 'habitCheck') { toast('틱틱에 반영하지 못했어요: ' + e.message, 6000); setTimeout(refreshHabits, 0); } // 화면을 틱틱의 실제 상태로 되돌림
-      else toast('시트가 거부해서 취소됨: ' + e.message);
+      showError(e, `저장되지 않음 · 대기 ${pending.length}건`);
+      if (e.rejected) statusAct = 'pending';
+      return false;
     }
     pending.shift();
     persist();
@@ -368,6 +411,8 @@ function renderHome() {
   const max = Math.max(1, ...per);
   $('#daily').innerHTML = per.map((v, d) => `<button type="button" data-d="${d + 1}" class="${v > 0 ? '' : 'zero'}" aria-pressed="${d + 1 === dailySel}"
     aria-label="${mo}월 ${d + 1}일 지출 ${won(v)}"><i style="--h:${v > 0 ? (v / max * 100).toFixed(1) : 0}%"></i></button>`).join('');
+  $('#dailyPick').innerHTML = '<option value="0">날짜 선택</option>' + per.map((_, i) => `<option value="${i + 1}">${mo}월 ${i + 1}일</option>`).join('');
+  $('#dailyPick').value = String(dailySel);
   $('#dailyX').innerHTML = [1, 8, 15, 22, days].map(d => `<span>${d}일</span>`).join('');
   const top = per.indexOf(Math.max(...per));
   $('#dailyInfo').innerHTML = dailySel
@@ -378,6 +423,7 @@ function renderHome() {
   $('#recent').innerHTML = [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '')).slice(0, 5).map(txRow).join('') || '<li class="empty">이번 달 거래가 없어요</li>';
 }
 let dailySel = 0;
+$('#dailyPick').onchange = e => { dailySel = +e.target.value; renderHome(); };
 // 오늘 쓸 수 있는 돈 = (월 예산 − 어제까지 지출) ÷ 오늘 포함 남은 일수 − 오늘 쓴 돈. 이번 달을 볼 때만, 예산이 있을 때만
 function renderToday(m, exp, total, today, list) {
   const el = $('#todayCan');
@@ -925,8 +971,8 @@ $('#lockOn').addEventListener('change', async e => {
 });
 // ── 로그인 (흔한 앱처럼 아이디·비밀번호). 맞게 로그인하기 전엔 창이 안 닫힘 ──
 // 로그인·초대 확인은 토큰 없이 시트에 보냄
-async function pub(body) {
-  const res = await fetch(cfg.url || SHEET_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+async function pub(body, url = cfg.url || SHEET_URL) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   let r; try { r = JSON.parse(await res.text()); } catch (e) { throw new Error('시트가 알 수 없는 응답을 보냈어요 · Code.gs를 새 버전으로 배포했는지 확인해 주세요'); }
   if (!r.ok) throw new Error(r.error || '로그인하지 못했어요');
   return r;
@@ -937,8 +983,10 @@ function showLogin(msg) {
   setTimeout(() => f.name.focus(), 50);
 }
 $('#login').addEventListener('cancel', e => e.preventDefault()); // Esc로도 못 닫음
-async function loggedIn(r) {
-  cfg = { url: cfg.url || SHEET_URL, token: r.token }; store.set('cfg', cfg);
+async function loggedIn(r, url = cfg.url || SHEET_URL) {
+  const changing = cfg.token && (cfg.token !== r.token || cfg.url !== url);
+  if (!switchConnection({ url, token: r.token }, pending)) throw new Error('이전 계정의 저장 대기를 먼저 처리해 주세요');
+  if (changing) { location.replace(location.pathname); return; }
   me = { token: r.token, role: r.role, name: r.name, people: [], friends: [] }; store.set('me', me);
   ss.set('unlockedAt', Date.now()); // 방금 로그인했으면 Face ID 다시 안 물음
   $('#login').close();
@@ -980,7 +1028,7 @@ function hello(name, ready = Promise.resolve()) {
 async function logout() {
   const left = pending.length ? `\n아직 시트에 못 보낸 ${pending.length}건은 사라져요.` : '';
   if (!(await ask('로그아웃할까요?' + left, { ok: '로그아웃', danger: true }))) return;
-  ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+  clearAccount();
   cfg = { url: cfg.url, token: '' }; store.set('cfg', cfg); me = {};
   document.querySelectorAll('dialog[open]').forEach(d => d.id !== 'login' && d.close());
   location.hash = ''; setTimeout(() => location.reload(), 50);
@@ -1062,7 +1110,7 @@ function openPrefs() {
   $('#prefName').textContent = nm || (isFriend() ? '친구' : '이름(아이디)을 정해 주세요');
   $('#prefRole').textContent = isFriend() ? '친구 계정' : '내 시트 주인 · 가계부까지';
   paintAvatar($('#prefAvatar'));
-  $('#pubDefault').checked = store.get('pubDefault', true);
+  $('#pubDefault').checked = store.get('pubDefault', false);
   $('#startSec').value = store.get('startSec', 'home'); $('#startSec').querySelector('.owner-opt').hidden = isFriend();
   $('#prefThemeVal').textContent = SKINS.find(x => x[0] === skin())[1];
   if (document.activeElement !== $('#myName')) $('#myName').value = nm;
@@ -1098,13 +1146,14 @@ $('#settings').addEventListener('close', () => {
   const f = $('#settingsForm'), link = f.link.value.trim();
   const c = link ? cfgFrom(link.split('#')[1] || '') : { url: f.url.value.trim() || cfg.url || SHEET_URL, token: f.token.value };
   if (!c || !c.url || !c.token) { toast(link ? '설정 링크가 올바르지 않아요' : '비밀번호를 넣어 주세요'); return $('#settings').showModal(); }
-  cfg = c;
+  const switching = cfg.token !== c.token || cfg.url !== c.url;
+  if (!switchConnection(c, pending)) return;
   f.link.value = '';
-  store.set('cfg', cfg);
+  if (switching) { location.replace(location.pathname); return; }
   if ($('#login').open) $('#login').close(); // 로그인 화면의 「다른 시트에 연결」로 들어온 경우
   refresh(); loadMe().then(() => { if (sec !== 'money') sec === 'habit' ? refreshHabits() : refreshLists(); });
 });
-window.addEventListener('online', refresh);
+window.addEventListener('online', async () => { if (await sync()) retry(); });
 // 바텀시트 끌어 닫기
 // 손가락: 내용이 맨 위까지 올라가 있으면 본문 어디를 잡고 내려도 시트가 따라 내려오고, 충분히 내리면 닫힘
 // 마우스: 위쪽(손잡이·제목) 영역에서 끌기
@@ -1729,7 +1778,7 @@ $('#v-dash').addEventListener('click', e => {
     return queue({ action: 'habitCheck', habitId: x.id, stamp: st, done });
   }
   const g = e.target.closest('[data-go]'); if (!g) return;
-  setSection(g.dataset.go); if (g.dataset.list) { curList = g.dataset.list; renderLists(); }
+  setSection(g.dataset.go); if (g.hasAttribute('data-new-book')) openItem(); if (g.dataset.list) { curList = g.dataset.list; renderLists(); }
 });
 // 습관 색: 내가 고른 색(이 기기에 저장) > 운동은 기본 하늘색(절주 분홍과 헷갈리지 않게) > 틱틱·시트 색
 const hColor = h => store.get('habitColors', {})[h.id] || (/^운동/.test(h.name) ? '#5ac8fa' : h.color) || '#3182f6';
@@ -2033,7 +2082,7 @@ function openItem(it, pre) {
   if (HOUSE_LISTS.includes(curList)) { // 친구가 내 집에 놀러 오면 보이는 작품 (맨 위에서 바로 켜고 끔)
     const sw = document.createElement('label'); sw.className = 'pub-row pub-pill full'; sw.title = '친구가 내 집에 놀러 오면 보여요 · 함께한 사람은 안 보여요';
     sw.innerHTML = `<span><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg>친구 공개</span><input type="checkbox" name="__pub" role="switch" aria-label="친구 공개">`;
-    $('#lTitle').after(sw); sw.querySelector('input').checked = it ? !!it.pub : store.get('pubDefault', true);
+    $('#lTitle').after(sw); sw.append(Object.assign(document.createElement('small'), {textContent: '내 집을 방문한 친구에게 보여요'})); sw.querySelector('input').checked = it ? !!it.pub : store.get('pubDefault', false);
   }
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
@@ -2319,11 +2368,11 @@ refresh();
 const invite = new URLSearchParams(location.hash.slice(1)).get('i');
 if (invite) {
   const su = new URLSearchParams(location.hash.slice(1)).get('s');
-  if (su && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(su)) cfg.url = su;
+  const inviteUrl = su && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(su) ? su : cfg.url;
   history.replaceState(null, '', location.pathname + location.search);
   showLogin('초대 링크를 확인하는 중이에요…');
-  pub({ action: 'redeem', invite }).then(async r => {
-    await loggedIn(r);
+  pub({ action: 'redeem', invite }, inviteUrl).then(async r => {
+    await loggedIn(r, inviteUrl);
     const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
     if (!standalone) ask(`환영해요! 공유 → 「홈 화면에 추가」로 하트를 설치하세요.\n\n홈 화면 앱에서는 처음 한 번 로그인이 필요해요.\n아이디: ${r.name}\n비밀번호: 1234 (설정에서 바꿀 수 있어요)`, { ok: '알겠어요' });
   }).catch(err => showLogin(err.message));
@@ -2334,7 +2383,7 @@ else lockNow();
 const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play', 'buy', 'escapeWant', 'boardWant', 'movieWant', 'playWant'];
 // 검색 결과에서 바로 담는 것처럼 입력 창을 거치지 않는 새 기록도 「새 기록은 친구 집에 공개」 설정을 따름
 const saveNew = (list, item) => {
-  const pub = HOUSE_LISTS.includes(list) && store.get('pubDefault', true);
+  const pub = HOUSE_LISTS.includes(list) && store.get('pubDefault', false);
   if (pub) item.pub = true;
   const send = { ...item }; delete send.pub;
   const p = queue({ action: 'listSave', list, item: send });
