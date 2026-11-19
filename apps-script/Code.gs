@@ -847,7 +847,8 @@ function doGet(e) {
   if(mode==='freeze' && (!owner || ['me','lists','house'].includes(what))) return out_(waitFriends_());
   let me;
   if(mode==='worker') {
-    if(!owner && ['book','board','movie','escape'].includes(what)) {
+    if(what==='movie') return out_(workerCall_({what,q:e.parameter.q,token:e.parameter.token},owner));
+    if(!owner && ['book','board','escape'].includes(what)) {
       const identity=workerCall_({what:'me',token:e.parameter.token},false);
       if(!identity.ok) return out_(identity);
       me={role:'friend',name:identity.name};

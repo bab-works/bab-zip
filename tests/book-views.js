@@ -12,9 +12,12 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 15 Pro'] });
   await ctx.addInitScript(() => { void localStorage.setItem('startSec', '"last"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 't' })); localStorage.setItem('sec', '"book"'); });
   const p = await ctx.newPage(); p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  const posts = [];
+  const posts = []; let movieCalls=0;
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request();
+    if (/what=movie&/.test(q.url())) {
+      movieCalls++; return rt.fulfill({json:{ok:true,source:'tmdb',movies:[{title:'가상 작품',type:'시리즈',year:'2020',image:''}]}});
+    }
     if (q.method() === 'POST') { posts.push(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
     rt.fulfill({ contentType: 'application/json', body: /what=escape&/.test(q.url()) ? JSON.stringify({ ok: true, themes: [{ theme: '오시리스', shop: '서울이스케이프룸 홍대점', genre: '공포', image: 'https://image.roomsescape.org/theme/83.jpg', url: '' }] }) : /what=book&/.test(q.url()) ? JSON.stringify({ ok: true, books: [{ title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/x/cover500/p.jpg' }] }) : /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
   });
@@ -104,6 +107,14 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=movie]'); await p.waitForTimeout(300);
   assert.equal(await p.isVisible('#lViews'), true, 'movies too');
   assert.equal(await p.locator('#lNav [data-list=movieWant]').count(), 1, 'want-to-see tab');
+  await p.click('#fab'); await p.click('#addMenu [data-add=find]'); await p.fill('#findQ','가상'); await p.waitForSelector('#findList [data-to=movie]');
+  assert.match(await p.textContent('#findList'),/가상 작품.*2020.*시리즈/);
+  await p.fill('#findQ','가'); assert.equal(await p.textContent('#findList'),'');
+  await p.fill('#findQ','가상'); await p.waitForSelector('#findList [data-to=movie]');
+  assert.equal(movieCalls,1);
+  await p.click('#findList [data-to=movie]'); await p.waitForSelector('#lItem[open]');
+  assert.equal(await p.inputValue('#lForm [name=title]'),'가상 작품'); await p.click('#lCancel');
+
   await p.click('#menuBtn'); await p.click('#menuList [data-sec=book]'); await p.waitForTimeout(400);
   // 독서 목표 고리: 눌러서 정하면 올해 완독 / 목표
   await p.evaluate(() => { window.__askAuto = () => '10'; }); await p.click('#goalSet');

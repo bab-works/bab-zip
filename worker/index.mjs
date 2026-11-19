@@ -33,6 +33,58 @@ const friendsQuery = `SELECT a.id,a.name,coalesce(h.icon,'') icon,coalesce(h.int
  WHERE a.id<>?1 AND (a.id='owner' OR ?1='owner' OR EXISTS
  (SELECT 1 FROM relations r WHERE r.accepted AND ((r.sender=?1 AND r.recipient=a.id) OR (r.recipient=?1 AND r.sender=a.id))))`;
 
+async function movieSearch(env, query) {
+  const url = new URL("https://api.themoviedb.org/3/search/multi");
+  const q = clip(query, 80).trim();
+  if (q.length < 2) return { movies: [] };
+  url.search = new URLSearchParams({
+    query: q,
+    language: "ko-KR",
+    include_adult: "false",
+  });
+  if (!env.TMDB_READ_TOKEN)
+    throw new InputError("영화 검색 연결 설정이 필요해요");
+  const response = await fetch(url, {
+    headers: {
+      Authorization: "Bearer " + env.TMDB_READ_TOKEN,
+      Accept: "application/json",
+    },
+    redirect: "manual",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok)
+    return {
+      ok: false,
+      retry: true,
+      error:
+        response.status === 429
+          ? "영화 검색이 몰렸어요. 잠시 후 다시 검색해 주세요"
+          : "영화 정보를 불러오지 못했어요",
+    };
+  const { results } = await response.json();
+  const movies = results
+    .filter(
+      (r) =>
+        ["movie", "tv"].includes(r.media_type) &&
+        !r.adult &&
+        (r.title || r.name),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.media_type === "movie") - Number(a.media_type === "movie"),
+    )
+    .slice(0, 8)
+    .map((r) => ({
+      title: r.title || r.name,
+      type: r.media_type === "movie" ? "영화" : "시리즈",
+      year: (r.release_date || r.first_air_date || "").slice(0, 4),
+      image: /^\/[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(r.poster_path)
+        ? "https://image.tmdb.org/t/p/w185" + r.poster_path
+        : "",
+    }));
+  return { movies, source: "tmdb" };
+}
+
 async function dispatch(env, b, authorization) {
   const sql = (s, ...args) => env.DB.prepare(s).bind(...args);
   const rows = async (s, ...args) => (await sql(s, ...args).all()).results;
@@ -108,6 +160,7 @@ async function dispatch(env, b, authorization) {
         String(b.token || ""),
       ).first();
   check(me, "로그인이 필요해요");
+  if (!action && b.what === "movie") return movieSearch(env, b.q);
   const id = me.id;
   const network = () => rows(friendsQuery, id);
   async function social() {

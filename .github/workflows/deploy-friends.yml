@@ -52,3 +52,20 @@ jobs:
           npx --no-install wrangler d1 migrations apply DB --remote
           node -e 'process.stdout.write(JSON.stringify({BRIDGE_SECRET:process.env.BRIDGE_SECRET,FIRST_PASSWORD:process.env.FIRST_PASSWORD}))' | npx --no-install wrangler secret bulk
           npx --no-install wrangler deploy
+      - name: 운영 영화 검색 확인
+        env:
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BRIDGE: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
+        run: |
+          node --input-type=module <<'JS'
+          import {workerUrl} from '../apps-script/deploy/worker-url.mjs';
+          const url=await workerUrl(process.env.CF_ACCOUNT,process.env.CF_TOKEN);
+          for(let i=0;i<3;i++){
+            const res=await fetch(url,{method:'POST',redirect:'error',headers:{Authorization:'Bearer '+process.env.BRIDGE},body:JSON.stringify({what:'movie',q:'기생충'})});
+            const data=await res.json();
+            if(data.ok && data.source==='tmdb' && data.movies?.some(m=>m.title==='기생충' && m.year==='2019')) process.exit(0);
+            if(i<2) await new Promise(resolve=>setTimeout(resolve,4000));
+          }
+          throw Error('운영 TMDB 검색 응답 확인 필요');
+          JS

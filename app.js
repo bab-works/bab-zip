@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v102'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v103'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -9,7 +9,7 @@ document.addEventListener('keydown', e => {
 }, true);
 const TYPES = ['지출', '수입', '환불', '이체'];
 const SHOW_MAX = 300; // 내역은 최대 300건만 그림 (검색·필터로 좁히면 됨)
-const accountKeys = ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec', 'bookGoal', 'splitAcct', 'lastPay', 'payRecent', 'pubDefault', 'habitColors', 'pushSent'];
+const accountKeys = ['me', 'lists', 'habits', 'data2', 'pending', 'lockId', 'sec', 'bookGoal', 'splitAcct', 'lastPay', 'payRecent', 'pubDefault', 'habitColors', 'pushSent', 'tmdbRecent'];
 let accountScope = '';
 const storageKey = k => accountScope && accountKeys.includes(k) ? accountScope + ':' + k : k;
 const store = {
@@ -252,7 +252,7 @@ const DIRECT_FRIEND_SERVER = true;
 function directFriendUrl(body, qs) {
   if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || me.role !== 'friend') return '';
   const what = new URLSearchParams(qs).get('what');
-  if (!body && !['me','lists','house','habits'].includes(what)) return '';
+  if (!body && !['me','lists','house','habits','movie'].includes(what)) return '';
   return /^https:\/\/bab-zip-friends\.[a-z0-9-]+\.workers\.dev\/?$/.test(me.workerUrl || '') ? me.workerUrl : '';
 }
 async function api(body, qs = '') {
@@ -1445,9 +1445,11 @@ let findHits = [], findT = 0;
 // 방탈출은 전국방탈출(roomescape.co.kr) 공개 테마 페이지로 시트가 만든 목록에서 검색 → 고르면 테마·매장·포스터가 채워진 입력 창
 const escMode = () => sec === 'escape';
 function openFind() {
-  const t = { escape: ['테마', '테마나 매장 이름', '테마나 매장 이름을 검색해요 · 전국방탈출 정보'], board: ['보드게임', '보드게임 이름', '보드게임 이름을 검색해요 · 코리아보드게임즈 정보'], movie: ['영화', '영화 제목', '영화 제목을 검색해요 · 키노라이츠 정보'] }[sec] || ['책', '책 제목이나 저자', '책 제목이나 저자를 검색해요'];
+  const t = { escape: ['테마', '테마나 매장 이름', '테마나 매장 이름을 검색해요 · 전국방탈출 정보'], board: ['보드게임', '보드게임 이름', '보드게임 이름을 검색해요 · 코리아보드게임즈 정보'], movie: ['영화', '영화나 시리즈 제목', '영화나 시리즈 제목을 검색해요'] }[sec] || ['책', '책 제목이나 저자', '책 제목이나 저자를 검색해요'];
   $('#findTitle').textContent = `${t[0]} 검색해서 추가`;
   $('#findManual').textContent = `찾는 ${t[0]}${t[0] === '책' ? '이' : '가'} 없어요 · 직접 입력`;
+  $('#tmdbCredit').hidden = sec !== 'movie' || cfg.url !== SHEET_URL;
+  $('#findQ').setAttribute('aria-label', t[1]);
   $('#findQ').placeholder = t[1];
   $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${t[2]}</li>`;
   $('#bookFind').showModal(); $('#findQ').focus();
@@ -1468,21 +1470,29 @@ const findMemo = new Map();
 $('#findQ').addEventListener('input', () => {
   clearTimeout(findT);
   const q = $('#findQ').value.trim();
-  if (q.length < 2) return;
+  if (q.length < 2) { findHits=[]; $('#findList').textContent=''; return; }
   const what = escMode() ? 'escape' : sec === 'board' || sec === 'movie' ? sec : 'book', key = what + ':' + q;
-  $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
+  const recent = what==='movie' ? store.get('tmdbRecent',[]).filter(x=>x.until>Date.now()) : [];
+  const cached = what==='movie' ? recent.find(x=>x.key===key)?.result : findMemo.get(key);
+  const current = () => $('#bookFind').open && q===$('#findQ').value.trim() && what===(escMode()?'escape':sec==='board'||sec==='movie'?sec:'book');
+  if (!cached) $('#findList').innerHTML = '<li class="empty">찾는 중…</li>';
   findT = setTimeout(async () => {
     try {
       // 같은 검색어는 이 화면이 켜져 있는 동안 다시 묻지 않음 (서버도 6시간 기억)
-      const r = findMemo.get(key) || await api(null, `&what=${what}&q=` + encodeURIComponent(q));
-      if (!(what === 'escape' && r.building)) findMemo.set(key, r);
-      if (q !== $('#findQ').value.trim()) return;
+      const r = cached || await api(null, `&what=${what}&q=` + encodeURIComponent(q));
+      if (!current()) return;
+      if (what==='movie') {
+        if (!cached && r.source==='tmdb') {
+          const next=[{key,result:r,until:Date.now()+6*3600000},...recent.filter(x=>x.key!==key)].slice(0,20);
+          try { localStorage.setItem(storageKey('tmdbRecent'), JSON.stringify(next)); } catch {}
+        }
+      } else if (!(what==='escape' && r.building)) findMemo.set(key,r);
       const hits = escMode() ? r.themes : sec === 'board' ? r.games : sec === 'movie' ? r.movies : r.books;
       if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
       findHits = hits;
       $('#findList').innerHTML = findHits.map(findRow).join('') || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
-    } catch (e) { $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
-  }, findMemo.has(key) ? 0 : 250);
+    } catch (e) { if (current()) $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
+  }, cached ? 0 : 250);
 });
 $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 $('#findList').addEventListener('click', e => {

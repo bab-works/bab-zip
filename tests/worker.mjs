@@ -16,7 +16,32 @@ const mf = new Miniflare({
   script: await readFile(new URL("index.mjs", root), "utf8"),
   compatibilityDate: "2025-11-18",
   d1Databases: ["DB"],
-  bindings: { BRIDGE_SECRET: bridge, FIRST_PASSWORD: first },
+  bindings: {
+    BRIDGE_SECRET: bridge,
+    FIRST_PASSWORD: first,
+    TMDB_READ_TOKEN: first,
+  },
+  outboundService(request) {
+    const url = new URL(request.url);
+    assert.equal(
+      url.origin + url.pathname,
+      "https://api.themoviedb.org/3/search/multi",
+    );
+    assert.equal(url.searchParams.get("language"), "ko-KR");
+    assert.equal(request.headers.get("Authorization"), "Bearer " + first);
+    return Response.json({
+      results: [
+        { media_type: "tv", name: "가상 시리즈", first_air_date: "2021-02-01" },
+        { media_type: "person", name: "인물" },
+        {
+          media_type: "movie",
+          title: "가상 영화",
+          release_date: "2024-03-01",
+          poster_path: "/poster.jpg",
+        },
+      ],
+    });
+  },
 });
 try {
   const db = await mf.getD1Database("DB");
@@ -103,6 +128,23 @@ try {
   assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 1);
   await call({ action: "replaceProjection", records: [] }, bridge);
   assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 0);
+  const search = { what: "movie", q: "가상" };
+  assert.equal((await request(search)).ok, false);
+  for (const token of [bridge, a.code]) {
+    const result = await call(search, token);
+    assert.equal(result.source, "tmdb");
+    assert.deepEqual(
+      result.movies.map((x) => [x.type, x.year]),
+      [
+        ["영화", "2024"],
+        ["시리즈", "2021"],
+      ],
+    );
+    assert.equal(
+      result.movies[0].image,
+      "https://image.tmdb.org/t/p/w185/poster.jpg",
+    );
+  }
   const login = (name, password) => ({ action: "login", name, password });
   assert.equal((await call(login("가", first))).token, a.code);
   await call({ action: "setPassword", password }, a.code);
