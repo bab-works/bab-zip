@@ -11,7 +11,11 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
     t('touchstart', 100); t('touchmove', 100 + dy); t('touchend', 0);
   }, dy);
   await drag(60); await p.waitForTimeout(400); assert.equal(gets.length, n, 'small pull does nothing');
+  const navY = () => p.$eval('nav', e => e.getBoundingClientRect().bottom);
+  assert.equal(await p.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorY), 'none', 'no native page bounce (it dragged the tab bar)');
+  const y0 = await navY();
   await drag(220); await p.waitForTimeout(600); assert.ok(gets.length > n, 'big pull reloads');
+  assert.equal(await navY(), y0, 'tab bar stays put while refreshing');
   await p.evaluate(() => toast('이건 두 줄 정도면 충분히 보여야 하는 꽤 긴 안내 문장이에요 · 예전엔 네 줄로 꺾였어요'));
   const h = await p.evaluate(() => { const t = $('#toast'); return t.getBoundingClientRect().height / parseFloat(getComputedStyle(t).lineHeight); });
   assert.ok(h < 3.6, 'toast fits in ~2 lines, got ' + h);

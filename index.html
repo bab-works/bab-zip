@@ -40,7 +40,7 @@
     --in:#5c9dff; --out:#ff6370; --refund:#2fd39a; --warn:#ffb340; } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden] { display:none !important; }
-  html { background:var(--bg); }
+  html { background:var(--bg); overscroll-behavior-y:none; } /* 아이폰이 맨 위에서 화면 전체를 끌어내리며 하단바까지 흔드는 걸 막음 (새로고침은 앱의 당겨서 새로고침이 함) */
   body { margin:0 auto; max-width:560px; min-height:100vh; color:var(--fg); background:var(--bg);
     font-size:.941rem; line-height:1.4; font-family:"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
     padding:calc(env(safe-area-inset-top) + 8px) 16px calc(96px + env(safe-area-inset-bottom)); }
