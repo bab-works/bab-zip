@@ -73,11 +73,11 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const link = await o.p.inputValue('#shareUrl'); assert.match(link, /#i=iabcdef0123(&s=|$)/); assert.doesNotMatch(link, /token|fbbbb/, 'no password/code in the link');
   await o.p.click('#shareCancel'); await o.p.waitForTimeout(300);
   assert.match(await o.p.textContent('#friendList'), /준호/);
-  // Existing session, direct guest traffic. Searches still go through the configured Sheet.
+  // Existing session, direct guest traffic. 책 검색은 친구 서버(카카오) 먼저, 안 되면 시트(알라딘)로.
   const worker='https://bab-zip-friends.test.workers.dev', direct=[];
   await p.route(worker+'/**', rt=>{
     const payload=rt.request().postDataJSON(); direct.push(payload);
-    rt.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,wrote:true,role:'friend'})});
+    rt.fulfill({contentType:'application/json',body:JSON.stringify(payload.what==='book'?{ok:false,retry:true,error:'책 검색 연결 설정이 필요해요'}:{ok:true,wrote:true,role:'friend'})});
   });
   await p.evaluate(async url=>{
     cfg.url=SHEET_URL; me={role:'friend',token:cfg.token,workerUrl:url};
@@ -86,6 +86,6 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
     await api(null,'&what=book&q=test');
     if(directFriendUrl(null,'&what=summary')) throw Error('ledger routing');
   },worker);
-  assert.deepEqual(direct.map(r=>r.what||r.action),['lists','habitCheck']);
-  assert.ok(gets.some(url=>url.includes('what=book')));
+  assert.deepEqual(direct.map(r=>r.what||r.action),['lists','habitCheck','book']);
+  assert.ok(gets.some(url=>url.includes('what=book')), 'worker book search failed → falls back to the Sheet');
   console.log('FRIEND APP OK'); await b.close(); process.exit(0); });
