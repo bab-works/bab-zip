@@ -23,7 +23,7 @@ AI 코딩 도우미(Codex, Claude 등)가 이 저장소를 고칠 때 먼저 읽
 | `guide/` | 「홈 화면에 추가」 안내 그림(`node guide/make.js`로 다시 만듦) |
 | `tests/` | Playwright 테스트(아래 4번) |
 | `push/worker.js` | 알림 서버(클라우드플레어 워커, 아직 미사용: `PUSH_URL`이 빈 값) |
-| `widget/scriptable.js` | 아이폰 Scriptable 위젯 |
+| `widget/scriptable.js`, `widget/today.js`, `widget/cards.js` | 아이폰 Scriptable 위젯(요약·오늘 쓴 돈·카드 실적). 모두 `what=summary`를 읽음. `tests/widgets.js`가 가짜 Scriptable로 크기별 확인 |
 
 ## 3. 꼭 지킬 것 (보안·개인정보)
 

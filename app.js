@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v103'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v104'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -409,6 +409,7 @@ function renderHome() {
       <span class="bar ${cls(level(exp, total))}"><i style="--w:${pct(exp, total)}%"></i></span></li>` : '')
     || '<li class="empty">이번 달 지출 없음</li>';
 
+  renderCardGoals(list);
   // 경고는 단계별로 한 줄씩 묶어서 (여러 개가 화면을 밀어내지 않게)
   const names = lv => rows.filter(r => level(r.used, r.budget) === lv).map(r => `${esc(r.k)} ${Math.round(r.used / r.budget * 100)}%`);
   const over = names(2), warn = names(1);
@@ -852,6 +853,28 @@ $('#calGrid').addEventListener('touchend', e => {
 });
 
 // ── 예산 ──
+// 카드 실적: 시트 설정(meta.cards: 이름·결제수단 글자·실적 금액)으로 이번 달 카드별 사용액과 모자란 금액
+const cardSpent = (c, list) => { let re; try { re = new RegExp(c.match, 'i'); } catch (e) { return 0; } return list.filter(i => re.test(i.pay || '')).reduce((s, i) => s + net(i), 0); };
+function renderCardGoals(list) {
+  const cards = data.meta.cards || [];
+  $('#cardGoals').innerHTML = cards.map(c => {
+    const spent = cardSpent(c, list), g = c.goal || 0, left = g - spent, st = !g ? 'unset' : left > 0 ? '' : 'done';
+    return `<li><button type="button" data-cardname="${esc(c.name)}" aria-label="${esc(c.name)} 실적 금액 정하기">
+      <b>${esc(c.name)}</b><span class="amt">${won(spent)}${g ? ` <small>/ ${compact(g)}</small>` : ''}</span>
+      ${g ? `<span class="bar ${st}"><i style="--w:${Math.min(100, spent / g * 100).toFixed(1)}%"></i></span>` : ''}
+      <span class="left ${st}">${!g ? '눌러서 실적 금액을 정해 주세요' : left > 0 ? `${won(left)} 더 써야 실적 채워요` : '실적 달성'}</span></button></li>`;
+  }).join('') || '<li class="empty">시트의 Code.gs가 새 버전이 되면 보여요</li>';
+}
+$('#cardGoals').addEventListener('click', async e => {
+  const name = e.target.closest('[data-cardname]')?.dataset.cardname, c = name && (data.meta.cards || []).find(x => x.name === name);
+  if (!c) return;
+  const v = await ask(`${name} 이번 달 실적 기준 (원)\n카드사가 정한 「전월 실적」 금액을 넣어 주세요`, { input: c.goal ? String(c.goal) : '', type: 'number', ok: '저장' });
+  if (v === null) return;
+  const n = Math.round(+String(v).replace(/[^\d]/g, ''));
+  if (!(n >= 0)) return;
+  c.goal = n; persist(); renderHome();
+  queue({ action: 'cardGoal', name, goal: n });
+});
 $('#budgets').addEventListener('click', async e => {
   const cat = e.target.closest('[data-cat]')?.dataset.cat;
   if (cat) { catOpen = cat; renderCatSheet(); return $('#catSheet').showModal(); }

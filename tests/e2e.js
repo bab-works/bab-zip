@@ -52,7 +52,7 @@ const sheets = {
 };
 const extraTabs = { '영화 기록': new Sheet([['번호', '영화 제목', '감독', '관람일', '극장', '평점', '함께한 사람', '후기', 'id']], 1000, 10), '연극·뮤지컬 기록': new Sheet([['번호', '작품명', '종류', '관람일', '극장', '출연', '평점', '함께한 사람', '후기', 'id']], 1000, 11), '보드게임 기록': new Sheet([['기록 ID', '날짜', '종류', '테마·보드게임', '장소', '함께한 사람', '후기', '연결 일정', '일정 키']], 1000, 26) };
 const ss = { getSheetByName: n => sheets[n] || extraTabs[n] || (bookSS[n] || null) || (hobbySS[n] || null), insertSheet: n => (sheets[n] = new Sheet([], 1000, 26)), getSpreadsheetTimeZone: () => 'Asia/Seoul' };
-let uid = 0;
+let uid = 0, cardGoals = null;
 const SUM = Array(10).fill(undefined).concat(['요약']); // K열 요약 표 흉내
 const withId = (hdr, idx) => [...hdr, ...Array(idx - hdr.length).fill(''), 'id'];
 const bookSS = { '독서 기록': new Sheet([
@@ -73,7 +73,7 @@ const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS:
   Utilities: { formatDate: (d, tz, p) => p === 'yyyy-MM' ? ymd(d).slice(0, 7) : ymd(d), getUuid: () => 'u' + (++uid),
     DigestAlgorithm: { MD5: 'MD5' }, computeDigest: (a, t) => [...crypto.createHash('md5').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, ScriptApp: {},
-  PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {} }) } };
+  PropertiesService: { getScriptProperties: () => ({ getProperty: k => k === 'CARD_GOALS' ? cardGoals : null, setProperty(k, v) { if (k === 'CARD_GOALS') cardGoals = v; } }) } }; // 카드 실적만 실제로 기억 (다른 키는 예전처럼 없음)
 const gs = new Function(...Object.keys(g), fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'test-token';") + ';return {doGet, doPost}')(...Object.values(g));
 const TOKEN = 'test-token';
 const T = sheets.거래, col = c => T.d.slice(1).map(r => r[c - 1]);
@@ -316,15 +316,15 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   // 10) 홈 편집 + 카테고리 내역
   await p.click('nav button[data-view=home]');
   const order = () => p.$$eval('#v-home > [data-card]', els => els.map(e => e.dataset.card).join(','));
-  assert.equal(await order(), 'hero,daily,budget,recent,upcoming');
+  assert.equal(await order(), 'hero,cards,daily,budget,recent,upcoming');
   assert.ok(!(await p.isVisible('.mover')));
   await p.click('#homeEdit');
   await p.click('[data-card="recent"] [data-mv="-1"]'); await p.click('[data-card="recent"] [data-mv="-1"]');
   await p.click('[data-card="hero"] [data-mv="-1"]'); // 맨 위에서 위로 → 변화 없음
-  assert.equal(await order(), 'hero,recent,daily,budget,upcoming');
+  assert.equal(await order(), 'hero,cards,recent,daily,budget,upcoming');
   await p.click('#homeEdit');
   await p.reload(); await status(/동기화됨/);
-  assert.equal(await order(), 'hero,recent,daily,budget,upcoming', 'order persisted');
+  assert.equal(await order(), 'hero,cards,recent,daily,budget,upcoming', 'order persisted');
   await p.click('#budgets [data-cat="식비"]');
   await p.waitForSelector('#catSheet', { state: 'visible' });
   assert.match(await p.textContent('#catTitle'), /식비/);
@@ -527,6 +527,17 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
     assert.deepEqual([sm.ok, sm.date, sm.month, sm.today, sm.budget, sm.left],
       [true, TODAY, rows.reduce((s, r) => s + net(r), 0), rows.filter(r => d0(r) === TODAY).reduce((s, r) => s + net(r), 0), bud, bud - rows.reduce((s, r) => s + net(r), 0)]);
     assert(sm.month > 0, 'summary has spending'); console.log('summary', JSON.stringify(sm)); }
+  { // 카드 실적: 결제수단 이름으로 카드 구분(현대카드(M)·KB국민도), 환불은 빼고 / 실적 금액은 cardGoal로 저장
+    const n0 = T.d.length, row = (type, pay, amt) => [D(TODAY), '', type, '식비', '외식', '카드 테스트', '', pay, amt];
+    T.d.push(row('지출', '롯데카드', 30000), row('지출', '현대카드(M)', 20000), row('환불', '현대카드(M)', 5000), row('지출', 'KB국민', 12000), row('이체', '롯데카드', 99000));
+    const sum = () => JSON.parse(gs.doGet({ parameter: { token: TOKEN, what: 'summary' } }));
+    assert.deepEqual(sum().cards.map(c => [c.name, c.spent, c.goal]), [['롯데카드', 30000, 0], ['현대카드', 15000, 0], ['국민카드', 12000, 0]]);
+    const post = o => JSON.parse(gs.doPost({ postData: { contents: JSON.stringify({ token: TOKEN, ...o }) } }));
+    assert.equal(post({ action: 'cardGoal', name: '롯데카드', goal: 300000 }).ok, true);
+    assert.equal(post({ action: 'cardGoal', name: '없는카드', goal: 1 }).ok, false);
+    assert.equal(sum().cards[0].goal, 300000); assert.ok(sum().daily >= 0);
+    assert.equal(JSON.parse(gs.doGet({ parameter: { token: TOKEN, fresh: '1' } })).meta.cards[0].goal, 300000, 'app gets goals in meta');
+    post({ action: 'cardGoal', name: '롯데카드', goal: 0 }); T.d.length = n0; console.log('CARDS OK'); }
   { // 올해의 BAB:ZIP: 결산 화면과 공유용 이미지
     await p.evaluate(() => openRecap()); await p.waitForSelector('#recap[open]');
     assert.match(await p.textContent('#rcList'), /한 해 동안 쓴 돈/);

@@ -362,7 +362,7 @@ function invite_(b) {
   sh.appendRow(["'" + name, code, new Date(), invite, pwHash_(code, FIRST_PW_)]);
   return { code, invite };
 }
-const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'invite', 'uninvite'];
+const OWNER_ONLY_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'cardGoal', 'invite', 'uninvite'];
 
 // 보드게임 이름으로 코리아보드게임즈 검색 → 앞의 6개 [이름, 이미지, 가격]. 검색 화면 안의 상품 목록(searchPrdList)을 읽음
 // shortcut: 사이트 화면 구조가 바뀌면 빈 목록이 됨
@@ -420,6 +420,20 @@ function rows_(name, cols) {
   const sh = ss_().getSheetByName(name);
   return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues();
 }
+// 카드 실적: 결제수단 이름에 match(정규식 글자)가 들어 있으면 그 카드. goal = 이번 달 채워야 할 실적(원), 0이면 미설정
+// 스크립트 속성 CARD_GOALS에 [{name, match, goal}]로 저장 (시트 탭은 건드리지 않음)
+const CARDS_DEFAULT_ = [{ name: '롯데카드', match: '롯데', goal: 0 }, { name: '현대카드', match: '현대', goal: 0 }, { name: '국민카드', match: '국민|KB', goal: 0 }];
+function cards_() {
+  try { const v = JSON.parse(PropertiesService.getScriptProperties().getProperty('CARD_GOALS') || 'null'); if (Array.isArray(v) && v.length) return v; } catch (e) {}
+  return CARDS_DEFAULT_.map(c => Object.assign({}, c));
+}
+const cardOf_ = (cards, pay) => cards.find(c => new RegExp(c.match, 'i').test(String(pay || '')));
+function cardGoal_(b) {
+  const cs = cards_(), c = cs.find(x => x.name === String(b.name || ''));
+  if (!c) throw new Error('입력값 오류: 없는 카드');
+  c.goal = Math.max(0, Math.round(num_(b.goal)));
+  PropertiesService.getScriptProperties().setProperty('CARD_GOALS', JSON.stringify(cs));
+}
 function meta_() {
   const c = rows_('카테고리', 9);
   const budgets = {};
@@ -427,6 +441,7 @@ function meta_() {
   return {
     cats: c.filter(r => r[0]).map(r => [String(r[0]), String(r[1])]),
     budgets,
+    cards: cards_(),
     payments: c.filter(r => r[7]).map(r => [String(r[7]), String(r[8])]),
     rules: rows_('분류규칙', 4).filter(r => r[0]).map(r => r.map(String)),
     recurring: rows_('반복', 11).filter(r => r[0]).map(r => ({
@@ -724,14 +739,19 @@ function summary_() {
   const sh = tx_(), last = last_(sh), today = fmt_(new Date(), 'yyyy-MM-dd'), m = today.slice(0, 7);
   const v = last < 2 ? [] : sh.getRange(2, 1, last - 1, 9).getValues();
   let day = 0, month = 0;
+  const cards = cards_().map(c => Object.assign({ spent: 0 }, c));
   v.forEach(r => {
     const d = fmt_(r[0], 'yyyy-MM-dd');
     if (!d.startsWith(m)) return;
     const n = r[2] === '지출' ? num_(r[8]) : r[2] === '환불' ? -num_(r[8]) : 0;
     month += n; if (d === today) day += n;
+    const c = n && cardOf_(cards, r[7]); if (c) c.spent += n; // H열 결제수단
   });
   const budget = rows_('카테고리', 5).reduce((s, r) => s + (r[3] ? num_(r[4]) : 0), 0);
-  return { ok: true, date: today, today: day, month, budget, left: budget - month };
+  const [y, mo, dd] = today.split('-').map(Number), daysLeft = new Date(y, mo, 0).getDate() - dd + 1;
+  // 오늘 써도 되는 돈 = (예산 - 어제까지 쓴 돈) ÷ 오늘 포함 남은 날
+  const daily = budget ? Math.max(0, Math.round((budget - (month - day)) / daysLeft)) : 0;
+  return { ok: true, date: today, today: day, month, budget, left: budget - month, daily, cards: cards.map(c => ({ name: c.name, goal: c.goal, spent: c.spent })) };
 }
 
 // Deployment injects the bridge credentials. Copies of this script default to Sheets.
@@ -969,6 +989,7 @@ function writeOp_(b) {
       else if (b.action === 'recSave') saveRec_(b.rule);
       else if (b.action === 'recDelete') deleteRec_(b.id);
       else if (b.action === 'budget') budget_(b.major, b.amount);
+      else if (b.action === 'cardGoal') cardGoal_(b);
       else if (/^list(Save|Delete)$/.test(b.action) && String((b.item || {}).id || b.id).startsWith('s:')) throw new Error('입력값 오류: 친구가 남긴 기록은 바꿀 수 없어요');
       else if (b.action === 'listSave') listSave_(b.list, b.item);
       else if (b.action === 'listDelete') listDelete_(b.list, b.id);
