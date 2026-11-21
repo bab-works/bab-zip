@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v107'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v108'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -252,12 +252,12 @@ const DIRECT_FRIEND_SERVER = true;
 function directFriendUrl(body, qs) {
   if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || me.role !== 'friend') return '';
   const what = new URLSearchParams(qs).get('what');
-  if (!body && !['me','lists','house','habits','movie'].includes(what)) return '';
+  if (!body && !['me','lists','house','habits','movie','book'].includes(what)) return '';
   return /^https:\/\/bab-zip-friends\.[a-z0-9-]+\.workers\.dev\/?$/.test(me.workerUrl || '') ? me.workerUrl : '';
 }
 async function api(body, qs = '') {
   const direct = directFriendUrl(body, qs);
-  if (direct) return call(body, qs, direct);
+  if (direct) return new URLSearchParams(qs).get('what') === 'book' ? call(body, qs, direct).catch(() => call('', qs)) : call(body, qs, direct); // 카카오 키가 없거나 실패하면 시트(알라딘)로
   if (!body) return call('', qs);
   const viaGet = () => call('', '&op=' + encodeURIComponent(JSON.stringify(body))).then(r => {
     if (!r.wrote) throw new Error('시트 쪽 코드가 예전 버전이에요 · Code.gs를 새 버전으로 배포해 주세요');

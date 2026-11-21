@@ -85,6 +85,32 @@ async function movieSearch(env, query) {
   return { movies, source: "tmdb" };
 }
 
+// 책: 카카오 도서 검색 (REST 키 KAKAO_REST_KEY). 키가 없거나 실패하면 ok:false → 시트(알라딘)가 대신 찾음
+async function bookSearch(env, query) {
+  const q = clip(query, 80).trim();
+  if (q.length < 2) return { books: [] };
+  if (!env.KAKAO_REST_KEY) return { ok: false, retry: true, error: "책 검색 연결 설정이 필요해요" };
+  const url = new URL("https://dapi.kakao.com/v3/search/book");
+  url.search = new URLSearchParams({ query: q, size: "20" });
+  const response = await fetch(url, {
+    headers: { Authorization: "KakaoAK " + env.KAKAO_REST_KEY },
+    redirect: "manual",
+    signal: AbortSignal.timeout(8000),
+  }).catch(() => null);
+  if (!response?.ok) return { ok: false, retry: true, error: "책 정보를 불러오지 못했어요" };
+  const { documents = [] } = await response.json();
+  const books = documents
+    .filter((d) => d.title)
+    .map((d) => ({
+      title: d.title,
+      author: (d.authors || []).join(", "),
+      image: /^https:\/\//.test(d.thumbnail || "") ? d.thumbnail : "",
+      publisher: d.publisher || "",
+      year: (d.datetime || "").slice(0, 4),
+    }));
+  return { books, source: "kakao" };
+}
+
 async function dispatch(env, b, authorization) {
   const sql = (s, ...args) => env.DB.prepare(s).bind(...args);
   const rows = async (s, ...args) => (await sql(s, ...args).all()).results;
@@ -161,6 +187,7 @@ async function dispatch(env, b, authorization) {
       ).first();
   check(me, "로그인이 필요해요");
   if (!action && b.what === "movie") return movieSearch(env, b.q);
+  if (!action && b.what === "book") return bookSearch(env, b.q);
   const id = me.id;
   const network = () => rows(friendsQuery, id);
   async function social() {

@@ -20,9 +20,19 @@ const mf = new Miniflare({
     BRIDGE_SECRET: bridge,
     FIRST_PASSWORD: first,
     TMDB_READ_TOKEN: first,
+    KAKAO_REST_KEY: first + "-kakao",
   },
   outboundService(request) {
     const url = new URL(request.url);
+    if (url.origin === "https://dapi.kakao.com") {
+      assert.equal(url.pathname, "/v3/search/book");
+      assert.equal(url.searchParams.get("size"), "20");
+      assert.equal(request.headers.get("Authorization"), "KakaoAK " + first + "-kakao");
+      return Response.json({ documents: [
+        { title: "만조를 기다리며", authors: ["조예은"], thumbnail: "https://search1.kakaocdn.net/thumb/x.jpg", publisher: "위즈덤하우스", datetime: "2023-05-10T00:00:00.000+09:00" },
+        { title: "표지 없는 책", authors: [], thumbnail: "http://insecure/x.jpg" },
+      ] });
+    }
     assert.equal(
       url.origin + url.pathname,
       "https://api.themoviedb.org/3/search/multi",
@@ -144,6 +154,17 @@ try {
       result.movies[0].image,
       "https://image.tmdb.org/t/p/w185/poster.jpg",
     );
+  }
+  // 책: 카카오 도서 검색 (친구·시트 둘 다), 로그인 없으면 안 됨, https 표지만
+  const bookQ = { what: "book", q: "만조" };
+  assert.equal((await request(bookQ)).ok, false);
+  for (const token of [bridge, a.code]) {
+    const result = await call(bookQ, token);
+    assert.equal(result.source, "kakao");
+    assert.deepEqual(result.books, [
+      { title: "만조를 기다리며", author: "조예은", image: "https://search1.kakaocdn.net/thumb/x.jpg", publisher: "위즈덤하우스", year: "2023" },
+      { title: "표지 없는 책", author: "", image: "", publisher: "", year: "" },
+    ]);
   }
   const login = (name, password) => ({ action: "login", name, password });
   assert.equal((await call(login("가", first))).token, a.code);

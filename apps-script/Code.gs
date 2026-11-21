@@ -868,6 +868,7 @@ function doGet(e) {
   let me;
   if(mode==='worker') {
     if(what==='movie') return out_(workerCall_({what,q:e.parameter.q,token:e.parameter.token},owner));
+    if(what==='book') { const r=workerCall_({what,q:e.parameter.q,token:e.parameter.token},owner); if(r.ok && r.books) return out_(r); } // 카카오 도서, 안 되면 아래 알라딘
     if(!owner && ['book','board','escape'].includes(what)) {
       const identity=workerCall_({what:'me',token:e.parameter.token},false);
       if(!identity.ok) return out_(identity);
