@@ -78,6 +78,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   // 위시리스트도 친구 공개 (입력 창 맨 위 「친구 공개」 아이콘 스위치)
   await p.click('#lNav [data-list=escapeWant]'); await p.waitForTimeout(200); await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]');
   await p.screenshot({ path: require('os').tmpdir() + '/pill.png' });  assert.match(await p.textContent('#lForm .pub-pill'), /^친구 공개/); assert.equal(await p.locator('#lForm .pub-pill svg').count(), 1);
+  const lay = await p.evaluate(() => { const pill = $('#lForm .pub-pill').getBoundingClientRect(), t = $('#lForm .ltitle').getBoundingClientRect(); return { pw: Math.round(pill.width), tw: Math.round(t.width), ph: Math.round(pill.height), r: getComputedStyle($('#lForm .pub-pill')).borderRadius, rt: getComputedStyle($('#lForm .ltitle')).borderRadius, ol: getComputedStyle($('#lTitle')).outlineStyle, pad: getComputedStyle($('#lForm .pub-pill')).paddingLeft, tpad: getComputedStyle($('#lForm .ltitle')).paddingLeft }; });
+  assert.equal(lay.pw, lay.tw, 'friend-public row is as wide as the fields below'); assert.equal(lay.r, lay.rt, 'same corner as the fields'); assert.ok(lay.ph < 80, 'one tidy row, not a blob'); assert.equal(lay.ol, 'none', 'no focus box on the title'); assert.ok(parseFloat(lay.pad) >= 12, 'text not glued to the edge ' + lay.pad);
   await p.click('#lCancel'); await p.waitForSelector('#lItem', { state: 'hidden' });
   // 6) 책: 선택해서 위시리스트로 옮기기
   await p.evaluate(() => { lists.book = [{ id: 'k1', title: '데미안', author: '헤세', status: '읽는중' }, { id: 'k2', title: '변신', status: '읽는중' }]; setSection('book'); });

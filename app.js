@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v106'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v107'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -2160,8 +2160,8 @@ function openItem(it, pre) {
   $('#lForm .pub-pill')?.remove();
   if (HOUSE_LISTS.includes(curList)) { // 친구가 내 집에 놀러 오면 보이는 작품 (맨 위에서 바로 켜고 끔)
     const sw = document.createElement('label'); sw.className = 'pub-row pub-pill full'; sw.title = '친구가 내 집에 놀러 오면 보여요 · 함께한 사람은 안 보여요';
-    sw.innerHTML = `<span><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg>친구 공개</span><input type="checkbox" name="__pub" role="switch" aria-label="친구 공개">`;
-    $('#lTitle').after(sw); sw.append(Object.assign(document.createElement('small'), {textContent: '내 집을 방문한 친구에게 보여요'})); sw.querySelector('input').checked = it ? !!it.pub : store.get('pubDefault', false);
+    sw.innerHTML = `<span><b><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg>친구 공개</b><small>내 집을 방문한 친구에게 보여요</small></span><input type="checkbox" name="__pub" role="switch" aria-label="친구 공개">`;
+    $('#lTitle').after(sw); sw.querySelector('input').checked = it ? !!it.pub : store.get('pubDefault', false);
   }
   $('#lForm').dataset.id = it?.id || '';
   $('#lDelete').hidden = !it;
