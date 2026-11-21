@@ -131,7 +131,7 @@ function escapeSearch_(q) {
   const flat = s => String(s).replace(/\s+/g, '').toLowerCase();
   return sh.getRange(2, 1, sh.getLastRow() - 1, 7).getValues().filter(r => r[1] && flat(r[1] + r[2]).includes(k))
     .sort((a, b) => (flat(b[1]).startsWith(k) - flat(a[1]).startsWith(k)) || (flat(b[1]).includes(k) - flat(a[1]).includes(k)))
-    .slice(0, 6).map(r => ({ theme: String(r[1]), shop: String(r[2]), genre: String(r[3]), image: /^https:\/\//.test(r[4]) ? String(r[4]) : '', url: String(r[5]), area: r[6] === '-' ? '' : String(r[6] || '') }));
+    .slice(0, 20).map(r => ({ theme: String(r[1]), shop: String(r[2]), genre: String(r[3]), image: /^https:\/\//.test(r[4]) ? String(r[4]) : '', url: String(r[5]), area: r[6] === '-' ? '' : String(r[6] || '') }));
 }
 const escapeStatus_ = () => { const sh = ss_().getSheetByName(ESC_TAB_); return { count: sh ? Math.max(0, sh.getLastRow() - 1) : 0, building: PropertiesService.getScriptProperties().getProperty('ESC_DONE') !== '1' }; };
 
@@ -383,7 +383,7 @@ function boardSearch_(q) {
   const flat = t => String(t).replace(/\s+/g, '').toLowerCase(), k = flat(q);
   return arr.filter(p => p.prdNm && !/슬리브|굿즈|부품|카드\s*케이스/.test(p.prdNm)).map(p => ({
     name: String(p.prdNm).replace(/^\[[^\]]*\]\s*/, ''), image: p.prdMainImg ? 'https://cdnfile.koreaboardgames.com/' + encodeURI(String(p.prdMainImg).replace(/^\//, '')) : '', price: Number(p.unitPrice) || 0 }))
-    .sort((a, b) => (flat(b.name) === k) - (flat(a.name) === k) || flat(b.name).startsWith(k) - flat(a.name).startsWith(k)).slice(0, 6); // 이름이 딱 맞는 것 먼저
+    .sort((a, b) => (flat(b.name) === k) - (flat(a.name) === k) || flat(b.name).startsWith(k) - flat(a.name).startsWith(k)).slice(0, 20); // 이름이 딱 맞는 것 먼저
 }
 
 // 영화: 키노라이츠 공개 검색 화면(robots 허용)에 함께 실려 오는 결과 → [제목, 종류, 개봉 연도, 포스터]. 영화 먼저
@@ -394,7 +394,7 @@ function movieSearch_(q) {
   const html = UrlFetchApp.fetch('https://kinolights.com/search?keyword=' + encodeURIComponent(q), { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } }).getContentText().replace(/\\"/g, '"');
   const re = /\{"content":\{"id":"(\d+)","titleKr":"([^"]*)","contentTypes":\[([^\]]*)\],"posterImage":(?:null|\{"id":"\d+","pathUrl":"([^"]*)")[\s\S]*?"openYear":(?:"(\d+)"|null)/g, out = [], seen = {};
   let m; while ((m = re.exec(html)) && out.length < 20) if (!seen[m[1]]) { seen[m[1]] = 1; out.push({ title: m[2], type: m[3].replace(/"/g, '').replace(/,/g, '·'), year: m[5] || '', image: m[4] || '' }); }
-  return out.sort((a, b) => (b.type === '영화') - (a.type === '영화')).slice(0, 8);
+  return out.sort((a, b) => (b.type === '영화') - (a.type === '영화')).slice(0, 20);
 }
 
 // 책 제목으로 알라딘 검색 → 앞의 3권 [제목, 저자, 표지]. 알라딘 API 키 없이 검색 결과 화면에서 읽음
@@ -408,10 +408,10 @@ function bookSearch_(q) {
   const al = html.split('class="ss_book_box"').slice(1).map(b => {
     const t = b.match(/class="bo3"[^>]*>(?:<b>)?([^<]+)/), a = b.match(/AuthorSearch=[^>]*>([^<]+)<\/a>/), c = b.match(/<img src="(https:\/\/image\.aladin\.co\.kr\/product\/[^"]+)"/);
     return t ? { title: un(t[1]), author: a ? un(a[1]) : '', image: c ? c[1].replace(/\/cover\d*\//, '/cover500/') : '' } : null;
-  }).filter(Boolean).slice(0, 3);
+  }).filter(Boolean).slice(0, 20);
   if (al.length) return al;
   // 알라딘이 구글 서버 요청을 막거나 화면이 바뀌었으면 구글 도서 검색으로 (키 필요 없음)
-  const g = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/books/v1/volumes?maxResults=3&q=' + encodeURIComponent(q), { muteHttpExceptions: true }).getContentText() || '{}');
+  const g = JSON.parse(UrlFetchApp.fetch('https://www.googleapis.com/books/v1/volumes?maxResults=10&q=' + encodeURIComponent(q), { muteHttpExceptions: true }).getContentText() || '{}');
   return (g.items || []).map(v => v.volumeInfo || {}).map(v => ({ title: v.title || '', author: (v.authors || []).join(', '),
     image: ((v.imageLinks || {}).thumbnail || '').replace(/^http:/, 'https:') })).filter(b => b.title);
 }
@@ -890,10 +890,10 @@ function doGet(e) {
     if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists', 'house'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
-    if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
+    if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG2:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
     if (e.parameter.what === 'house') return out_({ ok: true, house: cached_('HS:' + keyOf_(me) + ':' + String(e.parameter.name || '').slice(0, 20), 300, e.parameter.fresh === '1', () => house_(me, e.parameter.name)) }); // 친구 집 놀러 가기
-    if (e.parameter.what === 'movie') return out_({ ok: true, movies: cached_('QM:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => movieSearch_(e.parameter.q)) }); // 키노라이츠 검색
-    if (e.parameter.what === 'book') return out_({ ok: true, books: cached_('QB:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => bookSearch_(e.parameter.q)) }); // 알라딘 검색 (시트 안 건드림)
+    if (e.parameter.what === 'movie') return out_({ ok: true, movies: cached_('QM2:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => movieSearch_(e.parameter.q)) }); // 키노라이츠 검색
+    if (e.parameter.what === 'book') return out_({ ok: true, books: cached_('QB2:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => bookSearch_(e.parameter.q)) }); // 알라딘 검색 (시트 안 건드림)
     const fresh = e.parameter.fresh === '1';
     if (e.parameter.what === 'habits') return out_({ ok: true, habits: cached_('H:' + (me.code || 'owner'), 300, fresh, () => me.role === 'owner' ? habits_() : fHabits_(me)) }); // 주인은 틱틱, 친구는 시트
     if (e.parameter.what === 'lists') {
@@ -961,7 +961,7 @@ function doPost(e) {
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
 function writeOp_(b) {
   const owner=authOk_(b.token);
-  const sheetOwner=owner && ['save','delete','recSave','recDelete','budget','habitCheck'].includes(b.action);
+  const sheetOwner=owner && ['save','delete','recSave','recDelete','budget','cardGoal','habitCheck'].includes(b.action);
   if(!sheetOwner && ['freeze','worker'].includes(friendMode_())) {
     try{return out_(withLock_(()=>friendMode_()==='worker'?bridgeWrite_(b,owner):waitFriends_()));}
     catch(err){return out_({ok:false,retry:!String(err.message).startsWith('입력값 오류'),error:String(err.message)});}

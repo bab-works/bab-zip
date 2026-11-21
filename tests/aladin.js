@@ -7,7 +7,7 @@ let url = '';
 const ctx = { UrlFetchApp: { fetch: u => { url = u; return { getContentText: () => html }; } } };
 vm.createContext(ctx); vm.runInContext(fs.readFileSync(__dirname + '/../apps-script/Code.gs', 'utf8'), ctx);
 const r = vm.runInContext('bookSearch_("페스트")', ctx);
-assert.equal(r.length, 3);
+assert.equal(r.length, 4, 'all results on the page (app shows 5 at a time with 더 보기)');
 assert.deepEqual(r[0], { title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/product/1/2/cover500/a.jpg' });
 assert.equal(r[1].title, '톰 & 제리');
 assert.match(url, /SearchWord=%ED%8E%98/);

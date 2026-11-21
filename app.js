@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v105'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v106'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -1474,7 +1474,7 @@ function openFind() {
   $('#tmdbCredit').hidden = sec !== 'movie' || cfg.url !== SHEET_URL;
   $('#findQ').setAttribute('aria-label', t[1]);
   $('#findQ').placeholder = t[1];
-  $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${t[2]}</li>`;
+  $('#findRel').hidden = true; $('#findQ').value = ''; $('#findList').innerHTML = `<li class="empty">${t[2]}</li>`;
   $('#bookFind').showModal(); $('#findQ').focus();
 }
 const escRow = (b, k) => `<li><img class="thumb" src="${esc(b.image)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><span>${esc(b.theme)}</span><small>${esc(joinDot([b.shop, b.area, b.genre]))}${L('escape').some(i => i.theme === b.theme) ? ' · 이미 기록에 있어요' : ''}</small>
@@ -1493,7 +1493,7 @@ const findMemo = new Map();
 $('#findQ').addEventListener('input', () => {
   clearTimeout(findT);
   const q = $('#findQ').value.trim();
-  if (q.length < 2) { findHits=[]; $('#findList').textContent=''; return; }
+  if (q.length < 2) { findHits=[]; $('#findList').textContent=''; $('#findRel').hidden = true; return; }
   const what = escMode() ? 'escape' : sec === 'board' || sec === 'movie' ? sec : 'book', key = what + ':' + q;
   const recent = what==='movie' ? store.get('tmdbRecent',[]).filter(x=>x.until>Date.now()) : [];
   const cached = what==='movie' ? recent.find(x=>x.key===key)?.result : findMemo.get(key);
@@ -1512,12 +1512,37 @@ $('#findQ').addEventListener('input', () => {
       } else if (!(what==='escape' && r.building)) findMemo.set(key,r);
       const hits = escMode() ? r.themes : sec === 'board' ? r.games : sec === 'movie' ? r.movies : r.books;
       if (!hits) throw new Error('시트의 Code.gs를 새 버전으로 배포해 주세요');
-      findHits = hits;
-      $('#findList').innerHTML = findHits.map(findRow).join('') || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
+      findHits = hits; findShown = FIND_PAGE;
+      paintRelated(hits, q);
+      $('#findList').innerHTML = findPage() || `<li class="empty">${escMode() && r.building ? `검색 결과가 없어요 · 시트가 아직 테마 목록을 모으는 중이에요 (지금 ${(r.count || 0).toLocaleString()}개, 다 모으면 약 2,000개) · 조금 뒤 다시 검색해 주세요` : '검색 결과가 없어요'}</li>`;
     } catch (e) { if (current()) $('#findList').innerHTML = `<li class="empty">검색이 안 돼요 · ${esc(e.message)}</li>`; }
   }, cached ? 0 : 250);
 });
 $('#findQ').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+// 검색 결과는 5개씩 보여 주고 「더 보기」로 다음 5개 (서버는 한 번에 최대 20개를 줌)
+const FIND_PAGE = 5;
+let findShown = FIND_PAGE;
+const findPage = () => findHits.slice(0, findShown).map(findRow).join('') + (findHits.length > findShown ? `<li class="find-more"><button type="button" class="small" data-more>검색 결과 ${Math.min(FIND_PAGE, findHits.length - findShown)}개 더 보기</button></li>` : '');
+$('#findList').addEventListener('click', e => { if (!e.target.closest('[data-more]')) return; findShown += FIND_PAGE; $('#findList').innerHTML = findPage(); });
+// 연관검색어: 결과에 자주 나오는 저자·매장·시리즈와 제목 단어 중 지금 검색어에 없는 것 (누르면 그걸로 다시 검색)
+function relatedWords(hits, q) {
+  const qs = q.toLowerCase().split(/\s+/), n = {}, add = w => { w = String(w || '').replace(/\([^)]*\)/g, '').trim(); if (w.length >= 2 && w.length <= 20 && !qs.some(x => x && w.toLowerCase().includes(x)) && !/^\d+$/.test(w)) n[w] = (n[w] || 0) + 1; };
+  hits.forEach(h => {
+    String(h.author || '').split(/[,·]/).forEach(a => add(a.replace(/\s*\((지은이|옮긴이|그림|엮은이)\)/g, '')));
+    add(h.shop);
+    String(h.title || h.theme || h.name || '').split(/[\s:·,\-–()[\]]+/).forEach(add);
+  });
+  return Object.entries(n).filter(([, c]) => c >= 2 || hits.length <= 3).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);
+}
+function paintRelated(hits, q) {
+  const words = relatedWords(hits, q);
+  $('#findRel').hidden = !words.length;
+  $('#findRel').innerHTML = '<small>연관</small>' + words.map(w => `<button type="button" class="small" data-rel="${esc(w)}">${esc(w)}</button>`).join('');
+}
+$('#findRel').addEventListener('click', e => {
+  const w = e.target.closest('[data-rel]')?.dataset.rel; if (!w) return;
+  $('#findQ').value = w; $('#findQ').dispatchEvent(new Event('input'));
+});
 $('#findList').addEventListener('click', e => {
   const btn = e.target.closest('[data-to]'), b = btn && findHits[btn.dataset.k];
   if (!b) return;
@@ -2157,7 +2182,7 @@ $('#lFields').addEventListener('input', e => {
       const r = findMemo.get('book:' + q) || await api(null, '&what=book&q=' + encodeURIComponent(q)); findMemo.set('book:' + q, r);
       if (q !== $('#lForm').elements.title?.value.trim()) return; // 그새 더 쳤으면 버림
       if (!r.books) { $('#bookHits').innerHTML = '<p class="hint">책 검색은 시트의 Code.gs를 새 버전으로 배포해야 돼요</p>'; return; } // 예전 서버는 what=book을 몰라 거래를 보냄
-      bookHits = r.books;
+      bookHits = r.books.slice(0, 5); // 입력 칸 아래 바로 찾기는 짧게 (더 보려면 「책 검색해서 추가」)
       $('#bookHits').innerHTML = (bookHits.length ? '' : '<p class="hint">검색 결과가 없어요 · 직접 입력해 주세요</p>') + bookHits.map((b, k) => `<button type="button" data-hit="${k}" role="option">${b.image ? `<img src="${esc(b.image)}" alt="" referrerpolicy="no-referrer">` : ''}<span><b>${esc(b.title)}</b><small>${esc(b.author)}</small></span></button>`).join('');
     } catch (err) { $('#bookHits').innerHTML = `<p class="hint">책 검색이 안 돼요 (${esc(err.message)}) · 직접 입력해 주세요</p>`; }
   }, 300);

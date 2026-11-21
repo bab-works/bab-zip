@@ -595,6 +595,10 @@
   .split-bar .split-n { display:flex; align-items:center; gap:6px; } .split-bar .split-n b { min-width:2.6em; text-align:center; } .split-bar #splitGo { width:100%; }
   body.splitting .split-btn, body.splitting #dayAdd { visibility:hidden; }
   #splitText { width:100%; font:inherit; font-size:.88rem; line-height:1.55; resize:none; }
+  /* 검색: 연관검색어 칩 + 더 보기 */
+  .find-rel { display:flex; gap:6px; overflow-x:auto; margin:10px 0 2px; padding-bottom:2px; } .find-rel small { flex:none; align-self:center; color:var(--muted); font-size:.74rem; }
+  .find-rel button { flex:none; white-space:nowrap; }
+  .find-list li.find-more { justify-content:center; padding:4px 0; } .find-list li.find-more button { width:100%; }
   .pick-list { display:grid; gap:8px; } .pick-list button { width:100%; padding:14px; font-weight:600; }
   .pub-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 2px; } .pub-row span { display:grid; } .pub-row small { color:var(--muted); font-size:.72rem; }
   .pub-row input { width:46px; height:28px; appearance:none; -webkit-appearance:none; border-radius:99px; background:var(--fill); position:relative; flex:none; transition:background .2s; margin:0; }
@@ -1250,6 +1254,7 @@
   <h2 id="findTitle" style="text-align:center;margin:0 0 10px">책 검색해서 추가</h2>
   <input id="findQ" type="search" placeholder="책 제목이나 저자" aria-label="책 검색" enterkeyhint="search" autocomplete="off">
   <details id="tmdbCredit" class="hint" hidden><summary>영화 정보 출처 · TMDB</summary><a href="https://www.themoviedb.org/" target="_blank" rel="noopener"><img src="tmdb-logo.svg" width="40" height="29" alt="TMDB"></a> This product uses the TMDB API but is not endorsed or certified by TMDB.</details>
+  <div id="findRel" class="find-rel" hidden></div>
   <ul id="findList" class="tx find-list" aria-live="polite"></ul>
   <div class="row" style="margin-top:10px"><button type="button" id="findManual" class="small">찾는 책이 없어요 · 직접 입력</button><button type="button" id="findClose">닫기</button></div>
 </dialog>

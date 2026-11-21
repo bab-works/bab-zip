@@ -73,7 +73,7 @@ async function movieSearch(env, query) {
       (a, b) =>
         Number(b.media_type === "movie") - Number(a.media_type === "movie"),
     )
-    .slice(0, 8)
+    .slice(0, 20)
     .map((r) => ({
       title: r.title || r.name,
       type: r.media_type === "movie" ? "영화" : "시리즈",
