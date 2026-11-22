@@ -85,7 +85,7 @@ async function movieSearch(env, query) {
   return { movies, source: "tmdb" };
 }
 
-// 책: 카카오 도서 검색 (REST 키 KAKAO_REST_KEY). 키가 없거나 실패하면 ok:false → 시트(알라딘)가 대신 찾음
+// 책: 카카오 도서 검색 (REST 키 KAKAO_REST_KEY = 깃허브 비밀값 → 배포 때 Worker 비밀값). 키가 없거나 실패하면 ok:false → 시트(알라딘)가 대신 찾음
 async function bookSearch(env, query) {
   const q = clip(query, 80).trim();
   if (q.length < 2) return { books: [] };
