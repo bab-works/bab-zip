@@ -3,7 +3,12 @@ const TOKEN = '여기에-나만-아는-비밀번호를-적으세요'; // 앱 ⚙
 const TYPES = ['지출', '수입', '환불', '이체'];
 // 비밀번호: setupSheet()가 만든 스크립트 속성 APP_TOKEN이 있으면 그걸, 없으면 위 TOKEN. 처음 문구 그대로면 아무도 못 들어옴
 const PLACEHOLDER = '여기에-나만-아는-비밀번호를-적으세요';
-const authOk_ = t => { const k = PropertiesService.getScriptProperties().getProperty('APP_TOKEN') || TOKEN; return !!t && k !== PLACEHOLDER && String(t) === k; };
+// 비밀번호는 스크립트 속성 APP_TOKEN에만 둠 (코드에 남기지 않음). 예전 배포가 코드에 넣어 둔 값이 있으면 처음 한 번 속성으로 옮김
+const authOk_ = t => {
+  const p = PropertiesService.getScriptProperties(); let k = p.getProperty('APP_TOKEN');
+  if (!k && TOKEN !== PLACEHOLDER) { p.setProperty('APP_TOKEN', TOKEN); k = TOKEN; }
+  return !!t && !!k && k !== PLACEHOLDER && String(t) === k;
+};
 // 거래 탭 열 위치 (A 날짜 · B 시간 · C 구분 · D 대분류 · E 소분류 · F 내용 · G 결제유형(수식) · H 결제수단 · I 금액 · J 메모 · K 원본분류 · L 할부 · M~O 수식 · P id)
 // G·M·N·O 열은 시트 수식이 채우므로 절대 쓰지 않음. 열 구성이 다르면 아무것도 쓰지 않고 멈춤
 const ID_COL = 16;

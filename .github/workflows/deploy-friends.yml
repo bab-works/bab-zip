@@ -10,7 +10,10 @@ concurrency:
   group: friends-worker-deploy
   cancel-in-progress: false
 jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
   deploy:
+    needs: test # 테스트가 실패하면 배포하지 않음
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     defaults:
