@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v109'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v110'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -250,14 +250,14 @@ function toast(t, ms = 3500, undo) {
 // 저장 작업은 모두 id로 덮어쓰는 방식이라 두 번 들어가도 중복이 생기지 않음. 한 번 GET이 통하면 다음부터 GET 먼저
 const DIRECT_FRIEND_SERVER = true;
 function directFriendUrl(body, qs) {
-  if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || me.role !== 'friend') return '';
-  const what = new URLSearchParams(qs).get('what');
+  const what = new URLSearchParams(qs).get('what'), ownerSearch = me.role === 'owner' && !body && ['book', 'movie'].includes(what);
+  if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || (me.role !== 'friend' && !ownerSearch)) return '';
   if (!body && !['me','lists','house','habits','movie','book'].includes(what)) return '';
   return /^https:\/\/bab-zip-friends\.[a-z0-9-]+\.workers\.dev\/?$/.test(me.workerUrl || '') ? me.workerUrl : '';
 }
 async function api(body, qs = '') {
   const direct = directFriendUrl(body, qs);
-  if (direct) return new URLSearchParams(qs).get('what') === 'book' ? call(body, qs, direct).catch(() => call('', qs)) : call(body, qs, direct); // 카카오 키가 없거나 실패하면 시트(알라딘)로
+  if (direct) return ['book', 'movie'].includes(new URLSearchParams(qs).get('what')) ? call(body, qs, direct).catch(() => call('', qs)) : call(body, qs, direct); // 검색이 안 되면 시트로 (카카오 키 없음·주인 확인 실패 등)
   if (!body) return call('', qs);
   const viaGet = () => call('', '&op=' + encodeURIComponent(JSON.stringify(body))).then(r => {
     if (!r.wrote) throw new Error('시트 쪽 코드가 예전 버전이에요 · Code.gs를 새 버전으로 배포해 주세요');
@@ -856,7 +856,11 @@ $('#calGrid').addEventListener('touchend', e => {
 // 카드 실적: 시트 설정(meta.cards: 이름·결제수단 글자·실적 금액)으로 이번 달 카드별 사용액과 모자란 금액
 const cardSpent = (c, list) => { let re; try { re = new RegExp(c.match, 'i'); } catch (e) { return 0; } return list.filter(i => re.test(i.pay || '')).reduce((s, i) => s + net(i), 0); };
 function renderCardGoals(list) {
-  const cards = data.meta.cards || [];
+  const cards = data.meta.cards || [], ym = $('#month').value, seen = store.get('cardCheer', {});
+  if (ym === localISO().slice(0, 7)) cards.forEach(c => {
+    const key = ym + ':' + c.name;
+    if (c.goal && cardSpent(c, list) >= c.goal && !seen[key]) { seen[key] = 1; store.set('cardCheer', seen); setTimeout(() => toast(`${c.name} 이번 달 실적을 채웠어요 🎉`, 3500), 700); }
+  });
   $('#cardGoals').innerHTML = cards.map(c => {
     const spent = cardSpent(c, list), g = c.goal || 0, left = g - spent, st = !g ? 'unset' : left > 0 ? '' : 'done';
     return `<li><button type="button" data-cardname="${esc(c.name)}" aria-label="${esc(c.name)} 실적 금액 정하기">
@@ -1794,9 +1798,14 @@ $('#hList').addEventListener('click', e => {
   h.done = done ? [...h.done, st] : h.done.filter(x => x !== st);
   h.total = Math.max(0, h.total + (done ? 1 : -1));
   store.set('habits', habits);
-  renderHabits();
+  renderHabits(); if (done) cheerHabits(hDay);
   queue({ action: 'habitCheck', habitId: h.id, stamp: st, done }).then(ok => ok && setStatus(isFriend() ? '저장됨' : '틱틱에 반영됨'));
 });
+// 그날 할 습관을 마지막 하나까지 체크하면 한 번 축하 (끝맺음이 좋아야 다음에도 함)
+function cheerHabits(day) {
+  const due = habits.filter(h => dueOn(h, day)), st = stampOf(day);
+  if (due.length && due.every(h => h.done.includes(st))) { toast(`${day === localISO().slice(0, 10) ? '오늘' : '그날'} 습관을 모두 했어요 🎉`, 3000); navigator.vibrate?.([12, 60, 12]); }
+}
 // 습관 상세: 최근 1년 잔디(주마다 한 줄, 오른쪽 끝이 이번 주) + 최장 연속
 function openHabit(h) {
   const today = localISO().slice(0, 10), start = isoAdd(today, -364 - new Date(today + 'T12:00:00').getDay()); // 53주 전 일요일부터
@@ -1854,6 +1863,7 @@ $('#v-dash').addEventListener('click', e => {
   if (hb) { // 대시보드에서 바로 체크
     const x = habits.find(q => q.id === hb.dataset.hab), st = stampOf(localISO().slice(0, 10)), done = !x.done.includes(st);
     x.done = done ? [...x.done, st] : x.done.filter(q => q !== st); x.total = Math.max(0, x.total + (done ? 1 : -1)); store.set('habits', habits); renderDash();
+    if (done) cheerHabits(localISO().slice(0, 10));
     return queue({ action: 'habitCheck', habitId: x.id, stamp: st, done });
   }
   const g = e.target.closest('[data-go]'); if (!g) return;
@@ -2103,6 +2113,9 @@ document.addEventListener('error', e => {
 // 목록 항목 추가·수정 창 (필드 표로 자동 생성)
 // 목록 추가·수정 창: 제목은 크게, 몇 개 중 고르는 칸은 버튼 줄로, 평가는 이모지, 표지는 주소를 넣으면 바로 미리보기
 let lEditing = null, lFromShared = null;
+// 입력 창에서 접어 둘 칸 (처음엔 꼭 필요한 칸만 보이게)
+const MORE_FIELDS = { escape: ['area', 'people', 'hints', 'left', 'cost', 'image'], board: ['place', 'image'], movie: ['director', 'place', 'image'], play: ['cast', 'place', 'image'],
+  book: ['memo', 'image'], buy: ['memo', 'image'], wish: ['memo', 'image'], escapeWant: ['area', 'image'], boardWant: ['image'], movieWant: ['image'], playWant: ['image'] };
 // 서로 느낀 게 다르니까: 친구가 태그한 기록에 내 별점·리뷰를 따로 남김 → 내 기록이 생기고 둘이 한 줄로 합쳐 보임
 const othersLine = i => i.others?.length ? `<small class="others"><svg class="i" aria-hidden="true"><use href="#i-s-friends"/></svg> ${i.others.map(o => `${esc(o.name)} ${esc(o.rating || '–')}`).join(' · ')}</small>` : '';
 async function rateShared(it) {
@@ -2139,6 +2152,13 @@ function openItem(it, pre) {
   const init = it || { year: today.slice(0, 4) + '년', month: today.slice(5, 7) + '월', status: '읽는중', date: today.slice(0, 10), kind: '추천받은 책', ...pre };
   fs.forEach(([n, , type]) => { if (type === 'bool') f[n].checked = !!init[n]; else if (init[n] != null) f[n].value = init[n]; });
   $('#lFields').querySelectorAll('input[type=date]').forEach(i => dateField(i));
+  const more = (MORE_FIELDS[curList] || []).filter(n => f[n]);
+  if (more.length) {
+    const box = document.createElement('details'); box.className = 'more-fields full'; box.open = more.some(n => String(init[n] ?? '') !== '');
+    box.innerHTML = `<summary>더 입력하기 <small>${more.map(n => fs.find(x => x[0] === n)[1].replace(/\(.*\)/, '').trim()).join(' · ')}</small></summary><div class="grid2"></div>`;
+    more.forEach(n => box.lastElementChild.append(f[n].closest('.f, label')));
+    $('#lFields').append(box);
+  }
   // 「함께한 사람」 아래 앱 쓰는 사람 칩: 누르면 이름이 들어가고, 그 사람 앱에도 이 기록이 보임
   const tagTo = f.with, others = people().filter(n => n !== me.name);
   if (tagTo && others.length) {
@@ -2220,6 +2240,16 @@ const pick = (title, opts) => new Promise(res => { // opts: [[값, 글]] → 고
   d.addEventListener('close', onClose, { once: true }); d.showModal();
 });
 // 상태로 바꿀 수 있는 칸: 고르는 칸(평가 빼고)과 예/아니오 칸
+// 화면은 바로 바꾸고, 6초 동안 「되돌리기」를 기다렸다가 보냄. 앱을 내리거나 다른 되돌리기가 생기면 바로 보냄
+let undoable = null;
+function withUndo(msg, send, undo) {
+  undoable?.go();
+  const u = undoable = { done: false, go() { if (u.done) return; u.done = true; clearTimeout(u.t); if (undoable === u) undoable = null; send(); } };
+  u.t = setTimeout(() => u.go(), 6000);
+  toast(msg, 6000, () => { if (u.done) return; u.done = true; clearTimeout(u.t); if (undoable === u) undoable = null; undo(); toast('되돌렸어요', 1800); });
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) undoable?.go(); });
+addEventListener('pagehide', () => undoable?.go());
 const stateFields = k => (LIST_FIELDS[k] || []).filter(([n, , t]) => (t === 'select' && n !== RATE_KEY[k] && !['year', 'month'].includes(n)) || t === 'bool');
 function setSelecting(on) {
   selecting = on; selected.clear(); document.body.classList.toggle('selecting', on); $('#selBar').hidden = !on;
@@ -2249,10 +2279,12 @@ $('#selActs').addEventListener('click', async e => {
     const on = v === 'on'; items.forEach(i => { i.pub = on; }); store.set('lists', lists);
     queue({ action: 'setPub', list, ids: items.map(i => i.id), on }).then(ok => ok && toast(`${n}개를 ${on ? '친구 공개로 바꿨어요' : '비공개로 바꿨어요'}`));
   } else if (k === 'del') {
-    if (!await ask(`선택한 ${n}개 기록을 시트에서 삭제할까요?`, { ok: `${n}개 삭제`, danger: true })) return;
+    const before = L(list).slice();
     lists[list] = L(list).filter(i => !selected.has(i.id) || i.shared); store.set('lists', lists);
-    queue({ action: 'bulk', ops: items.map(i => ({ action: 'listDelete', list, id: i.id })) }).then(ok => ok && toast(`${n}개를 삭제했어요`));
-    if (items.some(i => i.pub)) queue({ action: 'setPub', list, ids: items.filter(i => i.pub).map(i => i.id), on: false });
+    withUndo(`${n}개를 삭제했어요`, () => {
+      queue({ action: 'bulk', ops: items.map(i => ({ action: 'listDelete', list, id: i.id })) });
+      if (items.some(i => i.pub)) queue({ action: 'setPub', list, ids: items.filter(i => i.pub).map(i => i.id), on: false });
+    }, () => { lists[list] = before; store.set('lists', lists); renderLists(); });
   } else if (k === 'state') {
     const st = stateFields(list), fk = st.length === 1 ? st[0][0] : await pick('무엇을 바꿀까요?', st.map(([n, l]) => [n, l])), f = st.find(x => x[0] === fk);
     if (!f) return;
@@ -2263,15 +2295,16 @@ $('#selActs').addEventListener('click', async e => {
   } else if (k === 'move') {
     const to = await pick(`${n}개를 어디로 옮길까요?`, Object.entries(BOOK_LISTS).filter(([x]) => x !== list).map(([x, l]) => [x, `→ ${l}`]));
     if (!to) return;
-    const t = localISO(), arr = lists[to] = lists[to] || [];
+    const t = localISO(), arr = lists[to] = lists[to] || [], before = { [list]: L(list).slice(), [to]: arr.slice() };
     const made = items.map(it => { const item = { id: crypto.randomUUID(), title: it.title, author: it.author || '', memo: it.memo || '', ...(/^https:/.test(it.image || '') ? { image: it.image } : {}),
       ...{ book: { year: t.slice(0, 4) + '년', month: t.slice(5, 7) + '월', status: '읽는중' }, buy: { done: false }, wish: { kind: '추천받은 책' } }[to] };
       if (to === 'book') item.seq = arr.filter(i => i.year === item.year && i.month === item.month).length + 1;
       arr.push(item); return item; });
     lists[list] = L(list).filter(i => !selected.has(i.id) || i.shared); store.set('lists', lists);
     // 새 목록에 저장이 된 뒤에만 원래 것을 지움 (책이 사라지지 않게)
-    queue({ action: 'bulk', ops: made.map(item => ({ action: 'listSave', list: to, item })) })
-      .then(ok => ok && queue({ action: 'bulk', ops: items.map(i => ({ action: 'listDelete', list, id: i.id })) })).then(ok => ok && toast(`${n}권을 ${BOOK_LISTS[to]}(으)로 옮겼어요`));
+    withUndo(`${n}권을 ${BOOK_LISTS[to]}(으)로 옮겼어요`, () => queue({ action: 'bulk', ops: made.map(item => ({ action: 'listSave', list: to, item })) })
+      .then(ok => ok && queue({ action: 'bulk', ops: items.map(i => ({ action: 'listDelete', list, id: i.id })) })),
+      () => { Object.assign(lists, before); store.set('lists', lists); renderLists(); });
   }
   setSelecting(false); renderLists();
 });

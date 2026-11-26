@@ -19,4 +19,16 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#findRel [data-rel="조예은"]'); await p.waitForTimeout(500);
   assert.equal(await p.inputValue('#findQ'), '조예은'); assert.equal(qs.at(-1), '조예은'); assert.equal(await shown(), 5, 'new search starts at 5 again');
   await p.fill('#findQ', 'a'); await p.waitForTimeout(100); assert.equal(await p.isVisible('#findRel'), false);
+  // 피츠: 작은 단추도 손가락으로 누르는 영역은 위아래로 넓음 (보이는 크기는 그대로)
+  await p.fill('#findQ', '위픽'); await p.waitForSelector('#findList [data-more]');
+  assert.ok(await p.$eval('#findList [data-more]', b => { b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top - 5)?.closest('[data-more]') === b; }), 'tap area reaches above the small button');
+  // 도허티: 주인도 책 검색은 친구 서버로 바로, 친구 서버가 안 되면 시트로
+  const worker = 'https://bab-zip-friends.test.workers.dev', direct = []; let workerOk = true;
+  await p.route(worker + '/**', rt => { direct.push(rt.request().postDataJSON()); rt.fulfill({ contentType: 'application/json', body: JSON.stringify(workerOk ? { ok: true, books: [{ title: '카카오 책', author: '', image: '' }], source: 'kakao' } : { ok: false, retry: true, error: 'x' }) }); });
+  await p.evaluate(url => { cfg.url = SHEET_URL; me = { role: 'owner', token: cfg.token, workerUrl: url }; findMemo.clear(); }, worker);
+  const n0 = qs.length; await p.fill('#findQ', '카카오'); await p.waitForTimeout(600);
+  assert.deepEqual([direct.at(-1).what, direct.at(-1).q, qs.length], ['book', '카카오', n0], 'owner search went straight to the friend server');
+  assert.match(await p.textContent('#findList'), /카카오 책/);
+  workerOk = false; await p.fill('#findQ', '알라딘'); await p.waitForTimeout(800);
+  assert.equal(qs.at(-1), '알라딘', 'falls back to the Sheet when the friend server fails');
   console.log('FIND OK'); await b.close(); process.exit(0); });

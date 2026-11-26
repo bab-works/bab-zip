@@ -68,8 +68,14 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.click('#lSelect'); await p.click('#lList li:has-text("사라진 목격자")'); await p.click('[data-act=state]');
   await p.waitForSelector('#pickSheet[open]'); await p.click('#pickList button:has-text("성공")'); await p.waitForTimeout(400);
   const bk = posts.filter(o => o.action === 'bulk').at(-1); assert.deepEqual(bk.ops.map(o => [o.action, o.item.theme, o.item.result]), [['listSave', '사라진 목격자', '성공']]);
+  // 여러 개 삭제: 확인창 대신 「되돌리기」 (6초 동안은 서버에 안 보냄)
+  const nBulk = () => posts.filter(o => o.action === 'bulk').length, b0 = nBulk();
   await p.click('#lSelect'); await p.click('#lList li:has-text("사라진 목격자")'); await p.click('[data-act=del]'); await p.waitForTimeout(400);
-  assert.deepEqual(posts.filter(o => o.action === 'bulk').at(-1).ops.map(o => o.action), ['listDelete']); assert.equal(await p.locator('#lList li:has-text("사라진 목격자")').count(), 0);
+  assert.equal(await p.locator('#lList li:has-text("사라진 목격자")').count(), 0); assert.equal(nBulk(), b0, 'not sent yet');
+  await p.click('#toast button'); await p.waitForTimeout(300);
+  assert.equal(await p.locator('#lList li:has-text("사라진 목격자")').count(), 1, 'undo brings it back'); assert.equal(nBulk(), b0, 'undo sends nothing');
+  await p.click('#lSelect'); await p.click('#lList li:has-text("사라진 목격자")'); await p.click('[data-act=del]'); await p.waitForTimeout(6400);
+  assert.deepEqual(posts.filter(o => o.action === 'bulk').at(-1).ops.map(o => o.action), ['listDelete'], 'sent after the undo window'); assert.equal(await p.locator('#lList li:has-text("사라진 목격자")').count(), 0);
   // 5) 새 기록은 기본 공개 (설정에서 끌 수 있음), 공개 스위치는 입력 창 맨 위
   await p.evaluate(() => openItem()); await p.waitForSelector('#lItem[open]');
   assert.equal(await p.evaluate(() => $('#lTitle').nextElementSibling.classList.contains('pub-pill')), true); assert.equal(await p.isChecked('#lForm [name=__pub]'), true);
@@ -85,6 +91,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   // 6) 책: 선택해서 위시리스트로 옮기기
   await p.evaluate(() => { lists.book = [{ id: 'k1', title: '데미안', author: '헤세', status: '읽는중' }, { id: 'k2', title: '변신', status: '읽는중' }]; setSection('book'); });
   await p.waitForTimeout(400); await p.click('#lSelect'); await p.click('#selAll'); await p.click('[data-act=move]');
-  await p.screenshot({ path: require('os').tmpdir() + '/sel.png' }); await p.waitForSelector('#pickSheet[open]'); await p.click('#pickList button:has-text("위시리스트")'); await p.waitForTimeout(600);
+  await p.screenshot({ path: require('os').tmpdir() + '/sel.png' }); await p.waitForSelector('#pickSheet[open]'); await p.click('#pickList button:has-text("위시리스트")'); await p.waitForTimeout(300);
+  assert.match(await p.textContent('#toast'), /옮겼어요/); await p.evaluate(() => undoable?.go()); await p.waitForTimeout(600);
   const mv = posts.filter(o => o.action === 'bulk').slice(-2); assert.deepEqual([mv[0].ops.map(o => o.list + ':' + o.item.title), mv[1].ops.map(o => o.action + ':' + o.id)], [['buy:데미안', 'buy:변신'], ['listDelete:k1', 'listDelete:k2']]);
   console.log('SOCIAL OK'); await b.close(); process.exit(0); });

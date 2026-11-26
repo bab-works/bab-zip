@@ -876,7 +876,7 @@ function doGet(e) {
     } else if(!owner || ['me','house'].includes(what)) {
       if(!['me','house','lists','habits'].includes(what)) return out_({ok:false,error:'친구 코드로는 볼 수 없어요'});
       const r=workerCall_({what,token:e.parameter.token,name:e.parameter.name},owner);
-      if(r.ok && !owner && what==='me') r.workerUrl=FRIEND_WORKER_;
+      if(r.ok && what==='me') r.workerUrl=FRIEND_WORKER_; // 주인도 책·영화 검색은 친구 서버로 바로
       return out_(r);
     } else if(what==='lists') {
       try{return out_(withLock_(()=>ownerListsWithTags_()));}catch(_){return out_(waitFriends_());}

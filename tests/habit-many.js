@@ -24,6 +24,10 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.ok(await p.locator('#hEach .h1:nth-child(7) .h1-grid i.rest').count() > 0, 'weekly habit shows rest days hatched');
   assert.ok(await p.$eval('#hEach', e => e.scrollWidth <= e.clientWidth + 1), 'habit cards fit the screen width');
   await p.screenshot({ path: require('os').tmpdir() + '/habit-each.png', fullPage: true });
+  // 피크엔드: 그날 할 습관을 마지막 하나까지 체크하면 축하
+  const first = await p.evaluate(() => { const st = stampOf(hDay); habits.forEach((h, i) => { if (i) { if (!h.done.includes(st)) h.done.push(st); } else h.done = h.done.filter(x => x !== st); }); renderHabits(); return habits[0].id; });
+  await p.click(`#hList [data-h="${first}"]`); await p.waitForTimeout(300);
+  assert.match(await p.textContent('#toast'), /습관을 모두 했어요/);
   // 누르면 그 습관의 1년 기록
   await p.click('#hEach .h1 >> nth=0'); await p.waitForSelector('#hDetail[open]');
   console.log('HABIT MANY OK'); await b.close(); process.exit(0); });

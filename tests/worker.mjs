@@ -21,6 +21,7 @@ const mf = new Miniflare({
     FIRST_PASSWORD: first,
     TMDB_READ_TOKEN: first,
     KAKAO_REST_KEY: first + "-kakao",
+    OWNER_TOKEN_SHA: createHash("sha256").update("owner-" + first).digest("hex"),
   },
   outboundService(request) {
     const url = new URL(request.url);
@@ -166,6 +167,12 @@ try {
       { title: "표지 없는 책", author: "", image: "", publisher: "", year: "" },
     ]);
   }
+  // 주인: 책·영화 검색만 친구 서버로 바로 (주인 비밀번호의 SHA-256이 맞을 때), 다른 기능은 안 됨
+  const ownerTok = "owner-" + first;
+  assert.equal((await call({ what: "book", q: "만조", token: ownerTok })).source, "kakao");
+  assert.equal((await call({ what: "movie", q: "가상", token: ownerTok })).source, "tmdb");
+  assert.equal((await request({ what: "lists", token: ownerTok })).ok, false, "owner token opens searches only");
+  assert.equal((await request({ what: "book", q: "만조", token: "wrong" })).ok, false);
   const login = (name, password) => ({ action: "login", name, password });
   assert.equal((await call(login("가", first))).token, a.code);
   await call({ action: "setPassword", password }, a.code);

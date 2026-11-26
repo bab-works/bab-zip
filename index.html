@@ -84,6 +84,9 @@
   .primary { background:var(--accent); color:#fff; font-weight:600; }
   .danger { color:var(--out); }
   .small { padding:7px 12px; font-size:0.765rem; white-space:nowrap; }
+  @media (pointer:coarse) { /* 손가락으로 누르는 곳은 44px 이상 (피츠의 법칙). 보이는 크기는 그대로, 누르는 영역만 넓힘 */
+    button.small { position:relative; } button.small::after { content:''; position:absolute; inset:-7px -2px; }
+    .icon-btn, .hmon .icon-btn { width:44px; height:44px; } }
   .sr-only { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
   svg.i { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
 
@@ -602,6 +605,9 @@
   .find-rel { display:flex; gap:6px; overflow-x:auto; margin:10px 0 2px; padding-bottom:2px; } .find-rel small { flex:none; align-self:center; color:var(--muted); font-size:.74rem; }
   .find-rel button { flex:none; white-space:nowrap; }
   .find-list li.find-more { justify-content:center; padding:4px 0; } .find-list li.find-more button { width:100%; }
+  .more-fields { border-top:1px solid var(--line); padding-top:4px; } .more-fields summary { list-style:none; cursor:pointer; padding:10px 2px; font-weight:600; font-size:.86rem; color:var(--accent); }
+  .more-fields summary::-webkit-details-marker { display:none; } .more-fields summary small { color:var(--muted); font-weight:500; margin-left:4px; }
+  .more-fields summary::before { content:'＋ '; } .more-fields[open] summary::before { content:'－ '; } .more-fields > .grid2 { padding-top:4px; }
   .pick-list { display:grid; gap:8px; } .pick-list button { width:100%; padding:14px; font-weight:600; }
   .pub-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 2px; } .pub-row span { display:grid; } .pub-row small { color:var(--muted); font-size:.72rem; }
   .pub-row input { width:46px; height:28px; appearance:none; -webkit-appearance:none; border-radius:99px; background:var(--fill); position:relative; flex:none; transition:background .2s; margin:0; }

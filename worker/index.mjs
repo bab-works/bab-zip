@@ -20,6 +20,7 @@ function check(ok, message = "입력값 오류") {
   if (!ok) throw new InputError(message);
 }
 const clip = (v, n) => String(v ?? "").slice(0, n);
+const sha256hex = async (s) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((x) => x.toString(16).padStart(2, "0")).join("");
 async function hash(code, pw) {
   const bytes = new TextEncoder().encode(code + ":" + pw);
   return btoa(
@@ -179,7 +180,10 @@ async function dispatch(env, b, authorization) {
     await env.DB.batch(batch);
     return { active: true };
   }
-  const me = service
+  // 주인은 책·영화 검색만 시트를 거치지 않고 바로 (토큰의 SHA-256 = OWNER_TOKEN_SHA일 때만, 다른 기능은 안 됨)
+  const ownerSearch = !action && ["book", "movie"].includes(b.what) && !!env.OWNER_TOKEN_SHA && !!b.token &&
+    (await sha256hex(String(b.token))) === env.OWNER_TOKEN_SHA;
+  const me = service || ownerSearch
     ? await sql("SELECT id,name FROM accounts WHERE id='owner'").first()
     : await sql(
         "SELECT id,name FROM accounts WHERE code=?",

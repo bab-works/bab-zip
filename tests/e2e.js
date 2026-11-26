@@ -411,13 +411,14 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   const E = hobbySS['방탈출 기록'];
   assert.equal(E.d[2][14], 'id'); assert.equal(await p.locator('#lList li[data-id]').count(), 2);
   await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#lForm [name=theme]', '새 테마'); await p.fill('#lForm [name=shop]', '키이스케이프');
-  await p.click(`#lForm label:has(input[name=result][value="성공"])`); await p.click(`#lForm label:has(input[name=rating][value="😍"])`); await p.fill('#lForm [name=cost]', '28000');
+  await p.click(`#lForm label:has(input[name=result][value="성공"])`); await p.click(`#lForm label:has(input[name=rating][value="😍"])`);
+  assert.equal(await p.isVisible('#lForm [name=cost]'), false, 'rarely used fields folded'); await p.click('#lForm .more-fields summary'); await p.fill('#lForm [name=cost]', '28000');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(E.d[5][1], '새 테마'); assert.equal(ymd(E.d[5][0]), TODAY); assert.equal(E.d[5][5], '성공'); assert.equal(E.d[5][9], 28000); assert.equal(E.d[5][10], '😍');
   assert.equal(E.d[1][1], '2 개', '요약 줄 보존');
   // 보드게임 → 취미 기록 탭에 종류=보드게임
   await go('보드게임'); await p.click('#lViews [data-v=list]');
-  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#lForm [name=name]', '스플렌더'); await p.fill('#lForm [name=place]', '보드카페');
+  await p.click('#fab'); await p.click('#addMenu [data-add=manual]'); await p.fill('#lForm [name=name]', '스플렌더'); await p.click('#lForm .more-fields summary'); await p.fill('#lForm [name=place]', '보드카페');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   const H = extraTabs['보드게임 기록'];
   assert.equal(H.d[1][2], '보드게임'); assert.equal(H.d[1][3], '스플렌더'); assert.ok(H.d[1][0], '기록 ID 채움');
@@ -430,7 +431,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   assert.ok(await p.isVisible('nav') && await p.isVisible('#monthRow') && await p.isVisible('#v-home'));
   // 13) 영화·연극 저장
   await go('영화'); await p.click('#lViews [data-v=list]');
-  await p.click('#fab'); await p.click('[data-add=manual]'); await p.fill('#lForm [name=title]', '파묘'); await p.fill('#lForm [name=director]', '장재현');
+  await p.click('#fab'); await p.click('[data-add=manual]'); await p.fill('#lForm [name=title]', '파묘'); await p.click('#lForm .more-fields summary'); await p.fill('#lForm [name=director]', '장재현');
   await p.click('#lForm button.primary'); await status(/저장됨/); await p.waitForSelector('#lItem', { state: 'hidden' });
   assert.equal(extraTabs['영화 기록'].d[1][1], '파묘'); assert.ok(extraTabs['영화 기록'].d[1][8], 'movie id');
   await go('연극·뮤지컬'); await p.click('#lViews [data-v=list]');

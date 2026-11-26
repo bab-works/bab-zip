@@ -11,6 +11,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') posts.push(JSON.parse(q.postData()));
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify(q.method() === 'POST' ? { ok: true, wrote: true } : { ok: true, full: true, items, meta: { cats: [['식비', '']], budgets: {}, cards, payments: [], rules: [], recurring: [] } }) }); });
   await p.goto('http://localhost:8801/'); await p.waitForTimeout(1200);
+  assert.match(await p.textContent('#toast'), /국민카드 이번 달 실적을 채웠어요/, 'cheer once when a card goal is reached');
+  await p.reload(); await p.waitForTimeout(1200); assert.doesNotMatch(await p.textContent('#toast'), /실적을 채웠어요/, 'only once per card per month');
   const row = n => p.textContent(`#cardGoals [data-cardname="${n}"]`);
   assert.match(await row('롯데카드'), /120,000원[\s\S]*30만[\s\S]*180,000원 더 써야/, 'transfer excluded');
   assert.match(await row('현대카드'), /190,000원[\s\S]*눌러서 실적 금액을 정해/, 'refund subtracted, no goal yet');
