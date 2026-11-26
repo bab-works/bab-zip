@@ -4,7 +4,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 13'] }), p = await ctx.newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), m = today.slice(0, 7);
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), m = today.slice(0, 7);
   const tx = (id, content, amount, type = '지출', time = '12:00') => ({ id, date: today, time, type, major: '식비', minor: '', content, pay: '카드', amount, memo: '' });
   const items = [tx('t1', '삼겹살', 52000, '지출', '19:00'), tx('t2', '2차 맥주', 31000, '지출', '21:00'), tx('t3', '택시', 12000, '지출', '23:00'), tx('t4', '월급', 3000000, '수입', '09:00')];
   await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) { localStorage.setItem('startSec', '"money"'); localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'pw1' })); } });

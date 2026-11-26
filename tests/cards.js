@@ -3,7 +3,7 @@ const { chromium, devices } = require('playwright'), fs = require('fs'), http = 
 http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('?')[0] === '/' ? 'index.html' : q.url.split('?')[0]); fs.readFile(f, (e, b) => { r.writeHead(e ? 404 : 200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' }); r.end(b); }); }).listen(8801, async () => {
   const b = await chromium.launch(), ctx = await b.newContext({ ...devices['iPhone 13'] }), p = await ctx.newPage(), posts = [];
   p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
-  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
   const tx = (id, type, pay, amount) => ({ id, date: today, time: '', type, major: '식비', minor: '', content: id, pay, amount, memo: '' });
   const items = [tx('a', '지출', '롯데카드', 120000), tx('b', '지출', '현대카드(M)', 200000), tx('c', '환불', '현대카드(M)', 10000), tx('d', '이체', '롯데카드', 500000), tx('e', '지출', 'KB국민카드', 350000)];
   const cards = [{ name: '롯데카드', match: '롯데', goal: 300000 }, { name: '현대카드', match: '현대', goal: 0 }, { name: '국민카드', match: '국민|KB', goal: 300000 }];

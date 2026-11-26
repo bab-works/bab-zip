@@ -10,7 +10,9 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   const assert = require('assert');
   const order = () => p.$$eval('#menuList [data-sec]', bs => bs.map(b => b.dataset.sec).join());
   await p.click('#menuBtn'); await p.waitForTimeout(400);
-  const o0 = await order(); assert.equal(o0, 'home,money,book,escape,board,movie,play,habit,friends,notice');
+  const o0 = await order(); assert.equal(o0, 'home,money,habit,book,escape,board,movie,play,friends,notice', 'grouped: 나 · 취미 기록 · 함께');
+  assert.deepEqual(await p.$$eval('#menuList .menu-group', l => l.map(x => x.textContent)), ['나', '취미 기록', '함께']);
+  assert.ok(await p.$eval('#menuSettings', e => e.getBoundingClientRect().bottom <= innerHeight + 1), 'settings button stays on screen even with group titles');
   const box = async k => (await p.locator(`#menuList [data-sec=${k}]`).boundingBox());
   // 짧게 누르면 이동 (편집 아님)는 마지막에 확인. 꾹 누르기 → 편집
   let bx = await box('habit'); await p.mouse.move(bx.x + 40, bx.y + bx.height / 2); await p.mouse.down(); await p.waitForTimeout(600); await p.mouse.up();

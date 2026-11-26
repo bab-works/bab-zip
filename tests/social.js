@@ -61,7 +61,8 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   // 4) 선택해서 한 번에: 전체 선택 → 공개 / 상태 변경 / 삭제
   await p.click('#lSelect'); assert.equal(await p.isVisible('#selBar'), true);
   await p.click('#selAll'); assert.match(await p.textContent('#selCount'), /^2개 선택/, 'shared items not selectable');
-  await p.click('[data-act=unpub]'); await p.waitForTimeout(400);
+  assert.equal(await p.locator('#selActs [data-act]').count(), 3, 'fewer choices: 공개 설정 · 상태 변경 · 삭제');
+  await p.click('[data-act=pub]'); await p.waitForSelector('#pickSheet[open]'); await p.click('#pickList button:has-text("비공개")'); await p.waitForTimeout(400);
   const up = posts.filter(o => o.action === 'setPub').at(-1); assert.deepEqual([up.on, up.ids.length], [false, 2]);
   assert.equal(await p.isVisible('#selBar'), false, 'leaves select mode after action');
   await p.click('#lSelect'); await p.click('#lList li:has-text("사라진 목격자")'); await p.click('[data-act=state]');

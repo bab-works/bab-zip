@@ -323,9 +323,10 @@
   html.menu-open body > :not(dialog) { will-change:translate; }
   html.pushing #menu, html.pushing #menu::after, html.pushing #menu::backdrop, html.pushing body > :not(dialog) { transition:none; }
   @media (prefers-reduced-motion: reduce) { #menu, #menu::after, #menu::backdrop, body > :not(dialog) { transition:none; } }
-  .menu-list { display:flex; flex-direction:column; gap:6px; }
+  .menu-list { display:flex; flex-direction:column; gap:6px; flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; } /* 메뉴가 길어도 아래 「설정」은 늘 보이게, 목록만 스크롤 */
   .menu-list button { display:flex; align-items:center; gap:12px; text-align:left; padding:14px 16px; border-radius:18px; font-size:1rem; font-weight:600; background:none; }
   .menu-list button[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
+  .menu-group { margin:14px 16px 4px; font-size:.74rem; font-weight:700; color:var(--muted); letter-spacing:.02em; } .menu-group:first-child { margin-top:2px; }
   .menu-list .em { font-size:1.294rem; }
 
   /* 독서 보기 3가지: 커버플로우 · 카드(3열) · 목록 */
@@ -1180,7 +1181,7 @@
 <dialog id="menu" aria-label="메뉴" data-close-ms="420">
   <div class="menu-head"><button type="button" id="menuUser" class="menu-user"><span class="avatar" id="menuAvatar" aria-hidden="true"></span><span><b id="menuName"></b><small id="menuRole"></small></span></button><button type="button" id="menuDone" class="small" hidden>완료</button><button type="button" id="menuLogout" class="small">로그아웃</button></div>
   <div id="menuList" class="menu-list"></div>
-  <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요</p>
+  <p id="menuTip" class="hint" style="padding:10px 6px" hidden>끌어서 순서를 바꿔요 · 순서는 같은 묶음(나·취미 기록·함께) 안에서 적용돼요</p>
   <div class="menu-foot"><button type="button" id="menuSettings" class="menu-settings"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg>설정</button><button type="button" id="bragBtn" class="brag-mini" aria-pressed="false" title="금액·거래 내용을 가려요">✨ 자랑하기</button></div>
 </dialog>
 

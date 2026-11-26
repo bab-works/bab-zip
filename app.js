@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v108'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v109'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -1265,6 +1265,8 @@ $('#homeEdit').addEventListener('click', () => {
 });
 
 // ── BAB:ZIP 섹션: MONEY · 독서 · 방탈출 · 보드게임 ──
+// 사이드 메뉴 묶음: 한 번에 10개를 훑지 않게 성격별로 나눔 (묶음 안 순서는 사용자가 정한 순서)
+const MENU_GROUPS = [['나', ['home', 'money', 'habit']], ['취미 기록', ['book', 'escape', 'board', 'movie', 'play']], ['함께', ['friends', 'notice']]];
 const SECTIONS = {
   home: { title: '오늘', icon: '🏠' }, // 친구(게스트)의 첫 화면 대시보드. 주인도 메뉴에서 볼 수 있음
   money: { title: '가계부', icon: '💰' },
@@ -1978,8 +1980,9 @@ function menuP(p, dragging) {
 // 다 열린 뒤에만 본문을 살짝 흐리게 (움직이는 동안 블러를 매 프레임 계산하면 아이폰에서 끊김)
 $('#menu').addEventListener('transitionend', e => { if (e.target === e.currentTarget && e.propertyName === 'opacity' && root.style.getPropertyValue('--p') === '1.000') root.classList.add('menu-rest'); });
 function openMenu(dragging) {
-  $('#menuList').innerHTML = menuOrder().map(k => [k, SECTIONS[k]]).map(([k, v]) =>
-    `<button type="button" data-sec="${k}" data-hidden="${store.get('menuHidden', []).includes(k) && k !== sec ? 1 : 0}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${v.title}${k === 'money' ? '' : '<span class="eye" data-eye role="button" aria-label="메뉴에서 숨기기·보이기">👁</span>'}</button>`).join('');
+  const order = menuOrder(), hid = store.get('menuHidden', []), btn = k => `<button type="button" data-sec="${k}" data-hidden="${hid.includes(k) && k !== sec ? 1 : 0}" ${k === sec ? 'aria-current="page"' : ''}><svg class="i" aria-hidden="true"><use href="#i-s-${k}"/></svg>${SECTIONS[k].title}${k === 'money' ? '' : '<span class="eye" data-eye role="button" aria-label="메뉴에서 숨기기·보이기">👁</span>'}</button>`;
+  $('#menuList').innerHTML = MENU_GROUPS.map(([g, ks]) => { const mine = order.filter(k => ks.includes(k));
+    return mine.some(k => !hid.includes(k) || k === sec) ? `<p class="menu-group" aria-hidden="true">${g}</p>` + mine.map(btn).join('') : mine.map(btn).join(''); }).join('');
   paintNoticeDot();
   const nm = me.token === cfg.token && me.name ? me.name : '';
   $('#menuName').textContent = nm || (isFriend() ? '친구' : '이름을 정해 주세요');
@@ -2038,7 +2041,7 @@ $('#menuBtn').addEventListener('click', () => openMenu());
 // 메뉴 항목을 꾹 누르면 편집 모드 → 끌어서 순서 변경, 「완료」나 메뉴를 닫으면 끝
 {
   const list = $('#menuList'), editing = () => list.classList.contains('editing');
-  const setEdit = on => { list.classList.toggle('editing', on); $('#menuDone').hidden = $('#menuTip').hidden = !on; };
+  const setEdit = on => { if (on) list.querySelectorAll('.menu-group').forEach(x => x.remove()); list.classList.toggle('editing', on); $('#menuDone').hidden = $('#menuTip').hidden = !on; }; // 순서 바꿀 땐 묶음 제목을 빼서 끌기만
   let timer = null, start = null, drag = null;
   list.addEventListener('contextmenu', e => e.preventDefault());
   list.addEventListener('pointerdown', e => {
@@ -2228,7 +2231,7 @@ function paintSel() {
   const n = selected.size, mine = L(curList).filter(i => !i.shared);
   $('#selCount').textContent = `${n}개 선택`; $('#selAll').textContent = n && n === mine.length ? '선택 해제' : '전체 선택';
   const st = stateFields(curList), act = (k, ic, t, show = true) => show ? `<button type="button" data-act="${k}" ${n ? '' : 'disabled'}><svg class="i" aria-hidden="true"><use href="#${ic}"/></svg>${t}</button>` : '';
-  $('#selActs').innerHTML = act('pub', 'i-s-friends', '친구 공개', HOUSE_LISTS.includes(curList)) + act('unpub', 'i-lock', '비공개', HOUSE_LISTS.includes(curList))
+  $('#selActs').innerHTML = act('pub', 'i-s-friends', '공개 설정', HOUSE_LISTS.includes(curList))
     + act('state', 'i-tag', '상태 변경', st.length > 0) + act('move', 'i-move', '옮기기', !!BOOK_LISTS[curList]) + act('del', 'i-trash', '삭제');
 }
 $('#lSelect').addEventListener('click', () => setSelecting(true));
@@ -2241,8 +2244,9 @@ $('#selAll').addEventListener('click', () => {
 $('#selActs').addEventListener('click', async e => {
   const k = e.target.closest('[data-act]')?.dataset.act; if (!k || !selected.size) return;
   const list = curList, items = L(list).filter(i => selected.has(i.id) && !i.shared), n = items.length, key = LIST_FIELDS[list][0][0];
-  if (k === 'pub' || k === 'unpub') {
-    const on = k === 'pub'; items.forEach(i => { i.pub = on; }); store.set('lists', lists);
+  if (k === 'pub') {
+    const v = await pick(`${n}개를 어떻게 할까요?`, [['on', '친구 공개'], ['off', '비공개']]); if (!v) return;
+    const on = v === 'on'; items.forEach(i => { i.pub = on; }); store.set('lists', lists);
     queue({ action: 'setPub', list, ids: items.map(i => i.id), on }).then(ok => ok && toast(`${n}개를 ${on ? '친구 공개로 바꿨어요' : '비공개로 바꿨어요'}`));
   } else if (k === 'del') {
     if (!await ask(`선택한 ${n}개 기록을 시트에서 삭제할까요?`, { ok: `${n}개 삭제`, danger: true })) return;
