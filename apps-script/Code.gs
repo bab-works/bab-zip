@@ -439,7 +439,7 @@ function smsTx_(id, p, meta) {
   const m = String(p.merchant || ''), majors = [...new Set(meta.cats.map(c => c[0]))];
   const rule = meta.rules.find(r => r[0] && m.toLowerCase().includes(String(r[0]).toLowerCase()) && (!r[1] || r[1] === p.type) && majors.includes(r[2]));
   const major = rule ? rule[2] : (majors.find(x => /미분류|기타/.test(x)) || majors[0] || '기타');
-  return { id, date: p.date, time: p.time, type: p.type, major, minor: rule ? rule[3] || '' : '', content: m, pay, amount: p.amount, inst: p.inst || '',
+  return { id, date: p.date, time: p.time, type: p.type, major, minor: rule ? rule[3] || '' : '', content: p.type === '환불' ? m + ' 취소' : m, pay, amount: p.amount, inst: p.inst || '',
     memo: ['문자 자동', p.currency ? p.currency + ' ' + p.foreign + (p.rate ? ' · 환율 ' + p.rate : '') : ''].filter(Boolean).join(' · ') };
 }
 function smsTick() { if (friendMode_() === 'worker') withLock_(() => smsIngest_()); } // 5분마다 (시간 트리거)
