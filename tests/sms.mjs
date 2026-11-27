@@ -24,6 +24,10 @@ const cases = [
     { card: "국민", amount: 120000, inst: 5, merchant: "샘플몰(페이)", date: "2026-10-10" }],
   ["[Web발신]\nKB국민카드1234취소\n홍*동님\n120,000원 05개월\n10/10 10:32\n샘플몰(페이)\n누적380,000원",
     { card: "국민", type: "환불", amount: 120000, merchant: "샘플몰(페이)", time: "10:32" }],
+  ["[Web발신]\n현대 네이버 승인\n홍*동\n300,000원 03개월\n09/29 19:24\n샘플약국\n누적3,000,000원",
+    { card: "현대", amount: 300000, inst: 3, merchant: "샘플약국", date: "2026-09-29", time: "19:24" }],
+  ["[Web발신]\nKB국민카드1234승인\n홍*동님\n1,000,000원 03개월\n11/08 16:57\n샘플파이낸셜 주식\n누적2,000,000원",
+    { card: "국민", amount: 1000000, inst: 3, merchant: "샘플파이낸셜 주식", date: "2026-11-08" }],
 ];
 for (const [text, want] of cases) {
   const got = p(text);
