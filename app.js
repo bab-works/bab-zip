@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v112'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v113'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -256,14 +256,15 @@ function toast(t, ms = 3500, undo) {
 // 저장 작업은 모두 id로 덮어쓰는 방식이라 두 번 들어가도 중복이 생기지 않음. 한 번 GET이 통하면 다음부터 GET 먼저
 const DIRECT_FRIEND_SERVER = true;
 function directFriendUrl(body, qs) {
-  const what = new URLSearchParams(qs).get('what'), ownerSearch = me.role === 'owner' && !body && ['book', 'movie'].includes(what);
+  // 주인은 책·영화 검색, 그리고 가계부가 서버(D1)로 옮겨졌으면 가계부 읽기도 바로
+  const what = new URLSearchParams(qs).get('what'), ownerSearch = me.role === 'owner' && !body && (['book', 'movie'].includes(what) || (what === 'ledger' && me.ledger === 'd1'));
   if (!DIRECT_FRIEND_SERVER || cfg.url !== SHEET_URL || me.token !== cfg.token || (me.role !== 'friend' && !ownerSearch)) return '';
-  if (!body && !['me','lists','house','habits','movie','book'].includes(what)) return '';
+  if (!body && !['me','lists','house','habits','movie','book','ledger'].includes(what)) return '';
   return /^https:\/\/bab-zip-friends\.[a-z0-9-]+\.workers\.dev\/?$/.test(me.workerUrl || '') ? me.workerUrl : '';
 }
 async function api(body, qs = '') {
   const direct = directFriendUrl(body, qs);
-  if (direct) return ['book', 'movie'].includes(new URLSearchParams(qs).get('what')) ? call(body, qs, direct).catch(() => call('', qs)) : call(body, qs, direct); // 검색이 안 되면 시트로 (카카오 키 없음·주인 확인 실패 등)
+  if (direct) return ['book', 'movie', 'ledger'].includes(new URLSearchParams(qs).get('what')) ? call(body, qs, direct).catch(() => call('', qs)) : call(body, qs, direct); // 안 되면 시트로 (카카오 키 없음·주인 확인 실패 등, 가계부는 시트가 서버에서 대신 받아 옴)
   if (!body) return call('', qs);
   const viaGet = () => call('', '&op=' + encodeURIComponent(JSON.stringify(body))).then(r => {
     if (!r.wrote) throw new Error('시트 쪽 코드가 예전 버전이에요 · Code.gs를 새 버전으로 배포해 주세요');
@@ -326,8 +327,8 @@ async function refresh() {
       try {
         // 지난달 1일부터만 받고, 그 이전은 지문이 같으면 폰에 있는 것을 그대로 씀 (예전 줄이 바뀌었으면 전체를 다시 받음)
         const since = ymAdd(localISO().slice(0, 7), -1) + '-01';
-        let r = await api(null, `&since=${since}${data.old?.since === since ? '' : '&full=1'}`);
-        if (r.old && !r.full && r.old.h !== data.old.h) r = await api(null, `&since=${since}&full=1`);
+        let r = await api(null, `&what=ledger&since=${since}${data.old?.since === since ? '' : '&full=1'}`);
+        if (r.old && !r.full && r.old.h !== data.old.h) r = await api(null, `&what=ledger&since=${since}&full=1`);
         const items = r.old && !r.full ? [...data.items.filter(i => i.date < since), ...r.items] : r.items;
         data = { items, meta: r.meta, old: r.old };
         persist();
@@ -1945,7 +1946,7 @@ async function loadMe() {
     loadedAt.me = Date.now();
     if (!r.role) return; // 예전 Code.gs
     if (isSession(r.token)) setToken(r.token); // 서버가 출입증을 새것으로 바꿔 줌 (7일마다)
-    me = { token: cfg.token, role: r.role, workerUrl:r.workerUrl || '', name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
+    me = { token: cfg.token, role: r.role, workerUrl:r.workerUrl || '', ledger: r.ledger || '', name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
   } catch (e) { return; }
   applyRole();
 }

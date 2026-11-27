@@ -601,7 +601,7 @@ function setupDaily() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'daily').forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('daily').timeBased().everyDays(1).atHour(6).create();
 }
-function daily() { withLock_(runRecurring_); }
+function daily() { if (!ledgerOn_()) withLock_(runRecurring_); } // 가계부가 서버에 있으면 반복은 서버가
 
 // ── 취미 목록 (독서·방탈출·보드게임·영화·연극): 이 가계부 파일 안의 탭 ──
 // 열은 "제목 줄의 글자"로 찾아요. 시트에 열을 끼워 넣어도 자동으로 맞춰져요.
@@ -832,6 +832,89 @@ function summary_() {
   return { ok: true, date: today, today: day, month, budget, left: budget - month, daily, cards: cards.map(c => ({ name: c.name, goal: c.goal, spent: c.spent })) };
 }
 
+// ── 2단계: 가계부 원본을 친구 서버(D1)로. 시트는 한 시간마다 채우는 백업·보기용 ──
+// LEDGER_TARGET_ = 'd1': 주인이 가계부를 처음 열 때 한 번 옮기고(건수·합계가 맞을 때만) 켬
+// 되돌리기: 'sheet'로 바꿔 배포 → 다음에 열 때 D1 → 시트로 마지막 백업 후 시트가 다시 원본
+const LEDGER_TARGET_ = 'd1';
+const LEDGER_ACTS_ = ['save', 'delete', 'recSave', 'recDelete', 'budget', 'cardGoal'];
+const ledgerMode_ = () => props_().getProperty('LEDGER_MODE') || 'sheet';
+const ledgerOn_ = () => ledgerMode_() === 'd1' && LEDGER_TARGET_ === 'd1';
+function ledgerSwitch_() {
+  const p = props_(), mode = ledgerMode_();
+  if (LEDGER_TARGET_ === 'd1' && mode !== 'd1' && ownerWorker_()) {
+    const c = cache_(); if (c && c.get('LEDGER_TRY')) return; // 실패하면 10분 뒤에 다시
+    if (c) c.put('LEDGER_TRY', '1', 600);
+    ledgerMigrate_();
+  } else if (LEDGER_TARGET_ !== 'd1' && mode === 'd1') {
+    ledgerBackup_(); workerRequired_({ action: 'ledgerDeactivate' }); p.setProperty('LEDGER_MODE', 'sheet');
+  }
+}
+function ledgerMigrate_() {
+  const p = props_(), sh = tx_(), last = last_(sh); ids_(sh, last);
+  const v = last < 2 ? [] : sh.getRange(2, 1, last - 1, ID_COL).getValues();
+  // 복사한 줄 등으로 id가 겹치면 새 id를 줌 (겹치면 서버에서 한 줄로 합쳐져 건수가 안 맞음)
+  const seen = {}, idCol = v.map(r => [r[ID_COL - 1]]); let fixed = false;
+  idCol.forEach(x => { if (x[0] !== '' && seen[x[0]]) { x[0] = Utilities.getUuid(); fixed = true; } seen[x[0]] = 1; });
+  if (fixed) sh.getRange(2, ID_COL, idCol.length, 1).setValues(idCol);
+  const rows = []; let sum = 0;
+  v.forEach((r, i) => {
+    if (r[0] === '') return;
+    const x = { id: String(idCol[i][0]), date: fmt_(r[0], 'yyyy-MM-dd'), time: tm_(r[1]), type: String(r[2]), major: String(r[3]), minor: String(r[4]), content: String(r[5]),
+      pay: String(r[7]), amount: Math.round(num_(r[8])), memo: String(r[9]), orig: String(r[10]), inst: num_(r[11]) >= 2 ? Math.round(num_(r[11])) : 0, seq: i + 1 };
+    rows.push(x); sum += x.amount;
+  });
+  const m = meta_(), meta = { cats: m.cats, payments: m.payments, rules: m.rules, budgets: m.budgets, budgetMajors: budgetMajors_(), recurring: m.recurring, cards: m.cards };
+  for (let i = 0; i === 0 || i < rows.length; i += 500)
+    workerRequired_(Object.assign({ action: 'ledgerImport', reset: i === 0, rows: rows.slice(i, i + 500) }, i === 0 ? { meta, recRun: p.getProperty('REC_RUN') || '' } : {}));
+  const got = workerRequired_({ action: 'ledgerVerify' });
+  if (got.count !== rows.length || got.sum !== sum) throw new Error('가계부 옮기기 확인 실패 · 시트 ' + rows.length + '건 ' + sum + '원 / 서버 ' + got.count + '건 ' + got.sum + '원');
+  if (!ss_().getSheetByName('거래 (옮기기 전)')) sh.copyTo(ss_()).setName('거래 (옮기기 전)'); // 옮기기 직전 그대로 한 장 남겨 둠 (백업이 거래 탭을 다시 쓰기 전)
+  workerRequired_({ action: 'ledgerActivate' });
+  p.setProperty('LEDGER_MODE', 'd1'); p.deleteProperty('LEDGER_BACKUP_VER'); p.deleteProperty('LEDGER_ERR');
+  ensureLedgerTrigger_();
+}
+const budgetMajors_ = () => rows_('카테고리', 5).filter(r => r[3]).map(r => String(r[3]));
+// 시트에서 고친 카테고리·결제수단·분류규칙(+카테고리 탭을 고쳤으면 예산)을 서버에 알림
+function pushLedgerMeta_(withBudgets) {
+  const m = meta_();
+  workerRequired_(Object.assign({ action: 'ledgerMeta', cats: m.cats, payments: m.payments, rules: m.rules, budgetMajors: budgetMajors_() }, withBudgets ? { budgets: m.budgets } : {}));
+}
+// 서버 → 시트 백업: 거래 탭(A~F, H~L, P열만. 수식 열 G·M~O는 그대로), 카테고리 예산(E열), 반복 탭, 카드 실적
+function ledgerBackup_() {
+  const p = props_(), r = workerRequired_({ what: 'ledgerExport', ver: p.getProperty('LEDGER_BACKUP_VER') || '' });
+  if (r.same || !r.active) return 0;
+  const sh = tx_(), last = last_(sh), n = r.rows.length;
+  if (last - 1 > 50 && n < (last - 1) * 0.9) throw new Error('백업 멈춤: 서버 거래(' + n + '건)가 시트(' + (last - 1) + '건)보다 너무 적어요'); // 이상하면 시트를 덮지 않음
+  if (n + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), n + 1 - sh.getMaxRows());
+  if (n) {
+    sh.getRange(2, 1, n, 6).setValues(r.rows.map(x => [x.date, x.time, x.type, txt_(x.major), txt_(x.minor), txt_(x.content)]));
+    sh.getRange(2, 8, n, 5).setValues(r.rows.map(x => [txt_(x.pay), x.amount, txt_(x.memo, 500), txt_(x.orig), x.inst >= 2 ? x.inst : '']));
+    sh.getRange(2, ID_COL, n, 1).setValues(r.rows.map(x => [String(x.id)]));
+  }
+  if (last > n + 1) [[1, 6], [8, 5], [ID_COL, 1]].forEach(([c, w]) => sh.getRange(n + 2, c, last - n - 1, w).clearContent());
+  const cat = ss_().getSheetByName('카테고리');
+  if (cat && cat.getLastRow() > 1) {
+    const d = cat.getRange(2, 4, cat.getLastRow() - 1, 2).getValues();
+    d.forEach(x => { if (x[0] && r.meta.budgets[String(x[0])] !== undefined) x[1] = r.meta.budgets[String(x[0])]; });
+    cat.getRange(2, 4, d.length, 2).setValues(d);
+  }
+  const rs = rec_(), rec = r.meta.recurring.map(x => [x.id, txt_(x.content), x.type, txt_(x.major), txt_(x.minor), txt_(x.pay), x.amount, x.day, x.start, x.end || '', x.done || '']);
+  if (rs.getLastRow() > 1) rs.getRange(2, 1, rs.getLastRow() - 1, REC_HEAD.length).clearContent();
+  if (rec.length) rs.getRange(2, 1, rec.length, REC_HEAD.length).setValues(rec);
+  if (r.meta.cards.length) p.setProperty('CARD_GOALS', JSON.stringify(r.meta.cards));
+  p.setProperty('LEDGER_BACKUP_VER', String(r.ver));
+  return n;
+}
+function ledgerTick() { // 한 시간마다 (시간 트리거)
+  if (!ledgerOn_()) return;
+  withLock_(() => { pushLedgerMeta_(false); ledgerBackup_(); });
+}
+function ensureLedgerTrigger_() {
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'ledgerTick')) ScriptApp.newTrigger('ledgerTick').timeBased().everyHours(1).create();
+}
+// 편집기에서 바로 백업하고 싶을 때 실행
+function ledgerBackupNow() { props_().deleteProperty('LEDGER_BACKUP_VER'); withLock_(() => Logger.log('시트에 쓴 거래: %s건', ledgerBackup_())); }
+
 // Deployment injects the bridge credentials. Copies of this script default to Sheets.
 const FRIEND_WORKER_ = '';
 const FRIEND_BRIDGE_ = '';
@@ -907,6 +990,7 @@ function repairFriendProjection_() {
   if (friendMode_()==='worker') withLock_(()=>refreshOwnerProjection_());
 }
 function editedFriendProjection_(e) {
+  if(e && e.range && ['카테고리','분류규칙'].includes(e.range.getSheet().getName()) && ledgerOn_()) { try { withLock_(()=>pushLedgerMeta_(e.range.getSheet().getName()==='카테고리')); } catch (_) {} }
   if(friendMode_()!=='worker' || !e || !e.range || !Object.values(LISTS).some(c=>c.tab===e.range.getSheet().getName())) return;
   withLock_(()=>{workerRequired_({action:'replaceProjection',records:[]});refreshOwnerProjection_();});
 }
@@ -957,6 +1041,7 @@ function doGet(e) {
       const r=workerCall_({what,token:e.parameter.token,name:e.parameter.name},owner);
       if(r.ok && what==='me') r.workerUrl=FRIEND_WORKER_; // 주인도 책·영화 검색은 친구 서버로 바로
       if(r.ok && rotated) r.token=rotated;
+      if(r.ok && owner && what==='me') r.ledger=ledgerMode_();
       return out_(r);
     } else if(what==='lists') {
       try{return out_(withLock_(()=>ownerListsWithTags_()));}catch(_){return out_(waitFriends_());}
@@ -969,7 +1054,7 @@ function doGet(e) {
       return out_({ ok: true, ...(rotated && { token: rotated }), role: me.role, name: me.name, people: myPeople_(me), social: social_(me), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
     if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists', 'house'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
-    if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
+    if (e.parameter.what === 'summary') return out_(ledgerOn_() ? workerCall_({ what: 'summary' }, true) : summary_()); // 읽기만 해서 잠금 불필요
     if (e.parameter.what === 'escape') return out_({ ok: true, themes: escapeSearch_(e.parameter.q), ...escapeStatus_() }); // 방탈출 테마 검색 (목록 탭에서)
     if (e.parameter.what === 'board') return out_({ ok: true, games: cached_('QG2:' + String(e.parameter.q || '').trim().slice(0, 80), 21600, false, () => boardSearch_(e.parameter.q)) }); // 코리아보드게임즈 검색
     if (e.parameter.what === 'house') return out_({ ok: true, house: cached_('HS:' + keyOf_(me) + ':' + String(e.parameter.name || '').slice(0, 20), 300, e.parameter.fresh === '1', () => house_(me, e.parameter.name)) }); // 친구 집 놀러 가기
@@ -983,7 +1068,13 @@ function doGet(e) {
     // since=날짜: 그날 이후 거래만 보내고, 그 이전 줄은 지문(old.h)만 보냄 → 앱은 지문이 같으면 가진 것을 그대로 씀
     // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
     const since = /^\d{4}-\d{2}-\d{2}$/.test(e.parameter.since || '') ? e.parameter.since : '';
+    const fromD1 = () => workerCall_({ what: 'ledger', since, full: e.parameter.full || '' }, true);
+    if (me.role === 'owner' && ledgerOn_()) return out_(fromD1());
     return out_(withLock_(() => {
+      if (me.role === 'owner') {
+        try { ledgerSwitch_(); } catch (err) { props_().setProperty('LEDGER_ERR', String(err.message).slice(0, 300)); }
+        if (ledgerOn_()) return fromD1();
+      }
       try { smsIngest_(); ensureSmsTrigger_(); } catch (err) {} // 카드 문자 보관함에 새 결제가 있으면 먼저 거래 탭에 (실패해도 보관함에 남아 다음에 다시)
       // 반복 거래 채우기는 하루 한 번이면 충분 (매번 돌려서 느렸음). 반복 규칙을 바꾸면 다시 돎
       const props = PropertiesService.getScriptProperties(), day = fmt_(new Date(), 'yyyy-MM-dd');
@@ -1056,6 +1147,10 @@ function doPost(e) {
 // 저장 작업 (POST 본문, 또는 아이폰에서 POST가 끊길 때 GET ?op=로도 받음). wrote:true = 실제로 처리했다는 표시
 function writeOp_(b) {
   const owner=authOk_(b.token);
+  if(owner && LEDGER_ACTS_.includes(b.action) && ledgerOn_()) { // 가계부가 서버에 있으면 서버에 바로 씀
+    const r=workerCall_(Object.assign({},b),true);
+    return out_(r.ok ? Object.assign(r,{wrote:true}) : r);
+  }
   const sheetOwner=owner && ['save','delete','recSave','recDelete','budget','cardGoal','habitCheck'].includes(b.action);
   if(!sheetOwner && ['freeze','worker'].includes(friendMode_())) {
     try{return out_(withLock_(()=>friendMode_()==='worker'?bridgeWrite_(b,owner):waitFriends_()));}
@@ -1068,6 +1163,7 @@ function writeOp_(b) {
   try {
     withLock_(() => {
       if(!sheetOwner && ['freeze','worker'].includes(friendMode_())) throw new Error('친구 서버 전환 중 · 다시 시도해 주세요');
+      if(LEDGER_ACTS_.includes(b.action) && ledgerOn_()) throw new Error('가계부를 서버로 옮겼어요 · 다시 보내 주세요'); // 기다리는 동안 옮겨졌으면 시트에 쓰지 않음
       if (b.action === 'setName') res = setName_(me, b);
       else if (/^friend(Request|Accept|Remove)$/.test(b.action)) res = { social: friendOp_(me, b) };
       else if (b.action === 'setHouse') setHouse_(me, b);

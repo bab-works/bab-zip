@@ -120,7 +120,7 @@ try {
     (await call({ action: "promoteSnapshot" }, bridge)).active,
     true,
   );
-  for (const f of ["migrations/0003_sms.sql", "migrations/0004_sessions.sql"]) for (const stmt of (await readFile(new URL(f, root), "utf8")).replace(/^--.*$/gm, "").split(";").filter((s) => s.trim())) await db.prepare(stmt).run();
+  for (const f of ["migrations/0003_sms.sql", "migrations/0004_sessions.sql", "migrations/0005_ledger.sql"]) for (const stmt of (await readFile(new URL(f, root), "utf8")).replace(/^--.*$/gm, "").split(";").filter((s) => s.trim())) await db.prepare(stmt).run();
   const invite = (name) => call({ action: "invite", name }, bridge);
   const a = await invite("가"),
     b = await invite("나"),
@@ -366,6 +366,88 @@ try {
   for (let i = 0; i < 10; i++)
     assert.equal((await request(login("나", password))).ok, false);
   assert.match((await request(login("나", first))).error, /10분/);
+  {
+  // ── 2단계 가계부 (주인 전용): 시트 → D1 옮기기 → 켜기 → 읽기·쓰기·반복·문자·요약·백업. 값은 전부 가짜 ──
+  const ownerT = "so." + randomUUID();
+  await call({ action: "ownerSession", hash: createHash("sha256").update(ownerT).digest("hex"), expires: 2e9 }, bridge);
+  const kstDay = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), mon = kstDay.slice(0, 7);
+  const ymAdd = (m, k) => { const d = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1 + k, 1)); return d.toISOString().slice(0, 7); };
+  const meta = { cats: [["식비", "외식"], ["식비", "배달"], ["기타", "미분류"], ["수입", "급여"]], payments: [["샘플 현대카드", "카드"], ["가짜통장", "현금·계좌"]],
+    rules: [["가나다", "지출", "식비", "외식"]], budgets: { 식비: 500000 }, budgetMajors: ["식비", "기타"],
+    recurring: [{ id: "r1", content: "가짜 구독", type: "지출", major: "기타", minor: "", pay: "가짜통장", amount: 9900, day: 1, start: ymAdd(mon, -1), end: "", done: ymAdd(mon, -2) }],
+    cards: [{ name: "현대카드", match: "현대", goal: 300000 }] };
+  const rowsIn = [
+    { id: "t1", date: ymAdd(mon, -3) + "-05", time: "", type: "지출", major: "식비", minor: "외식", content: "가짜식당", pay: "샘플 현대카드", amount: 120000, memo: "", orig: "원본", inst: 3, seq: 1 },
+    { id: "t2", date: mon + "-01", time: "09:00", type: "수입", major: "수입", minor: "급여", content: "가짜급여", pay: "가짜통장", amount: 1000000, memo: "", orig: "", inst: 0, seq: 2 },
+  ];
+  assert.equal((await request({ what: "ledger" }, ownerT)).ok, false, "not readable before the switch");
+  assert.equal((await request({ action: "ledgerImport", reset: true, rows: rowsIn, meta }, ownerT)).ok, false, "only the Sheet can import");
+  await call({ action: "ledgerImport", reset: true, rows: rowsIn.slice(0, 1), meta }, bridge);
+  await call({ action: "ledgerImport", rows: rowsIn.slice(1) }, bridge);
+  assert.deepEqual(await call({ action: "ledgerVerify" }, bridge), { ok: true, count: 2, sum: 1120000 });
+  await call({ action: "ledgerActivate" }, bridge);
+  assert.equal((await request({ action: "ledgerImport", reset: true, rows: [] }, bridge)).ok, false, "never re-imported over live data");
+  // 친구·로그아웃한 출입증·아무것도 없이: 가계부 못 봄
+  for (const t of [a.tok, b.tok, "so.fake", undefined]) {
+    assert.equal((await request({ what: "ledger" }, t)).ok, false, "friends never see the ledger");
+    assert.equal((await request({ what: "summary" }, t)).ok, false);
+    assert.equal((await request({ action: "save", item: { id: "x", date: kstDay, type: "지출", major: "식비", amount: 1 } }, t)).ok, false);
+  }
+  // 주인: 읽기 (결제유형·할부 회차는 시트 수식과 같게 계산, 반복 거래는 지난달·이번 달 생성)
+  let L = await call({ what: "ledger" }, ownerT);
+  const t1 = L.items.find((x) => x.id === "t1");
+  assert.equal(t1.payType, "카드"); assert.equal(t1.instState, "완료"); assert.equal(t1.inst, 3);
+  assert.deepEqual(L.items.filter((x) => x.id.startsWith("rec-")).map((x) => x.id), ["rec-r1-" + ymAdd(mon, -1), "rec-r1-" + mon]);
+  assert.equal(L.meta.recurring[0].done, mon);
+  const own = (x) => !x.id.startsWith("sms:"); assert.equal(L.items.filter(own).length, 4); assert.equal(L.full, true);
+  // since: 그 전은 지문만, 같으면 그대로
+  const since = ymAdd(mon, -1) + "-01";
+  const part = await call({ what: "ledger", since }, ownerT);
+  assert.equal(part.full, false); assert.ok(part.items.every((x) => x.date >= since)); assert.match(part.old.h, /^d1:1:120000:/);
+  // 쓰기: 저장(새·수정), 삭제, 예산, 카드 실적, 반복
+  const item = { id: "n1", date: kstDay, time: "12:30", type: "지출", major: "식비", minor: "배달", content: "=수식 아님", pay: "샘플 현대카드", amount: "15,000", memo: "" };
+  await call({ action: "save", item }, ownerT);
+  await call({ action: "save", item: { ...item, amount: 16000 } }, ownerT);
+  assert.equal((await request({ action: "save", item: { ...item, amount: 0 } }, ownerT)).error, "입력값 오류");
+  L = await call({ what: "ledger" }, ownerT);
+  assert.equal(L.items.at(-1).id, "n1"); assert.equal(L.items.at(-1).amount, 16000); assert.equal(L.items.filter(own).length, 5);
+  const fp0 = (await call({ what: "ledger", since }, ownerT)).old.h;
+  await call({ action: "save", item: { ...rowsIn[0], amount: 130000 } }, ownerT);
+  assert.notEqual((await call({ what: "ledger", since }, ownerT)).old.h, fp0, "editing an old row changes the fingerprint");
+  assert.equal((await db.prepare("SELECT orig FROM ledger_tx WHERE id='t1'").first()).orig, "원본", "app saves keep 원본분류");
+  await call({ action: "budget", major: "식비", amount: 450000 }, ownerT);
+  assert.equal((await request({ action: "budget", major: "없는분류", amount: 1 }, ownerT)).ok, false);
+  await call({ action: "cardGoal", name: "현대카드", goal: 350000 }, ownerT);
+  await call({ action: "recSave", rule: { id: "r2", content: "가짜 월세", type: "이체", major: "기타", minor: "", pay: "가짜통장", amount: 500000, day: 31, start: mon } }, ownerT);
+  L = await call({ what: "ledger" }, ownerT);
+  assert.equal(L.meta.budgets.식비, 450000); assert.equal(L.meta.cards[0].goal, 350000);
+  assert.equal(L.items.some((x) => x.id === "rec-r2-" + mon), kstDay.slice(8) === String(new Date(Date.UTC(+mon.slice(0, 4), +mon.slice(5, 7), 0)).getUTCDate()), "day 31 → last day of month only once it comes");
+  await call({ action: "recDelete", id: "r2" }, ownerT);
+  await call({ action: "delete", id: "n1" }, ownerT);
+  assert.equal((await call({ what: "ledger" }, ownerT)).items.some((x) => x.id === "n1"), false);
+  // 카드 문자: 켜진 뒤엔 바로 거래로 (시트 smsPull은 빈 목록 → 두 번 안 적힘), 취소는 「 취소」
+  const smsIn = `[Web발신]\n현대 M 승인\n홍*동\n8,800원 일시불\n${mon.slice(5)}/${kstDay.slice(8)} 08:10\n가나다김밥\n누적1원`;
+  const h1 = await hook(smsIn); assert.equal(h1.saved, true);
+  assert.deepEqual((await call({ action: "smsPull" }, bridge)).items, [], "the Sheet does not also write it");
+  L = await call({ what: "ledger" }, ownerT);
+  const sx = L.items.find((x) => x.id === h1.id);
+  assert.deepEqual([sx.pay, sx.major, sx.minor, sx.content, sx.amount, sx.memo], ["샘플 현대카드", "식비", "외식", "가나다김밥", 8800, "문자 자동"]);
+  const h2 = await hook(smsIn.replace("승인", "승인취소"));
+  assert.equal((await call({ what: "ledger" }, ownerT)).items.find((x) => x.id === h2.id).content, "가나다김밥 취소");
+  assert.equal((await hook(smsIn)).duplicate, true);
+  // 위젯 요약
+  const sm = await call({ what: "summary" }, ownerT);
+  assert.equal(sm.cards[0].name, "현대카드"); assert.equal(sm.budget, 450000);
+  // 시트 백업: 바뀐 게 없으면 줄을 안 보냄
+  const ex = await call({ what: "ledgerExport" }, bridge);
+  assert.ok(ex.rows.length >= 5 && ex.rows[0].id === "t1" && ex.rows[0].orig === "원본");
+  assert.equal((await call({ what: "ledgerExport", ver: ex.ver }, bridge)).same, true);
+  assert.equal((await request({ what: "ledgerExport" }, ownerT)).ok, false, "export is for the Sheet only");
+  // 되돌리기: 끄면 주인도 못 읽고(시트가 다시 원본), 문자는 다시 시트가 가져감
+  await call({ action: "ledgerDeactivate" }, bridge);
+  assert.match((await request({ what: "ledger" }, ownerT)).error, /옮기는 중/);
+  await call({ action: "ledgerActivate" }, bridge);
+  }
   console.log("WORKER OK");
 } finally {
   await mf.dispose();

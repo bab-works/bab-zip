@@ -188,8 +188,181 @@ async function smsHook(env, request) {
   const parsed = await toKrw(p);
   const r = await env.DB.prepare("INSERT OR IGNORE INTO sms_inbox (id, received, text, parsed) VALUES (?, ?, ?, ?)")
     .bind(id, Math.floor(Date.now() / 1000), text, JSON.stringify(parsed)).run();
+  const m = await metaAll(env);
+  if (m.active) await smsToLedger(env, m); // 가계부가 D1으로 옮겨졌으면 바로 거래로
   return { saved: r.meta.changes > 0, duplicate: r.meta.changes === 0, id,
     summary: `${parsed.card} ${parsed.type} ${parsed.currency ? parsed.currency + " " + parsed.foreign : parsed.amount.toLocaleString("ko-KR") + "원"} ${parsed.merchant}` };
+}
+
+// ── 가계부 (주인 전용, 2단계): 전환(active) 뒤엔 D1이 원본, 구글 시트는 한 시간마다 채우는 백업 ──
+// 시트 Code.gs와 같은 규칙: 저장 검사(check_), 결제유형(카테고리 H:I), 할부 진행(L열 수식), 반복(runRecurring_), 문자(smsTx_), 위젯 요약(summary_)
+const TYPES = ["지출", "수입", "환불", "이체"];
+const LEDGER_READ = ["ledger", "summary"], LEDGER_WRITE = ["save", "delete", "recSave", "recDelete", "budget", "cardGoal"];
+const LEDGER_SERVICE = ["ledgerImport", "ledgerVerify", "ledgerActivate", "ledgerDeactivate", "ledgerMeta", "ledgerExport"];
+const kst = () => new Date(Date.now() + 9 * 3600e3).toISOString(); // "2026-11-27T16:00…" (한국 시간)
+const nextMonth = (m) => { const [y, mo] = m.split("-").map(Number); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`; };
+const daysIn = (m) => { const [y, mo] = m.split("-").map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate(); };
+const t200 = (v, n = 200) => String(v ?? "").trim().slice(0, n);
+const won = (v) => Math.round(Number(String(v ?? "").replace(/,/g, "")) || 0);
+async function metaAll(env) {
+  const o = {};
+  for (const r of (await env.DB.prepare("SELECT key,value FROM ledger_meta").all()).results) o[r.key] = JSON.parse(r.value);
+  return o;
+}
+const metaSet = (env, key, value) => env.DB.prepare("INSERT INTO ledger_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(key, JSON.stringify(value));
+const touched = (env) => metaSet(env, "ver", Date.now()); // 시트 백업이 바뀐 게 있을 때만 다시 쓰게
+const publicMeta = (m) => ({ cats: m.cats || [], budgets: m.budgets || {}, cards: m.cards || [], payments: m.payments || [], rules: m.rules || [], recurring: m.recurring || [] });
+function txIn(i) {
+  const amount = won(i?.amount), inst = Math.round(Number(i?.inst) || 0);
+  check(i && t200(i.id, 100) && /^\d{4}-\d{2}-\d{2}$/.test(i.date) && TYPES.includes(i.type) && amount > 0 && t200(i.major), "입력값 오류");
+  return { id: t200(i.id, 100), date: i.date, time: /^\d{2}:\d{2}$/.test(i.time || "") ? i.time : "", type: i.type, major: t200(i.major), minor: t200(i.minor),
+    content: t200(i.content), pay: t200(i.pay), amount, memo: t200(i.memo, 500), orig: t200(i.orig), inst: inst >= 2 ? inst : 0 };
+}
+// 새 거래는 맨 뒤(seq), 고친 거래는 자리 그대로. 원본분류(K열)는 값이 올 때만 바꿈 (앱은 안 보냄)
+const upsertTx = (env, x, rev = Date.now()) => env.DB.prepare(`INSERT INTO ledger_tx(id,date,time,type,major,minor,content,pay,amount,memo,orig,inst,seq,rev)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,(SELECT coalesce(max(seq),0)+1 FROM ledger_tx),?)
+  ON CONFLICT(id) DO UPDATE SET date=excluded.date,time=excluded.time,type=excluded.type,major=excluded.major,minor=excluded.minor,content=excluded.content,
+  pay=excluded.pay,amount=excluded.amount,memo=excluded.memo,orig=CASE WHEN excluded.orig<>'' THEN excluded.orig ELSE ledger_tx.orig END,inst=excluded.inst,rev=excluded.rev`)
+  .bind(x.id, x.date, x.time, x.type, x.major, x.minor, x.content, x.pay, x.amount, x.memo, x.orig, x.inst, rev);
+function txOut(r, payTypes, ym) {
+  const k = ym - (Number(r.date.slice(0, 4)) * 12 + Number(r.date.slice(5, 7))) + 1; // 시트 L열 수식과 같은 회차
+  return { id: r.id, date: r.date, time: r.time, type: r.type, major: r.major, minor: r.minor, content: r.content,
+    payType: r.pay ? payTypes.get(r.pay) ?? "미지정" : "", pay: r.pay, amount: r.amount, memo: r.memo,
+    inst: r.inst >= 2 ? r.inst : "", instState: r.inst >= 2 && Number.isFinite(k) ? (k > r.inst ? "완료" : `${k}/${r.inst}회차`) : "" };
+}
+// 반복 거래: 지정일이 지난 달마다 한 번씩 (id = rec-규칙id-월 이라 여러 번 돌아도 중복 없음). 하루 한 번 또는 규칙을 바꿨을 때
+async function runRecurring(env, m, force) {
+  const today = kst().slice(0, 10), cur = today.slice(0, 7);
+  if (!force && m.recRun === today) return;
+  const rec = m.recurring || [], batch = [];
+  for (const r of rec) {
+    if (!r.id || !(won(r.amount) > 0) || !TYPES.includes(r.type)) continue;
+    let mo = r.done ? nextMonth(r.done) : r.start || cur;
+    while (mo <= cur && (!r.end || mo <= r.end)) {
+      const date = `${mo}-${String(Math.min(Math.max(1, won(r.day)), daysIn(mo))).padStart(2, "0")}`;
+      if (date > today) break;
+      batch.push(env.DB.prepare(`INSERT OR IGNORE INTO ledger_tx(id,date,time,type,major,minor,content,pay,amount,memo,seq,rev)
+        VALUES(?,?,'',?,?,?,?,?,?,'반복',(SELECT coalesce(max(seq),0)+1 FROM ledger_tx),?)`)
+        .bind(`rec-${r.id}-${mo}`, date, r.type, t200(r.major), t200(r.minor), t200(r.content), t200(r.pay), won(r.amount), Date.now()));
+      r.done = mo; mo = nextMonth(mo);
+    }
+  }
+  batch.push(metaSet(env, "recurring", rec), metaSet(env, "recRun", today));
+  if (batch.length > 2) batch.push(touched(env));
+  await env.DB.batch(batch);
+  m.recurring = rec; m.recRun = today;
+}
+// 카드 문자 → 거래 (시트 smsTx_와 같은 규칙). 외화는 환율을 못 받으면 보관함에 남겨 다음에 다시
+function smsTx(id, p, m) {
+  const kw = { 롯데: /롯데/, 현대: /현대/, 국민: /국민|KB/i }[p.card];
+  const pay = ((m.payments || []).find((x) => kw && kw.test(x[0])) || [])[0] || p.card + "카드";
+  const text = String(p.merchant || ""), majors = [...new Set((m.cats || []).map((c) => c[0]))];
+  const rule = (m.rules || []).find((r) => r[0] && text.toLowerCase().includes(String(r[0]).toLowerCase()) && (!r[1] || r[1] === p.type) && majors.includes(r[2]));
+  return { id, date: p.date, time: p.time, type: p.type, major: rule ? rule[2] : majors.find((x) => /미분류|기타/.test(x)) || majors[0] || "기타",
+    minor: rule ? rule[3] || "" : "", content: p.type === "환불" ? text + " 취소" : text, pay, amount: p.amount, inst: p.inst || 0,
+    memo: ["문자 자동", p.currency ? `${p.currency} ${p.foreign}${p.rate ? " · 환율 " + p.rate : ""}` : ""].filter(Boolean).join(" · ") };
+}
+async function smsToLedger(env, m) {
+  const items = (await env.DB.prepare("SELECT id, parsed FROM sms_inbox WHERE status='new' ORDER BY received LIMIT 50").all()).results;
+  for (const x of items) {
+    let p = JSON.parse(x.parsed);
+    if (p.currency && !p.amount) p = await toKrw(p);
+    if (!(p.amount > 0)) continue;
+    await env.DB.batch([upsertTx(env, txIn(smsTx(x.id, p, m))), env.DB.prepare("UPDATE sms_inbox SET status='done', note='', text='', parsed='{}' WHERE id=?").bind(x.id), touched(env)]);
+  }
+}
+async function ledger(env, b, service) {
+  const sql = (s, ...a) => env.DB.prepare(s).bind(...a), action = b.action;
+  if (LEDGER_SERVICE.includes(action) || b.what === "ledgerExport") check(service, "로그인이 필요해요");
+  const m = await metaAll(env);
+  // 시트 → D1 옮기기: 비우고(reset) 나눠 받기 → 건수·합계 확인 → 켜기. 켜진 뒤엔 다시 옮기지 않음 (덮어쓰기 방지)
+  if (action === "ledgerImport") {
+    check(!m.active && Array.isArray(b.rows) && b.rows.length <= 1000, "입력값 오류");
+    const batch = b.reset ? [sql("DELETE FROM ledger_tx")] : [];
+    for (const r of b.rows) { // 시트에 있던 줄은 검사 없이 그대로 (예전 기록이 규칙에 안 맞아도 잃지 않게). id만 꼭 있어야 함
+      check(t200(r?.id, 100), "입력값 오류");
+      const x = { id: t200(r.id, 100), date: t200(r.date, 20), time: t200(r.time, 10), type: t200(r.type, 20), major: t200(r.major), minor: t200(r.minor),
+        content: t200(r.content), pay: t200(r.pay), amount: won(r.amount), memo: t200(r.memo, 500), orig: t200(r.orig), inst: Math.round(Number(r.inst) || 0) };
+      batch.push(sql(`INSERT OR REPLACE INTO ledger_tx(id,date,time,type,major,minor,content,pay,amount,memo,orig,inst,seq,rev) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+        x.id, x.date, x.time, x.type, x.major, x.minor, x.content, x.pay, x.amount, x.memo, x.orig, x.inst, Number(r.seq) || 0));
+    }
+    if (b.meta) for (const k of ["cats", "payments", "rules", "budgets", "budgetMajors", "recurring", "cards"]) if (b.meta[k] !== undefined) batch.push(metaSet(env, k, b.meta[k]));
+    if (b.recRun) batch.push(metaSet(env, "recRun", b.recRun));
+    await env.DB.batch(batch);
+    return {};
+  }
+  if (action === "ledgerVerify") return await sql("SELECT count(*) count, coalesce(sum(amount),0) sum FROM ledger_tx").first();
+  if (action === "ledgerActivate" || action === "ledgerDeactivate") {
+    await env.DB.batch([metaSet(env, "active", action === "ledgerActivate"), touched(env)]);
+    if (action === "ledgerActivate") await smsToLedger(env, m); // 옮기는 동안 온 문자
+    return { active: action === "ledgerActivate" };
+  }
+  // 카테고리·결제수단·분류규칙은 시트에서 고침 → 시트가 바뀔 때 알려 줌
+  if (action === "ledgerMeta") {
+    const same = (k) => JSON.stringify(m[k]) === JSON.stringify(b[k]); // 그대로면 안 씀 (백업이 매시간 시트를 다시 쓰지 않게)
+    const batch = ["cats", "payments", "rules", "budgetMajors"].filter((k) => Array.isArray(b[k]) && !same(k)).map((k) => metaSet(env, k, b[k]));
+    if (b.budgets && typeof b.budgets === "object" && !same("budgets")) batch.push(metaSet(env, "budgets", b.budgets));
+    if (batch.length) await env.DB.batch([...batch, touched(env)]);
+    return {};
+  }
+  if (b.what === "ledgerExport") { // 시트 백업용: 바뀐 게 없으면(ver 같음) 줄은 안 보냄. 앱을 안 열어도 반복·문자가 채워지게 먼저 돌림
+    if (m.active) { await runRecurring(env, m); await smsToLedger(env, m); Object.assign(m, await metaAll(env)); }
+    if (b.ver && String(b.ver) === String(m.ver)) return { same: true, ver: m.ver };
+    return { ver: m.ver || 0, active: !!m.active, rows: (await sql("SELECT id,date,time,type,major,minor,content,pay,amount,memo,orig,inst FROM ledger_tx ORDER BY seq").all()).results, meta: publicMeta(m), budgetMajors: m.budgetMajors || [] };
+  }
+  check(m.active, "가계부를 옮기는 중이에요 · 잠시 후 다시 해 주세요");
+  if (LEDGER_WRITE.includes(action)) {
+    const batch = [];
+    if (action === "save") batch.push(upsertTx(env, txIn(b.item)));
+    else if (action === "delete") batch.push(sql("DELETE FROM ledger_tx WHERE id=?", String(b.id || "")));
+    else if (action === "budget") {
+      const major = String(b.major || "");
+      check((m.budgetMajors || Object.keys(m.budgets || {})).includes(major), "입력값 오류: 카테고리 탭에 없는 대분류");
+      batch.push(metaSet(env, "budgets", { ...(m.budgets || {}), [major]: Math.max(0, won(b.amount)) }));
+    } else if (action === "cardGoal") {
+      const cards = m.cards || [], c = cards.find((x) => x.name === String(b.name || ""));
+      check(c, "입력값 오류: 없는 카드");
+      c.goal = Math.max(0, won(b.goal));
+      batch.push(metaSet(env, "cards", cards));
+    } else if (action === "recSave") {
+      const r = b.rule || {};
+      check(r.id && t200(r.content) && TYPES.includes(r.type) && won(r.amount) > 0 && won(r.day) >= 1 && won(r.day) <= 31 &&
+        /^\d{4}-\d{2}$/.test(r.start) && (!r.end || /^\d{4}-\d{2}$/.test(r.end)), "입력값 오류");
+      const rec = m.recurring || [], old = rec.find((x) => x.id === String(r.id));
+      const next = { id: String(r.id).slice(0, 100), content: t200(r.content), type: r.type, major: t200(r.major), minor: t200(r.minor), pay: t200(r.pay),
+        amount: won(r.amount), day: won(r.day), start: r.start, end: r.end || "", done: old?.done || "" };
+      m.recurring = old ? rec.map((x) => (x === old ? next : x)) : [...rec, next];
+      batch.push(metaSet(env, "recurring", m.recurring));
+    } else if (action === "recDelete") batch.push(metaSet(env, "recurring", (m.recurring || []).filter((x) => x.id !== String(b.id))));
+    await env.DB.batch([...batch, touched(env)]);
+    if (action === "recSave") await runRecurring(env, m, true);
+    return { wrote: true };
+  }
+  await runRecurring(env, m);
+  await smsToLedger(env, m);
+  const now = kst(), today = now.slice(0, 10), ym = Number(today.slice(0, 4)) * 12 + Number(today.slice(5, 7));
+  if (b.what === "summary") { // 위젯: 오늘·이번 달 쓴 돈, 예산, 카드 실적 (시트 summary_와 같은 계산)
+    const mon = today.slice(0, 7), cards = (m.cards || []).map((c) => ({ ...c, spent: 0 }));
+    let day = 0, month = 0;
+    for (const r of (await sql("SELECT date,type,pay,amount FROM ledger_tx WHERE date>=? AND date<?", mon + "-01", nextMonth(mon) + "-01").all()).results) {
+      const n = r.type === "지출" ? r.amount : r.type === "환불" ? -r.amount : 0;
+      month += n; if (r.date === today) day += n;
+      const c = n && cards.find((x) => new RegExp(x.match, "i").test(r.pay)); if (c) c.spent += n;
+    }
+    const budget = Object.values(m.budgets || {}).reduce((s, v) => s + won(v), 0), daysLeft = daysIn(mon) - Number(today.slice(8, 10)) + 1;
+    return { date: today, today: day, month, budget, left: budget - month, daily: budget ? Math.max(0, Math.round((budget - (month - day)) / daysLeft)) : 0,
+      cards: cards.map((c) => ({ name: c.name, goal: c.goal, spent: c.spent })) };
+  }
+  // 가계부: since=날짜 이후만 보내고, 그 전은 지문(old.h)만. 지문 = 건수·합계·마지막 수정·이번 달(할부 회차가 달마다 바뀜)
+  const since = /^\d{4}-\d{2}-\d{2}$/.test(b.since || "") ? b.since : "", full = !since || String(b.full) === "1";
+  const payTypes = new Map((m.payments || []).map((p) => [p[0], p[1]]));
+  const rowsOut = (await (full ? sql("SELECT * FROM ledger_tx ORDER BY seq") : sql("SELECT * FROM ledger_tx WHERE date>=? ORDER BY seq", since)).all()).results;
+  let old = null;
+  if (since) {
+    const o = await sql("SELECT count(*) n, coalesce(sum(amount),0) s, coalesce(max(rev),0) r FROM ledger_tx WHERE date<?", since).first();
+    old = { since, h: `d1:${o.n}:${o.s}:${o.r}:${ym}` };
+  }
+  return { items: rowsOut.map((r) => txOut(r, payTypes, ym)), full, old, meta: publicMeta(m) };
 }
 
 async function dispatch(env, b, authorization) {
@@ -276,6 +449,7 @@ async function dispatch(env, b, authorization) {
   // 시트가 문자 보관함에서 새 결제를 가져가고(smsPull) 다 쓴 것을 알려 줌(smsAck). 시트 연결 비밀값으로만
   if (action === "smsPull") {
     check(service);
+    if ((await metaAll(env)).active) return { items: [] }; // 가계부가 D1에 있으면 시트는 문자를 쓰지 않음 (두 번 적히지 않게)
     const items = (await rows("SELECT id, parsed FROM sms_inbox WHERE status='new' ORDER BY received LIMIT 50")).map((x) => ({ id: x.id, parsed: JSON.parse(x.parsed) }));
     for (const x of items) if (x.parsed.currency && !x.parsed.amount) { x.parsed = await toKrw(x.parsed); await sql("UPDATE sms_inbox SET parsed=? WHERE id=?", JSON.stringify(x.parsed), x.id).run(); }
     return { items: items.filter((x) => x.parsed.amount > 0) };
@@ -297,7 +471,7 @@ async function dispatch(env, b, authorization) {
         : null;
   check(me, "로그인이 필요해요");
   // 주인 출입증으로 친구 서버에서 할 수 있는 건 책·영화 검색뿐 (나머지는 시트를 거침)
-  check(service || me.id !== owner || (!action && ["book", "movie"].includes(b.what)), "로그인이 필요해요");
+  check(service || me.id !== owner || (!action && ["book", "movie", ...LEDGER_READ].includes(b.what)) || LEDGER_WRITE.includes(action), "로그인이 필요해요");
   if (action === "session") { // 예전 접속코드 → 출입증으로 바꾸기
     check(!me.hash && me.id !== owner);
     return { role: "friend", name: me.name, token: await newSession(env, me.id, now) };
@@ -315,6 +489,10 @@ async function dispatch(env, b, authorization) {
       await sql("UPDATE sessions SET expires=?, created=-1 WHERE hash=?", Math.min(me.expires, now + GRACE_SEC), me.hash).run(); // 이미 보낸 요청이 끊기지 않게 2분만 더
     } else if (me.expires - now < SESSION_SEC - 86400)
       await sql("UPDATE sessions SET expires=? WHERE hash=?", now + SESSION_SEC, me.hash).run();
+  }
+  if ((!action && LEDGER_READ.includes(b.what)) || b.what === "ledgerExport" || LEDGER_WRITE.includes(action) || LEDGER_SERVICE.includes(action)) {
+    check(service || me.id === owner, "가계부는 주인만 볼 수 있어요");
+    return ledger(env, b, service);
   }
   if (!action && b.what === "movie") return movieSearch(env, b.q);
   if (!action && b.what === "book") return bookSearch(env, b.q);
