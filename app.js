@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-const APP_VERSION = 'gagyebu-v111'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
+const APP_VERSION = 'gagyebu-v112'; // sw.js의 CACHE와 같아야 함 (tests/version.js가 확인)
 // 터치로 연 창의 자동 포커스와 키보드로 이동한 위치를 구분한다.
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
@@ -61,7 +61,13 @@ if (fromLink && switchConnection(fromLink)) history.replaceState(null, '', locat
 navigator.storage?.persist?.(); // 브라우저가 저장 데이터를 임의로 지우지 않게 요청
 // 누구로 연결했나: 주인(가계부까지) / 친구(접속코드, 취미 기록·습관만). 시트에 물어보기 전엔 코드 모양(f + 11자리)으로 짐작
 let me = store.get('me', {});
-const isFriend = () => me.token === cfg.token ? me.role === 'friend' : /^f[0-9a-f]{11}$/.test(cfg.token || '');
+const isFriend = () => me.token === cfg.token ? me.role === 'friend' : /^(f[0-9a-f]{11}|sf\..+)$/.test(cfg.token || '');
+// 로그인 출입증(세션)만 바꿔 끼움 (같은 계정이라 기기에 저장된 기록·저장 대기는 그대로)
+function setToken(t) {
+  const old = cfg.token; cfg.token = t; store.set('cfg', cfg);
+  if (me.token === old) { me.token = t; store.set('me', me); }
+}
+const isSession = t => /^s[of]\./.test(t || '');
 const people = () => (me.token === cfg.token && me.people) || [];
 // 시트(원본)의 화면용 사본. meta = 카테고리·예산·결제수단·분류규칙·반복
 let data = store.get('data2', { items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } });
@@ -289,7 +295,8 @@ async function call(body, qs = '', direct = '') {
   } finally { clearTimeout(timer); }
   let r;
   try { r = JSON.parse(text); } catch { throw new Error(`시트가 알 수 없는 응답을 보냈어요 (HTTP ${res.status}) ${text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)}`); }
-  if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호/.test(r.error) });
+  if (!r.ok && /비밀번호가 맞지 않습니다|로그인이 필요해요/.test(r.error) && isSession(cfg.token)) showLogin('로그인 기간이 끝났어요 · 다시 로그인해 주세요');
+  if (!r.ok) throw Object.assign(new Error(r.error || '서버 오류'), { rejected: !r.retry && !/비밀번호|로그인/.test(r.error) });
   if(direct && r.role==='friend') r.workerUrl=direct;
   return r;
 }
@@ -1002,7 +1009,16 @@ async function unlock(auto) {
 const lockNow = () => { if (store.get('lockId') && cfg.token && !$('#lock').open && !unlocking && Date.now() - ss.get('unlockedAt') > 120e3) { $('#lock').showModal(); $('#lockPw').pw.value = ''; setTimeout(() => unlock(true), 150); } };
 $('#lock').addEventListener('cancel', e => e.preventDefault()); // Esc로 못 닫게
 $('#unlock').addEventListener('click', () => unlock());
-$('#lockPw').addEventListener('submit', e => { e.preventDefault(); if (e.target.pw.value === cfg.token) unlocked(); else toast('비밀번호가 맞지 않아요'); });
+// 비밀번호로 열기: 기기엔 비밀번호가 없으니 서버에 확인 → 새 출입증으로 바꾸고 예전 것은 끝냄
+$('#lockPw').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    const r = await pub({ action: 'login', name: me.name || '', password: e.target.pw.value });
+    if (r.name !== me.name || r.role !== me.role) throw new Error();
+    const old = cfg.token; setToken(r.token); pub({ action: 'logout', token: old }).catch(() => {});
+    unlocked();
+  } catch (err) { toast('비밀번호가 맞지 않아요'); }
+});
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (!unlocking) hiddenAt = Date.now(); } else if (hiddenAt && Date.now() - hiddenAt > 60e3) lockNow(); }); // 1분 넘게 나갔다 오면 다시 잠금
 $('#lockOn').addEventListener('change', async e => {
@@ -1030,8 +1046,11 @@ function showLogin(msg) {
 }
 $('#login').addEventListener('cancel', e => e.preventDefault()); // Esc로도 못 닫음
 async function loggedIn(r, url = cfg.url || SHEET_URL) {
-  const changing = cfg.token && (cfg.token !== r.token || cfg.url !== url);
-  if (!switchConnection({ url, token: r.token }, pending)) throw new Error('이전 계정의 저장 대기를 먼저 처리해 주세요');
+  // 같은 사람이 다시 로그인(출입증 만료 등)하면 출입증만 바꿈: 저장 대기·기기 사본을 그대로 둠
+  const same = !!cfg.token && !!me.name && r.name === me.name && r.role === me.role && cfg.url === url;
+  const changing = !same && cfg.token && (cfg.token !== r.token || cfg.url !== url);
+  if (same) setToken(r.token);
+  else if (!switchConnection({ url, token: r.token }, pending)) throw new Error('이전 계정의 저장 대기를 먼저 처리해 주세요');
   if (changing) { location.replace(location.pathname); return; }
   me = { token: r.token, role: r.role, workerUrl:r.workerUrl || '', name: r.name, people: [], friends: [] }; store.set('me', me);
   ss.set('unlockedAt', Date.now()); // 방금 로그인했으면 Face ID 다시 안 물음
@@ -1074,6 +1093,17 @@ function hello(name, ready = Promise.resolve()) {
 async function logout() {
   const left = pending.length ? `\n아직 시트에 못 보낸 ${pending.length}건은 사라져요.` : '';
   if (!(await ask('로그아웃할까요?' + left, { ok: '로그아웃', danger: true }))) return;
+  if (cfg.token) pub({ action: 'logout', token: cfg.token }).catch(() => {}); // 이 기기 출입증을 서버에서도 끝냄
+  endLocal();
+}
+// 모든 기기에서 로그아웃: 서버의 내 출입증을 전부 끝냄 (휴대폰을 잃어버렸을 때 등)
+$('#prefLogoutAll').addEventListener('click', async () => {
+  const left = pending.length ? `\n이 기기에서 아직 시트에 못 보낸 ${pending.length}건은 사라져요.` : '';
+  if (!(await ask('이 기기를 포함해 로그인된 모든 기기에서 로그아웃할까요?\n휴대폰을 잃어버렸거나 다른 사람이 쓰는 것 같을 때 쓰세요.' + left, { ok: '모두 로그아웃', danger: true }))) return;
+  try { await pub({ action: 'logoutAll', token: cfg.token }); } catch (e) { return toast('지금은 할 수 없어요 · 인터넷 연결을 확인해 주세요'); }
+  endLocal();
+});
+function endLocal() {
   clearAccount();
   cfg = { url: cfg.url, token: '' }; store.set('cfg', cfg); me = {};
   document.querySelectorAll('dialog[open]').forEach(d => d.id !== 'login' && d.close());
@@ -1914,6 +1944,7 @@ async function loadMe() {
     if(cfg.token!==token || cfg.url!==url) return;
     loadedAt.me = Date.now();
     if (!r.role) return; // 예전 Code.gs
+    if (isSession(r.token)) setToken(r.token); // 서버가 출입증을 새것으로 바꿔 줌 (7일마다)
     me = { token: cfg.token, role: r.role, workerUrl:r.workerUrl || '', name: r.name || '', people: r.people || [], friends: r.friends || [], social: r.social }; store.set('me', me);
   } catch (e) { return; }
   applyRole();
@@ -2494,6 +2525,8 @@ if (invite) {
   }).catch(err => showLogin(err.message));
 } else if (!cfg.token) showLogin(); // 로그인 전이면 로그인 화면
 else lockNow();
+// 예전 방식(기기에 비밀번호·접속코드를 그대로 저장) → 출입증으로 바꿈. 안 되면 다음에 앱을 열 때 다시 (틀린 비밀번호면 상태 줄이 알려 줌)
+if (cfg.token && !isSession(cfg.token)) pub({ action: 'session', token: cfg.token }).then(r => { if (isSession(r.token)) setToken(r.token); }).catch(() => {});
 // 앱을 켜면 처음엔 「오늘」 (설정 → 시작 화면에서 가계부·마지막 화면으로 바꿀 수 있음). ?sec= 바로가기는 그대로
 // ── 친구 탭: 친구 신청·수락, 친구 집 놀러 가기 (친구가 공개한 작품이 방마다 선반에) ──
 const HOUSE_LISTS = ['book', 'escape', 'board', 'movie', 'play', 'buy', 'escapeWant', 'boardWant', 'movieWant', 'playWant'];

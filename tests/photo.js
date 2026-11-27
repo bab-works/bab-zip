@@ -10,7 +10,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const posts = [];
 
   await p.route('https://script.google.com/**', rt => { const q = rt.request();
-    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); posts.push(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, wrote: true }) }); }
+    if (q.method() === 'POST') { const o = JSON.parse(q.postData()); (x => x.action !== 'session' && posts.push(x))(o); return rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, wrote: true }) }); }
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, items, full: true, meta }) }); });
   await p.goto('http://localhost:8786/'); await p.waitForTimeout(800);
   // 파서: 은행 앱 목록 / 영수증 / 카드 문자

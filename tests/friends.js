@@ -88,7 +88,7 @@ assert.equal(post(JH, { action: 'habitCheck', habitId: 'h1234abcd', stamp: 20261
 post(MJ, { action: 'habitDelete', habitId: 'h1234abcd' }); assert.equal(get(MJ, 'habits').habits.length, 0);
 
 // 로그인: 주인은 이름 + 시트 비밀번호, 친구는 짧은 초대 링크(비밀번호 없음)로 들어와서 비밀번호를 정한 뒤 이름 + 비밀번호
-assert.equal(post(undefined, { action: 'login', name: '나리', password: OWNER }).token, OWNER);
+assert.match(post(undefined, { action: 'login', name: '나리', password: OWNER }).token, /^so\./, 'login gives a session, never the password');
 assert.equal(post(undefined, { action: 'login', name: '남', password: OWNER }).ok, false, 'owner name must match');
 assert.match(post(undefined, { action: 'login', name: '나리', password: 'x' }).error, /맞지 않아요/);
 const mjInv = get(OWNER, 'me').friends.find(f => f.name === '민지').invite; assert.match(mjInv, /^i[0-9a-f]{9}$/);
@@ -129,9 +129,9 @@ assert.equal(post(JH, { action: 'friendRemove', name: '민지' }).ok, true);
 assert.equal(get(JH, 'house', { name: '민지' }).ok, false); assert.equal(get(JH, 'lists').lists.escape.length, 0);
 post(MJ, { action: 'setPub', list: 'escape', id: 'e1', on: false }); assert.equal(get(OWNER, 'house', { name: '민지' }).house.items.escape.length, 0);
 // 주인 비밀번호 바꾸기 → 새 토큰으로만
-const np = post(OWNER, { action: 'setPassword', password: 'newpw1' }); assert.equal(np.token, 'newpw1');
-assert.equal(get(OWNER, 'me').ok, false); assert.equal(get('newpw1', 'me').role, 'owner');
-assert.equal(post('newpw1', { action: 'setPassword', password: OWNER }).ok, true); // 원래대로
+const np = post(OWNER, { action: 'setPassword', password: 'newpw1' }); assert.match(np.token, /^so\./);
+assert.equal(get(OWNER, 'me').ok, false); assert.equal(get('newpw1', 'me').role, 'owner'); assert.equal(get(np.token, 'me').role, 'owner');
+assert.equal(post(np.token, { action: 'setPassword', password: OWNER }).ok, true); // 원래대로
 
 // 초대 취소 → 그 코드는 더 못 씀
 post(OWNER, { action: 'uninvite', code: JH }); assert.equal(get(JH, 'lists').ok, false);
@@ -151,4 +151,38 @@ assert.equal(post(MJ,{action:'promoteSnapshot'}).ok,false);
 post(OWNER,{action:'invite',name:'가짜'});
 assert.equal(forwarded.at(-1).body.token,undefined);
 assert.ok(forwarded.at(-1).headers.Authorization);
+// 주인 출입증(세션): 로그인 → so.…, 쓸 때마다 30일 연장, 30일 넘게 안 쓰면 끝, 7일 넘으면 새것으로, 로그아웃·모든 기기·비밀번호 변경은 즉시 끝
+{
+  const H = t => require('crypto').createHash('sha256').update(t).digest('hex'), S = () => JSON.parse(props.SESSIONS || '{}');
+  // (이 테스트 앞부분이 다른 모드로 바꿔 놨을 수 있어서 시트 모드로 로그인)
+  props.FRIEND_MODE = ''; props.OWNER_NAME = '나리';
+  const login = pw => post(undefined, { action: 'login', name: '나리', password: pw });
+  const t1 = login('owner-pw').token; assert.match(t1, /^so\.[0-9a-f]{64}$/);
+  assert.ok(!props.SESSIONS.includes(t1) && !props.SESSIONS.includes('owner-pw'), 'only hashes are stored');
+  assert.equal(get(t1, 'me').role, 'owner');
+  // 슬라이딩: 남은 기간이 하루 넘게 줄었으면 쓸 때 다시 30일
+  let s = S(); s[H(t1)].e = Date.now() + 3 * 864e5; props.SESSIONS = JSON.stringify(s);
+  get(t1, 'summary'); assert.ok(S()[H(t1)].e > Date.now() + 29 * 864e5, 'use pushes expiry to 30 days');
+  s = S(); s[H(t1)].e = Date.now() - 1; props.SESSIONS = JSON.stringify(s);
+  assert.equal(get(t1, 'me').ok, false, '30 days unused → signed out');
+  // 7일 넘은 출입증: 앱을 열 때(me) 새것, 예전 것은 2분만
+  const t2 = login('owner-pw').token; s = S(); s[H(t2)].c = Date.now() - 8 * 864e5; props.SESSIONS = JSON.stringify(s);
+  const t3 = get(t2, 'me').token; assert.match(t3, /^so\./); assert.notEqual(t3, t2);
+  assert.ok(S()[H(t2)].e <= Date.now() + 120e3, 'old one lives 2 more minutes'); assert.equal(get(t2, 'lists').ok, true);
+  assert.equal(get(t2, 'me').token, undefined, 'old one is not rotated twice'); assert.ok(S()[H(t2)].e <= Date.now() + 120e3, 'nor extended');
+  assert.equal(get(t3, 'me').token, undefined, 'fresh token not rotated again');
+  // 로그아웃: 그 기기만
+  const t4 = login('owner-pw').token;
+  post(t4, { action: 'logout' }); assert.equal(get(t4, 'me').ok, false); assert.equal(get(t3, 'me').role, 'owner', 'other devices stay');
+  // 예전 앱이 들고 있던 비밀번호 → 출입증으로 바꾸기 (기존 비밀번호 그대로)
+  const t5 = post(undefined, { action: 'session', token: 'owner-pw' }).token; assert.match(t5, /^so\./);
+  assert.equal(post(undefined, { action: 'session', token: 'wrong' }).ok, false);
+  // 모든 기기에서 로그아웃
+  post(t5, { action: 'logoutAll' }); assert.equal(get(t3, 'me').ok, false); assert.equal(get(t5, 'me').ok, false);
+  // 비밀번호 변경: 모든 출입증 끝, 이 기기엔 새 출입증
+  const t6 = login('owner-pw').token, t7 = login('owner-pw').token;
+  const t8 = post(t6, { action: 'setPassword', password: 'new-pw-1' }).token;
+  assert.match(t8, /^so\./); assert.equal(get(t6, 'me').ok, false); assert.equal(get(t7, 'me').ok, false); assert.equal(get(t8, 'me').role, 'owner');
+  assert.equal(login('owner-pw').ok, false); assert.match(login('new-pw-1').token, /^so\./);
+}
 console.log('FRIENDS OK');

@@ -4,11 +4,54 @@ const TYPES = ['지출', '수입', '환불', '이체'];
 // 비밀번호: setupSheet()가 만든 스크립트 속성 APP_TOKEN이 있으면 그걸, 없으면 위 TOKEN. 처음 문구 그대로면 아무도 못 들어옴
 const PLACEHOLDER = '여기에-나만-아는-비밀번호를-적으세요';
 // 비밀번호는 스크립트 속성 APP_TOKEN에만 둠 (코드에 남기지 않음). 예전 배포가 코드에 넣어 둔 값이 있으면 처음 한 번 속성으로 옮김
-const authOk_ = t => {
+const pwOk_ = t => {
   const p = PropertiesService.getScriptProperties(); let k = p.getProperty('APP_TOKEN');
   if (!k && TOKEN !== PLACEHOLDER) { p.setProperty('APP_TOKEN', TOKEN); k = TOKEN; }
   return !!t && !!k && k !== PLACEHOLDER && String(t) === k;
 };
+// 로그인하면 비밀번호 대신 출입증(so.…)을 줌. 시트엔 출입증의 SHA-256과 {e: 만료, c: 만든 때}만 (스크립트 속성 SESSIONS)
+// 슬라이딩: 쓸 때마다 마지막 사용 + 30일(기록은 하루 한 번). 30일 넘게 안 쓰면 끝. 7일 넘은 출입증은 앱을 열 때(what=me) 새것으로 교체
+// 예전 앱이 비밀번호를 그대로 들고 오는 건 LEGACY_UNTIL_까지만 받음 (그 전에 앱이 알아서 출입증으로 바꿈)
+const SESSION_MS_ = 30 * 864e5, ROTATE_MS_ = 7 * 864e5, GRACE_MS_ = 120e3, LEGACY_UNTIL_ = Date.parse('2027-01-01T00:00:00+09:00');
+const sha_ = s => Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s)).map(b => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+const sessions_ = () => { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('SESSIONS') || '{}'); } catch (_) { return {}; } };
+const saveSessions_ = s => PropertiesService.getScriptProperties().setProperty('SESSIONS', JSON.stringify(s));
+const authOk_ = t => {
+  t = String(t || '');
+  if (/^so\./.test(t)) { const x = sessions_()[sha_(t)]; return !!x && x.e > Date.now(); }
+  return Date.now() < LEGACY_UNTIL_ && pwOk_(t);
+};
+const ownerWorker_ = () => friendMode_() === 'worker' && !!FRIEND_BRIDGE_;
+function newSession_() {
+  const token = 'so.' + Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''), now = Date.now(), s = sessions_();
+  Object.keys(s).forEach(k => { if (!s[k] || !(s[k].e > now)) delete s[k]; });
+  const keep = Object.keys(s).sort((a, b) => s[b].e - s[a].e).slice(0, 19), next = {}; keep.forEach(k => { next[k] = s[k]; }); // 기기 20대까지
+  const h = sha_(token), exp = now + SESSION_MS_; next[h] = { e: exp, c: now }; saveSessions_(next);
+  if (ownerWorker_()) workerCall_({ action: 'ownerSession', hash: h, expires: Math.floor(exp / 1000) }, true); // 친구 서버에서 책·영화 검색용
+  return token;
+}
+// 쓸 때마다 연장 (하루에 한 번만 기록). rotate면 7일 넘은 출입증을 새것으로 바꿔 돌려줌 (예전 것은 2분 뒤 끝)
+function renewSession_(t, rotate) {
+  if (!/^so\./.test(String(t))) return '';
+  const s = sessions_(), h = sha_(t), now = Date.now(), x = s[h];
+  if (!x || !(x.e > now) || x.r) return ''; // x.r: 이미 새것으로 바꾼 출입증 (2분 유예만, 연장 안 함)
+  if (rotate && now - x.c > ROTATE_MS_) {
+    x.e = Math.min(x.e, now + GRACE_MS_); x.r = 1; saveSessions_(s);
+    if (ownerWorker_()) workerCall_({ action: 'ownerSession', hash: h, expires: Math.floor(x.e / 1000) }, true);
+    return newSession_();
+  }
+  if (x.e - now > SESSION_MS_ - 864e5) return '';
+  x.e = now + SESSION_MS_; saveSessions_(s);
+  if (ownerWorker_()) workerCall_({ action: 'ownerSession', hash: h, expires: Math.floor(x.e / 1000) }, true);
+  return '';
+}
+// 로그아웃: 이 기기 출입증만 / 모든 기기 (친구 서버에 알려 둔 것까지)
+function endSessions_(t, all) {
+  const s = sessions_(), h = sha_(t);
+  if (all) saveSessions_({}); else { delete s[h]; saveSessions_(s); }
+  if (ownerWorker_()) workerCall_(all ? { action: 'dropOwnerSessions' } : { action: 'dropOwnerSessions', hashes: [h] }, true);
+  return { ok: true, wrote: true };
+}
 // 거래 탭 열 위치 (A 날짜 · B 시간 · C 구분 · D 대분류 · E 소분류 · F 내용 · G 결제유형(수식) · H 결제수단 · I 금액 · J 메모 · K 원본분류 · L 할부 · M~O 수식 · P id)
 // G·M·N·O 열은 시트 수식이 채우므로 절대 쓰지 않음. 열 구성이 다르면 아무것도 쓰지 않고 멈춤
 const ID_COL = 16;
@@ -178,7 +221,7 @@ function login_(b) {
   if (!name || !pw) throw new Error('아이디와 비밀번호를 넣어 주세요');
   if (cache && +(cache.get(key) || 0) >= 10) throw new Error('너무 많이 틀렸어요 · 10분 뒤에 다시 해 주세요');
   const owner = ownerName_();
-  if (authOk_(pw) && (!owner || owner === name)) { if (!owner) PropertiesService.getScriptProperties().setProperty('OWNER_NAME', name); return { token: pw, role: 'owner', name }; }
+  if (pwOk_(pw) && (!owner || owner === name)) { if (!owner) PropertiesService.getScriptProperties().setProperty('OWNER_NAME', name); return { token: newSession_(), role: 'owner', name }; }
   const f = friends_().find(x => x.name === name && x.pw && x.pw === pwHash_(x.code, pw));
   if (f) return { token: f.code, role: 'friend', name: f.name };
   if (cache) cache.put(key, String(+(cache.get(key) || 0) + 1), 600);
@@ -194,7 +237,9 @@ function redeem_(b) {
 function setPassword_(me, b) {
   const pw = String(b.password || '');
   if (pw.length < 4 || pw.length > 40) throw new Error('입력값 오류: 비밀번호는 4~40자');
-  if (me.role === 'owner') { PropertiesService.getScriptProperties().setProperty('APP_TOKEN', pw); return { token: pw }; }
+  if (me.role === 'owner') { // 비밀번호를 바꾸면 모든 기기의 출입증을 끊고 이 기기엔 새 출입증
+    PropertiesService.getScriptProperties().setProperty('APP_TOKEN', pw); endSessions_('', true); return { token: newSession_() };
+  }
   const sh = ss_().getSheetByName(FRIEND_TAB_), i = body_(sh).findIndex(r => String(r[1]) === me.code);
   sh.getRange(1, 5).setValue('비밀번호'); sh.getRange(i + 2, 5).setValue(pwHash_(me.code, pw));
   return { token: me.code };
@@ -808,7 +853,7 @@ function workerRequired_(b) {
   return r;
 }
 function friendControl_(b) {
-  if (!FRIEND_BRIDGE_ || b.proof !== FRIEND_BRIDGE_ || !authOk_(b.token)) return {ok:false};
+  if (!FRIEND_BRIDGE_ || b.proof !== FRIEND_BRIDGE_ || !(authOk_(b.token) || pwOk_(b.token))) return {ok:false};
   if(b.command==='baseline' && !['freeze','worker'].includes(friendMode_())) {
     const sample=friends_()[0];
     if(!sample) return {ok:true,sample:false};
@@ -897,6 +942,7 @@ function doGet(e) {
     return writeOp_(b);
   }
   const mode=friendMode_(), owner=authOk_(e.parameter.token), what=e.parameter.what;
+  const rotated=owner ? renewSession_(e.parameter.token, what==='me') : '';
   if(mode==='freeze' && (!owner || ['me','lists','house'].includes(what))) return out_(waitFriends_());
   let me;
   if(mode==='worker') {
@@ -910,6 +956,7 @@ function doGet(e) {
       if(!['me','house','lists','habits'].includes(what)) return out_({ok:false,error:'친구 코드로는 볼 수 없어요'});
       const r=workerCall_({what,token:e.parameter.token,name:e.parameter.name},owner);
       if(r.ok && what==='me') r.workerUrl=FRIEND_WORKER_; // 주인도 책·영화 검색은 친구 서버로 바로
+      if(r.ok && rotated) r.token=rotated;
       return out_(r);
     } else if(what==='lists') {
       try{return out_(withLock_(()=>ownerListsWithTags_()));}catch(_){return out_(waitFriends_());}
@@ -919,7 +966,7 @@ function doGet(e) {
   try {
     if (e.parameter.what === 'me') {
       if (me.role === 'owner') ensureInvites_();
-      return out_({ ok: true, role: me.role, name: me.name, people: myPeople_(me), social: social_(me), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
+      return out_({ ok: true, ...(rotated && { token: rotated }), role: me.role, name: me.name, people: myPeople_(me), social: social_(me), friends: me.role === 'owner' ? friends_().map(f => ({ name: f.name, code: f.code, invite: f.invite })) : undefined });
     }
     if (me.role === 'friend' && !['escape', 'book', 'board', 'movie', 'habits', 'lists', 'house'].includes(e.parameter.what)) return out_({ ok: false, error: '친구 코드로는 가계부를 볼 수 없어요' });
     if (e.parameter.what === 'summary') return out_(summary_()); // 읽기만 해서 잠금 불필요
@@ -965,12 +1012,25 @@ function doPost(e) {
   if(b.action==='friendCutover') {
     try{return out_(friendControl_(b));}catch(_){return out_({ok:false,error:'전환 설정을 확인해 주세요'});}
   }
+  // 예전 앱(비밀번호·접속코드를 들고 있음) → 출입증으로 바꾸기. 주인 비밀번호는 로그인과 같은 횟수 제한
+  if(b.action==='session') {
+    const t=String(b.token||'');
+    if(/^s[of]\./.test(t)) return out_({ok:false,error:'입력값 오류: 이미 출입증이에요'});
+    if(Date.now()<LEGACY_UNTIL_ && pwOk_(t)) return out_({ok:true,role:'owner',name:ownerName_(),token:newSession_()});
+    if(friendMode_()==='worker') return out_(workerCall_(b,false));
+    return out_({ok:false,error:'다시 로그인해 주세요'});
+  }
+  if(b.action==='logout' || b.action==='logoutAll') {
+    if(authOk_(b.token)) return out_(/^so\./.test(String(b.token)) || b.action==='logoutAll' ? endSessions_(String(b.token),b.action==='logoutAll') : {ok:true,wrote:true});
+    if(friendMode_()==='worker') return out_(workerCall_(b,false));
+    return out_({ok:true,wrote:true});
+  }
   if(['login','redeem'].includes(b.action) && friendMode_()==='worker') {
     const name=String(b.name||'').trim(), ownerName=ownerName_();
-    if(b.action==='login' && name && (ownerName===name || (!ownerName && authOk_(b.password)))) {
+    if(b.action==='login' && name && (ownerName===name || (!ownerName && pwOk_(b.password)))) {
       const cache=cache_(), key='fail:'+name, failures=Number(cache && cache.get(key) || 0);
       if(failures>=10) return out_({ok:false,error:'너무 많이 틀렸어요 · 10분 뒤에 다시 해 주세요'});
-      if(!authOk_(b.password)) {
+      if(!pwOk_(b.password)) {
         if(cache) cache.put(key,String(failures+1),600);
         return out_({ok:false,error:'아이디 또는 비밀번호가 맞지 않아요'});
       }
@@ -980,7 +1040,7 @@ function doPost(e) {
         PropertiesService.getScriptProperties().setProperty('OWNER_NAME',name);
       }
       if(cache) cache.remove(key);
-      return out_({ok:true,role:'owner',token:b.password,name});
+      return out_({ok:true,role:'owner',token:newSession_(),name});
     }
     const r=workerCall_(b,false);
     if(r.ok) r.workerUrl=FRIEND_WORKER_;

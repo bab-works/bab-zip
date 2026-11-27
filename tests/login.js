@@ -8,7 +8,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
     await p.route('https://script.google.com/**', rt => {
       const q = rt.request(), u = q.url(); let body;
       if (q.method() === 'POST') {
-        const o = JSON.parse(q.postData()); posts.push(o);
+        const o = JSON.parse(q.postData()); (x => x.action !== 'session' && posts.push(x))(o);
         body = o.action === 'login' ? (o.name === '서현' && o.password === 'pw1' ? { ok: true, token: 'pw1', role: 'owner', name: '서현' } : { ok: false, error: '아이디 또는 비밀번호가 맞지 않아요' })
           : o.action === 'redeem' ? (o.invite === 'i0123456789' ? { ok: true, token: 'f0123456789a', role: 'friend', name: '민지', hasPassword: false } : { ok: false, error: '초대 링크가 맞지 않거나 취소됐어요' })
           : { ok: true, wrote: true };

@@ -29,6 +29,33 @@ async function hash(code, pw) {
     ),
   );
 }
+// 비밀번호는 PBKDF2(SHA-256, 10만 번)로 저장. 예전 방식(SHA-256 한 번)은 로그인에 성공하면 바로 새 방식으로 바꿔 저장
+const b64u = (u8) => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function pbkdf2(pw, salt) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  return b64u(new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 100000 }, key, 256)));
+}
+async function makePw(pw) {
+  const salt = b64u(crypto.getRandomValues(new Uint8Array(16)));
+  return `p2$${salt}$${await pbkdf2(pw, salt)}`;
+}
+async function pwMatches(a, pw) {
+  if (String(a.pw).startsWith("p2$")) { const [, salt, h] = a.pw.split("$"); return (await pbkdf2(pw, salt)) === h; }
+  return (await hash(a.code, pw)) === a.pw;
+}
+// 출입증(세션): 친구 sf. / 주인 so.(시트가 만들어 알려 줌, 여기선 책·영화 검색만)
+// 슬라이딩: 쓸 때마다 마지막 사용 + 30일로 연장(쓰기는 하루 한 번). 30일 넘게 안 쓰면 끝. 7일 넘은 출입증은 앱을 열 때 새것으로 교체
+const SESSION_SEC = 30 * 86400, ROTATE_SEC = 7 * 86400, GRACE_SEC = 120;
+// 예전 앱이 들고 있는 접속코드는 이날까지만 받음 (그 전에 앱이 알아서 출입증으로 바꿈)
+const LEGACY_UNTIL = Date.parse("2027-01-01T00:00:00+09:00") / 1000;
+async function newSession(env, person, now) {
+  const token = "sf." + b64u(crypto.getRandomValues(new Uint8Array(32)));
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM sessions WHERE expires<?").bind(now),
+    env.DB.prepare("INSERT INTO sessions(hash,person,expires,created) VALUES(?,?,?,?)").bind(await sha256hex(token), person, now + SESSION_SEC, now),
+  ]);
+  return token;
+}
 const friendsQuery = `SELECT a.id,a.name,coalesce(h.icon,'') icon,coalesce(h.intro,'') intro
  FROM accounts a LEFT JOIN houses h ON h.person=a.id
  WHERE a.id<>?1 AND (a.id='owner' OR ?1='owner' OR EXISTS
@@ -191,17 +218,18 @@ async function dispatch(env, b, authorization) {
       now,
     ).first();
     check(attempt, "너무 많이 틀렸어요 · 10분 뒤에 다시 해 주세요");
-    check((await hash(a.code, b.password)) === a.pw, denied);
+    check(await pwMatches(a, b.password), denied);
     await sql("DELETE FROM login_limits WHERE person=?", a.id).run();
-    return { role: "friend", name: a.name, token: a.code };
+    if (!a.pw.startsWith("p2$")) await sql("UPDATE accounts SET pw=? WHERE id=?", await makePw(b.password), a.id).run();
+    return { role: "friend", name: a.name, token: await newSession(env, a.id, now) };
   }
   if (action === "redeem") {
     const a = await sql(
-      "SELECT name,code,pw FROM accounts WHERE invite=? AND id<>'owner'",
+      "SELECT id,name,code,pw FROM accounts WHERE invite=? AND id<>'owner'",
       String(b.invite || ""),
     ).first();
     check(a, "초대 링크가 맞지 않거나 취소됐어요");
-    return { role: "friend", name: a.name, token: a.code, hasPassword: !!a.pw };
+    return { role: "friend", name: a.name, token: await newSession(env, a.id, now), hasPassword: !!a.pw };
   }
   // Apps Script authenticates the owner before making a server-to-server request.
   const service =
@@ -233,9 +261,18 @@ async function dispatch(env, b, authorization) {
     await env.DB.batch(batch);
     return { active: true };
   }
-  // 주인은 책·영화 검색만 시트를 거치지 않고 바로 (토큰의 SHA-256 = OWNER_TOKEN_SHA일 때만, 다른 기능은 안 됨)
-  const ownerSearch = !action && ["book", "movie"].includes(b.what) && !!env.OWNER_TOKEN_SHA && !!b.token &&
-    (await sha256hex(String(b.token))) === env.OWNER_TOKEN_SHA;
+  // 주인 출입증은 시트가 만들어 여기에 알려 줌(해시만). 「모든 기기에서 로그아웃」이면 시트가 지움
+  if (action === "ownerSession") {
+    check(service && /^[0-9a-f]{64}$/.test(String(b.hash)) && Number.isInteger(b.expires));
+    await sql("INSERT OR REPLACE INTO sessions(hash,person,expires,created) VALUES(?,'owner',?,?)", b.hash, Math.min(b.expires, now + SESSION_SEC), now).run();
+    return {};
+  }
+  if (action === "dropOwnerSessions") {
+    check(service);
+    if (Array.isArray(b.hashes)) await sql("DELETE FROM sessions WHERE person='owner' AND hash IN (SELECT value FROM json_each(?))", JSON.stringify(b.hashes)).run();
+    else await sql("DELETE FROM sessions WHERE person='owner'").run();
+    return {};
+  }
   // 시트가 문자 보관함에서 새 결제를 가져가고(smsPull) 다 쓴 것을 알려 줌(smsAck). 시트 연결 비밀값으로만
   if (action === "smsPull") {
     check(service);
@@ -250,13 +287,35 @@ async function dispatch(env, b, authorization) {
     for (const f of b.failed.slice(0, 50)) await sql("UPDATE sms_inbox SET note=? WHERE id=?", clip(f.error, 120), String(f.id)).run();
     return {};
   }
-  const me = service || ownerSearch
+  const token = String(b.token || "");
+  const me = service
     ? await sql("SELECT id,name FROM accounts WHERE id='owner'").first()
-    : await sql(
-        "SELECT id,name FROM accounts WHERE code=?",
-        String(b.token || ""),
-      ).first();
+    : /^s[fo]\./.test(token)
+      ? await sql("SELECT a.id,a.name,s.hash,s.expires,s.created FROM sessions s JOIN accounts a ON a.id=s.person WHERE s.hash=? AND s.expires>?", await sha256hex(token), now).first()
+      : now < LEGACY_UNTIL && token
+        ? await sql("SELECT id,name FROM accounts WHERE code=?", token).first()
+        : null;
   check(me, "로그인이 필요해요");
+  // 주인 출입증으로 친구 서버에서 할 수 있는 건 책·영화 검색뿐 (나머지는 시트를 거침)
+  check(service || me.id !== owner || (!action && ["book", "movie"].includes(b.what)), "로그인이 필요해요");
+  if (action === "session") { // 예전 접속코드 → 출입증으로 바꾸기
+    check(!me.hash && me.id !== owner);
+    return { role: "friend", name: me.name, token: await newSession(env, me.id, now) };
+  }
+  if (action === "logout" || action === "logoutAll") {
+    check(!service);
+    if (action === "logoutAll") await sql("DELETE FROM sessions WHERE person=?", me.id).run();
+    else if (me.hash) await sql("DELETE FROM sessions WHERE hash=?", me.hash).run();
+    return {};
+  }
+  let rotated;
+  if (me.hash && me.id !== owner && me.created >= 0) { // 주인 출입증은 시트가 연장·교체해서 알려 줌. created -1 = 이미 바꾼 것(2분 유예만)
+    if (!action && b.what === "me" && now - me.created > ROTATE_SEC) {
+      rotated = await newSession(env, me.id, now);
+      await sql("UPDATE sessions SET expires=?, created=-1 WHERE hash=?", Math.min(me.expires, now + GRACE_SEC), me.hash).run(); // 이미 보낸 요청이 끊기지 않게 2분만 더
+    } else if (me.expires - now < SESSION_SEC - 86400)
+      await sql("UPDATE sessions SET expires=? WHERE hash=?", now + SESSION_SEC, me.hash).run();
+  }
   if (!action && b.what === "movie") return movieSearch(env, b.q);
   if (!action && b.what === "book") return bookSearch(env, b.q);
   const id = me.id;
@@ -337,6 +396,7 @@ async function dispatch(env, b, authorization) {
       const s = await social();
       return {
         role: service ? owner : "friend",
+        ...(rotated && { token: rotated }),
         name: me.name,
         social: s,
         people: [me.name, ...s.friends.map((f) => f.name)],
@@ -495,12 +555,12 @@ async function dispatch(env, b, authorization) {
         b.password.length >= 4 &&
         b.password.length <= 40,
     );
-    await sql(
-      "UPDATE accounts SET pw=? WHERE id=?",
-      await hash(b.token, b.password),
-      id,
-    ).run();
-    return { ...wrote, token: b.token };
+    // 비밀번호를 바꾸면 모든 출입증(이 기기 것 포함)을 끊고, 이 기기엔 새 출입증
+    await env.DB.batch([
+      sql("UPDATE accounts SET pw=? WHERE id=?", await makePw(b.password), id),
+      sql("DELETE FROM sessions WHERE person=?", id),
+    ]);
+    return { ...wrote, token: await newSession(env, id, now) };
   } else if (
     ["friendRequest", "friendAccept", "friendRemove"].includes(action)
   ) {

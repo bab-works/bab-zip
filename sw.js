@@ -1,5 +1,5 @@
 // 앱 화면 파일만 캐시 (시트 API 요청은 건드리지 않음). 파일 수정 후엔 버전을 올리세요.
-const CACHE = 'gagyebu-v111';
+const CACHE = 'gagyebu-v112';
 const FILES = ['./', 'index.html', 'friend-house.webp', 'tmdb-logo.svg', 'notices.js', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'PretendardVariable.woff2'];
 // 설치: 화면 파일을 브라우저 HTTP 캐시를 건너뛰고 새로 받아 저장
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting())));

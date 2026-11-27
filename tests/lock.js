@@ -6,7 +6,12 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await cdp.send('WebAuthn.enable');
   await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
   await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) void localStorage.setItem('startSec', '"money"') || localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'pw1' })); });
-  await p.route('https://script.google.com/**', rt => rt.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } }) }));
+  const posts = [];
+  await p.route('https://script.google.com/**', rt => { // 비밀번호로 풀 때는 서버에 확인(기기엔 비밀번호가 없음)
+    const o = rt.request().method() === 'POST' ? JSON.parse(rt.request().postData()) : {}; posts.push(o);
+    rt.fulfill({ contentType: 'application/json', body: JSON.stringify(o.action === 'login' ? (o.password === 'pw1' ? { ok: true, token: 'so.new', role: 'owner', name: '서현' } : { ok: false, error: '아이디 또는 비밀번호가 맞지 않아요' })
+      : /what=me/.test(rt.request().url()) ? { ok: true, role: 'owner', name: '서현' } : { ok: true, items: [], meta: { cats: [], budgets: {}, payments: [], rules: [], recurring: [] } }) });
+  });
   await p.goto('http://localhost:8784/'); await p.waitForTimeout(500);
   assert.equal(await p.locator('#lock[open]').count(), 0, 'no lock until enabled');
   await p.click('#openSettings'); await p.click('#prefs .switch:has(#lockOn)'); await p.waitForTimeout(800);
@@ -23,4 +28,6 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.equal(await p.locator('#lock[open]').count(), 1, 'stays locked if auto prompt blocked');
   await p.fill('#lockPw [name=pw]', 'nope'); await p.click('#lockPw button'); assert.equal(await p.locator('#lock[open]').count(), 1);
   await p.fill('#lockPw [name=pw]', 'pw1'); await p.click('#lockPw button'); await p.waitForTimeout(600); assert.equal(await p.locator('#lock[open]').count(), 0, 'password fallback');
+  assert.equal(JSON.parse(await p.evaluate(() => localStorage.getItem('cfg'))).token, 'so.new', 'unlocking by password swaps in a fresh session');
+  assert.ok(posts.some(o => o.action === 'logout'), 'and ends the old one');
   console.log('LOCK OK'); await b.close(); process.exit(0); });

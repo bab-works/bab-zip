@@ -18,7 +18,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
     if (/what=movie&/.test(q.url())) {
       movieCalls++; return rt.fulfill({json:{ok:true,source:'tmdb',movies:[{title:'가상 작품',type:'시리즈',year:'2020',image:''}]}});
     }
-    if (q.method() === 'POST') { posts.push(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
+    if (q.method() === 'POST') { (x => x.action !== 'session' && posts.push(x))(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
     rt.fulfill({ contentType: 'application/json', body: /what=escape&/.test(q.url()) ? JSON.stringify({ ok: true, themes: [{ theme: '오시리스', shop: '서울이스케이프룸 홍대점', genre: '공포', image: 'https://image.roomsescape.org/theme/83.jpg', url: '' }] }) : /what=book&/.test(q.url()) ? JSON.stringify({ ok: true, books: [{ title: '페스트', author: '알베르 카뮈', image: 'https://image.aladin.co.kr/x/cover500/p.jpg' }] }) : /what=lists/.test(q.url()) ? JSON.stringify({ ok: true, lists: { book: books, buy: [], wish: [] } }) : empty });
   });
   await p.goto('http://localhost:8791/'); await p.waitForSelector('#lFlow .fc'); await p.waitForTimeout(COVERS ? 2500 : 600);

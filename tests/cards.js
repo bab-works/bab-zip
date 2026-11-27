@@ -8,7 +8,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   const items = [tx('a', '지출', '롯데카드', 120000), tx('b', '지출', '현대카드(M)', 200000), tx('c', '환불', '현대카드(M)', 10000), tx('d', '이체', '롯데카드', 500000), tx('e', '지출', 'KB국민카드', 350000)];
   const cards = [{ name: '롯데카드', match: '롯데', goal: 300000 }, { name: '현대카드', match: '현대', goal: 0 }, { name: '국민카드', match: '국민|KB', goal: 300000 }];
   await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) { localStorage.setItem('startSec', '"money"'); localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'pw1' })); } });
-  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') posts.push(JSON.parse(q.postData()));
+  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') (x => x.action !== 'session' && posts.push(x))(JSON.parse(q.postData()));
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify(q.method() === 'POST' ? { ok: true, wrote: true } : { ok: true, full: true, items, meta: { cats: [['식비', '']], budgets: {}, cards, payments: [], rules: [], recurring: [] } }) }); });
   await p.goto('http://localhost:8801/'); await p.waitForTimeout(1200);
   assert.match(await p.textContent('#toast'), /국민카드 이번 달 실적을 채웠어요/, 'cheer once when a card goal is reached');

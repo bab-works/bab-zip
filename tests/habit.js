@@ -12,7 +12,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, q.url.split('?')[0] === 
   const posts = [];
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request();
-    if (q.method() === 'POST') { posts.push(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
+    if (q.method() === 'POST') { (x => x.action !== 'session' && posts.push(x))(JSON.parse(q.postData())); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true}' }); }
     rt.fulfill({ contentType: 'application/json', body: /what=habits/.test(q.url()) ? JSON.stringify({ ok: true, habits }) : body });
   });
   await p.goto('http://localhost:8783/'); await p.waitForTimeout(800);

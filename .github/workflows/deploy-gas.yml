@@ -2,7 +2,7 @@
 # 필요한 저장소 비밀값(Settings → Secrets and variables → Actions):
 #   CLASPRC_JSON  clasp login으로 만든 ~/.clasprc.json 내용
 #   SCRIPT_ID     Apps Script 프로젝트 설정의 「스크립트 ID」
-#   (앱 비밀번호는 시트 스크립트 속성 APP_TOKEN에만 있음. 깃허브 APP_TOKEN은 친구 서버의 주인 검색 확인용)
+#   (앱 비밀번호는 시트 스크립트 속성 APP_TOKEN에만 있음. 기기·주소에는 비밀번호 대신 출입증(세션)만)
 name: Code.gs 자동 배포
 on:
   push:

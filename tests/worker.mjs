@@ -22,7 +22,6 @@ const mf = new Miniflare({
     TMDB_READ_TOKEN: first,
     KAKAO_REST_KEY: first + "-kakao",
     SMS_HOOK_SHA: createHash("sha256").update("sms-" + first).digest("hex"),
-    OWNER_TOKEN_SHA: createHash("sha256").update("owner-" + first).digest("hex"),
   },
   outboundService(request) {
     const url = new URL(request.url);
@@ -121,12 +120,27 @@ try {
     (await call({ action: "promoteSnapshot" }, bridge)).active,
     true,
   );
+  for (const f of ["migrations/0003_sms.sql", "migrations/0004_sessions.sql"]) for (const stmt of (await readFile(new URL(f, root), "utf8")).replace(/^--.*$/gm, "").split(";").filter((s) => s.trim())) await db.prepare(stmt).run();
   const invite = (name) => call({ action: "invite", name }, bridge);
   const a = await invite("가"),
     b = await invite("나"),
     outsider = await invite("다");
+  const login = (name, password) => ({ action: "login", name, password });
+  // 로그인하면 출입증(sf.…)을 받음. 처음 로그인에 예전 방식 비밀번호가 PBKDF2로 바뀜
+  for (const [x, n] of [[a, "가"], [b, "나"], [outsider, "다"]]) x.tok = (await call(login(n, first))).token;
+  assert.match(a.tok, /^sf\.[\w-]{43}$/);
+  assert.match((await db.prepare("SELECT pw FROM accounts WHERE code=?").bind(a.code).first()).pw, /^p2\$/);
+  assert.equal((await call(login("가", first))).role, "friend", "PBKDF2 password still logs in");
+  // 예전 접속코드는 2027년 전까지만, 출입증으로 바꾸는 데 씀
+  if (Date.now() < Date.parse("2027-01-01T00:00:00+09:00")) {
+    const swapped = await call({ action: "session" }, a.code);
+    assert.match(swapped.token, /^sf\./);
+    assert.equal((await request({ action: "session" }, swapped.token)).ok, false, "a session cannot mint more sessions");
+    await call({ action: "logout" }, swapped.token);
+    assert.equal((await request({ what: "me" }, swapped.token)).ok, false, "logout ends that session");
+  }
   assert.equal(
-    (await request({ what: "projectionContext" }, a.code)).ok,
+    (await request({ what: "projectionContext" }, a.tok)).ok,
     false,
   );
   await call(
@@ -141,12 +155,12 @@ try {
     },
     bridge,
   );
-  assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 1);
+  assert.equal((await call({ what: "lists" }, a.tok)).lists.movie.length, 1);
   await call({ action: "replaceProjection", records: [] }, bridge);
-  assert.equal((await call({ what: "lists" }, a.code)).lists.movie.length, 0);
+  assert.equal((await call({ what: "lists" }, a.tok)).lists.movie.length, 0);
   const search = { what: "movie", q: "가상" };
   assert.equal((await request(search)).ok, false);
-  for (const token of [bridge, a.code]) {
+  for (const token of [bridge, a.tok]) {
     const result = await call(search, token);
     assert.equal(result.source, "tmdb");
     assert.deepEqual(
@@ -164,7 +178,7 @@ try {
   // 책: 카카오 도서 검색 (친구·시트 둘 다), 로그인 없으면 안 됨, https 표지만
   const bookQ = { what: "book", q: "만조" };
   assert.equal((await request(bookQ)).ok, false);
-  for (const token of [bridge, a.code]) {
+  for (const token of [bridge, a.tok]) {
     const result = await call(bookQ, token);
     assert.equal(result.source, "kakao");
     assert.deepEqual(result.books, [
@@ -172,14 +186,17 @@ try {
       { title: "표지 없는 책", author: "", image: "", publisher: "", year: "" },
     ]);
   }
-  // 주인: 책·영화 검색만 친구 서버로 바로 (주인 비밀번호의 SHA-256이 맞을 때), 다른 기능은 안 됨
-  const ownerTok = "owner-" + first;
+  // 주인: 시트가 알려 준 출입증으로 책·영화 검색만 친구 서버로 바로, 다른 기능은 안 됨
+  const ownerTok = "so." + randomUUID();
+  assert.equal((await request({ action: "ownerSession", hash: createHash("sha256").update(ownerTok).digest("hex"), expires: 2e9 }, a.tok)).ok, false, "only the Sheet registers owner sessions");
+  await call({ action: "ownerSession", hash: createHash("sha256").update(ownerTok).digest("hex"), expires: 2e9 }, bridge);
   assert.equal((await call({ what: "book", q: "만조", token: ownerTok })).source, "kakao");
   assert.equal((await call({ what: "movie", q: "가상", token: ownerTok })).source, "tmdb");
   assert.equal((await request({ what: "lists", token: ownerTok })).ok, false, "owner token opens searches only");
   assert.equal((await request({ what: "book", q: "만조", token: "wrong" })).ok, false);
+  await call({ action: "dropOwnerSessions" }, bridge);
+  assert.equal((await request({ what: "book", q: "만조", token: ownerTok })).ok, false, "owner logout-all reaches the friend server");
   // 카드 결제 문자 웹훅: 열쇠 확인 → 해석해 보관함에 저장(같은 문자는 한 번만) → 시트가 가져가고 완료 표시
-  for (const f of ["migrations/0003_sms.sql"]) for (const stmt of (await readFile(new URL(f, root), "utf8")).replace(/^--.*$/gm, "").split(";").filter((s) => s.trim())) await db.prepare(stmt).run();
   const hook = (text, key = "sms-" + first) => mf.dispatchFetch("http://localhost/hook/sms", { method: "POST", headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).then((r) => r.json());
   const sms1 = "[Web발신]\n현대 M 승인\n홍*동\n43,500원 일시불\n11/20 12:30\n가나다식당\n누적1,234,567원";
   const sms2 = "[Web발신]\n현대 M 해외승인\n홍*동\nUSD 9.99\n11/21 10:05\nEXAMPLE SHOP";
@@ -188,44 +205,63 @@ try {
   const h1 = await hook(sms1); assert.deepEqual([h1.ok, h1.saved], [true, true]); assert.match(h1.summary, /현대 지출 43,500원 가나다식당/);
   assert.deepEqual([(await hook(sms1)).duplicate, (await hook(sms1)).id], [true, h1.id], "same text saved once");
   assert.match((await hook(sms2)).summary, /USD 9.99 EXAMPLE SHOP/);
-  assert.equal((await request({ action: "smsPull" }, a.code)).ok, false, "only the Sheet can pull");
+  assert.equal((await request({ action: "smsPull" }, a.tok)).ok, false, "only the Sheet can pull");
   const pulled = (await call({ action: "smsPull" }, bridge)).items;
   assert.deepEqual(pulled.map((x) => [x.parsed.merchant, x.parsed.amount]), [["가나다식당", 43500], ["EXAMPLE SHOP", 13986]], "foreign amount converted to KRW");
   await call({ action: "smsAck", done: [pulled[0].id], failed: [{ id: pulled[1].id, error: "test" }] }, bridge);
   assert.deepEqual((await call({ action: "smsPull" }, bridge)).items.map((x) => x.id), [pulled[1].id], "done ones are not pulled again");
   assert.deepEqual(await db.prepare("SELECT text, parsed FROM sms_inbox WHERE id=?").bind(pulled[0].id).first(), { text: "", parsed: "{}" }, "written messages are wiped from the server");
   assert.equal((await hook(sms1)).duplicate, true, "still deduped after wiping");
-  for (const t of [a.code, undefined]) assert.equal((await request({ action: "smsAck", done: [], failed: [] }, t)).ok, false, "friends cannot touch the inbox");
-  const login = (name, password) => ({ action: "login", name, password });
-  assert.equal((await call(login("가", first))).token, a.code);
-  await call({ action: "setPassword", password }, a.code);
-  const stored = await db
-    .prepare("SELECT pw FROM accounts WHERE code=?")
-    .bind(a.code)
-    .first();
-  assert.equal(
-    stored.pw,
-    createHash("sha256")
-      .update(a.code + ":" + password)
-      .digest("base64"),
-  );
+  for (const t of [a.tok, undefined]) assert.equal((await request({ action: "smsAck", done: [], failed: [] }, t)).ok, false, "friends cannot touch the inbox");
+  // 슬라이딩: 쓸 때마다 마지막 사용 + 30일 (기록은 하루 한 번), 30일 넘게 안 쓰면 끝
+  const sec = () => Math.floor(Date.now() / 1000), H = (t) => createHash("sha256").update(t).digest("hex");
+  const row = (t) => db.prepare("SELECT expires, created FROM sessions WHERE hash=?").bind(H(t)).first();
+  await db.prepare("UPDATE sessions SET expires=? WHERE hash=?").bind(sec() + 3 * 86400, H(a.tok)).run();
+  await call({ what: "lists" }, a.tok);
+  assert.ok((await row(a.tok)).expires > sec() + 29 * 86400, "using the app pushes expiry back to 30 days");
+  await db.prepare("UPDATE sessions SET expires=? WHERE hash=?").bind(sec() - 1, H(a.tok)).run();
+  assert.equal((await request({ what: "lists" }, a.tok)).ok, false, "30 days unused → signed out");
+  a.tok = (await call(login("가", first))).token;
+  // 7일 넘은 출입증은 앱을 열 때(what=me) 새것으로, 예전 것은 2분만 더
+  await db.prepare("UPDATE sessions SET created=? WHERE hash=?").bind(sec() - 8 * 86400, H(a.tok)).run();
+  const fresh = (await call({ what: "me" }, a.tok)).token;
+  assert.match(fresh, /^sf\.[\w-]{43}$/);
+  assert.ok((await row(a.tok)).expires <= sec() + 120, "old token only lives 2 more minutes");
+  assert.equal((await call({ what: "lists" }, a.tok)).ok, true, "in-flight requests with the old token still work");
+  assert.equal((await call({ what: "me" }, a.tok)).token, undefined, "old one is not rotated twice");
+  assert.ok((await row(a.tok)).expires <= sec() + 120, "nor extended");
+  assert.equal((await call({ what: "me" }, fresh)).token, undefined, "a fresh token is not rotated again");
+  a.tok = fresh;
+  // 비밀번호를 바꾸면 모든 출입증(이 기기 것 포함)이 끝나고 이 기기는 새 출입증
+  const other = (await call(login("가", first))).token, before = a.tok;
+  a.tok = (await call({ action: "setPassword", password }, a.tok)).token;
+  assert.match(a.tok, /^sf\./);
+  assert.equal((await request({ what: "me" }, other)).ok, false, "other devices are signed out");
+  assert.equal((await request({ what: "me" }, before)).ok, false, "this device's old token is revoked too");
+  assert.equal((await call({ what: "me" }, a.tok)).social.ownerName !== undefined, true);
+  const stored = await db.prepare("SELECT pw FROM accounts WHERE code=?").bind(a.code).first();
+  assert.match(stored.pw, /^p2\$/);
+  assert.ok(!stored.pw.includes(password));
+  assert.equal((await request(login("가", first))).ok, false, "old password stops working");
   assert.equal((await call(login("가", password))).role, "friend");
-  assert.equal(
-    (await call({ action: "redeem", invite: a.invite })).token,
-    a.code,
-  );
+  assert.match((await call({ action: "redeem", invite: a.invite })).token, /^sf\./);
+  // 모든 기기에서 로그아웃
+  const second = (await call(login("가", password))).token;
+  await call({ action: "logoutAll" }, second);
+  assert.equal((await request({ what: "me" }, a.tok)).ok, false, "logoutAll ends every session");
+  a.tok = (await call(login("가", password))).token;
   for (const body of [
     { action: "invite", name: "라" },
     { what: "summary" },
     { action: "save" },
     { what: "house", name: "나" },
   ])
-    assert.equal((await request(body, a.code)).ok, false);
-  await call({ action: "friendRequest", name: "나" }, a.code);
-  assert.deepEqual((await call({ what: "me" }, b.code)).social.incoming, [
+    assert.equal((await request(body, a.tok)).ok, false);
+  await call({ action: "friendRequest", name: "나" }, a.tok);
+  assert.deepEqual((await call({ what: "me" }, b.tok)).social.incoming, [
     "가",
   ]);
-  await call({ action: "friendAccept", name: "가" }, b.code);
+  await call({ action: "friendAccept", name: "가" }, b.tok);
   const save = {
     action: "listSave",
     list: "movie",
@@ -237,29 +273,29 @@ try {
       quotes: ["test"],
     },
   };
-  await call(save, a.code);
-  await call({ ...save, item: { id: "x", review: "수정" } }, a.code);
+  await call(save, a.tok);
+  await call({ ...save, item: { id: "x", review: "수정" } }, a.tok);
   assert.equal(
-    (await call({ what: "lists" }, outsider.code)).lists.movie.length,
+    (await call({ what: "lists" }, outsider.tok)).lists.movie.length,
     0,
   );
-  const shared = (await call({ what: "lists" }, b.code)).lists.movie[0];
+  const shared = (await call({ what: "lists" }, b.tok)).lists.movie[0];
   assert.equal(shared.shared, "가");
   assert.ok(!shared.id.includes(a.code));
   assert.equal(shared.review, "수정");
-  await call({ action: "setPub", list: "movie", id: "x", on: true }, a.code);
-  const house = (await call({ what: "house", name: "가" }, b.code)).house;
+  await call({ action: "setPub", list: "movie", id: "x", on: true }, a.tok);
+  const house = (await call({ what: "house", name: "가" }, b.tok)).house;
   assert.deepEqual(house.items.movie, [
     { id: "x", title: "가상 영화", review: "수정" },
   ]);
-  await call({ ...save, item: { id: "b", title: "가상 영화" } }, b.code);
+  await call({ ...save, item: { id: "b", title: "가상 영화" } }, b.tok);
   assert.equal(
-    (await call({ what: "lists" }, b.code)).lists.movie[0].others[0].name,
+    (await call({ what: "lists" }, b.tok)).lists.movie[0].others[0].name,
     "가",
   );
-  await call({ action: "friendRemove", name: "가" }, b.code);
+  await call({ action: "friendRemove", name: "가" }, b.tok);
   assert.equal(
-    (await request({ what: "house", name: "가" }, b.code)).ok,
+    (await request({ what: "house", name: "가" }, b.tok)).ok,
     false,
   );
   await call(
@@ -267,23 +303,23 @@ try {
     bridge,
   );
   assert.equal(
-    (await call({ what: "lists" }, b.code)).lists.movie.find((x) => x.shared)
+    (await call({ what: "lists" }, b.tok)).lists.movie.find((x) => x.shared)
       ?.shared,
     "테스트주인",
   );
-  await call({ action: "setHouse", icon: "book", intro: "가짜 소개" }, b.code);
-  assert.equal((await call({ what: "me" }, b.code)).social.house.icon, "book");
-  await call({ action: "setName", name: "라" }, outsider.code);
-  assert.equal((await call(login("라", first))).token, outsider.code);
+  await call({ action: "setHouse", icon: "book", intro: "가짜 소개" }, b.tok);
+  assert.equal((await call({ what: "me" }, b.tok)).social.house.icon, "book");
+  await call({ action: "setName", name: "라" }, outsider.tok);
+  assert.match((await call(login("라", first))).token, /^sf\./);
   await call(
     { action: "report", text: "가짜 제보", ver: "test", ua: "test" },
-    outsider.code,
+    outsider.tok,
   );
   assert.equal(
     (await db.prepare("SELECT count(*) n FROM reports").first()).n,
     1,
   );
-  await call({ action: "setPub", list: "movie", id: "x", on: false }, a.code);
+  await call({ action: "setPub", list: "movie", id: "x", on: false }, a.tok);
   assert.equal(
     (await call({ what: "house", name: "가" }, bridge)).house.items.movie
       .length,
@@ -294,31 +330,31 @@ try {
       action: "bulk",
       ops: [save, { action: "listDelete", list: "movie", id: "x" }],
     },
-    outsider.code,
+    outsider.tok,
   );
   const habitId = "hdeadbeef";
-  await call({ action: "habitAdd", habitId, name: "테스트" }, a.code);
+  await call({ action: "habitAdd", habitId, name: "테스트" }, a.tok);
   for (let i = 0; i < 2; i++)
     await call(
       { action: "habitCheck", habitId, done: true, stamp: "20260101" },
-      a.code,
+      a.tok,
     );
-  assert.deepEqual((await call({ what: "habits" }, a.code)).habits[0].done, [
+  assert.deepEqual((await call({ what: "habits" }, a.tok)).habits[0].done, [
     20260101,
   ]);
-  await call({ action: "habitDelete", habitId }, a.code);
-  assert.deepEqual((await call({ what: "habits" }, a.code)).habits, []);
+  await call({ action: "habitDelete", habitId }, a.tok);
+  assert.deepEqual((await call({ what: "habits" }, a.tok)).habits, []);
   assert.equal(
     (
       await request(
         { action: "bulk", ops: [save, { action: "save" }] },
-        outsider.code,
+        outsider.tok,
       )
     ).ok,
     false,
   );
   assert.equal(
-    (await call({ what: "lists" }, outsider.code)).lists.movie.length,
+    (await call({ what: "lists" }, outsider.tok)).lists.movie.length,
     0,
   );
   await call({ action: "uninvite", code: a.code }, bridge);
@@ -326,7 +362,7 @@ try {
     (await request({ action: "redeem", invite: a.invite })).ok,
     false,
   );
-  assert.equal((await request({ what: "me" }, a.code)).ok, false);
+  assert.equal((await request({ what: "me" }, a.tok)).ok, false);
   for (let i = 0; i < 10; i++)
     assert.equal((await request(login("나", password))).ok, false);
   assert.match((await request(login("나", first))).error, /10분/);

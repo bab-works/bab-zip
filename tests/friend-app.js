@@ -10,7 +10,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
     await p.route('https://script.google.com/**', rt => {
       const q = rt.request(), u = q.url();
       if (q.method() === 'POST') {
-        const o = JSON.parse(q.postData()); posts.push(o);
+        const o = JSON.parse(q.postData()); (x => x.action !== 'session' && posts.push(x))(o);
         if (o.action === 'invite') { friends.push({ name: o.name, code: 'fbbbbbbbbbbb', invite: 'iabcdef0123' }); return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true,"code":"fbbbbbbbbbbb","invite":"iabcdef0123"}' }); }
         return rt.fulfill({ contentType: 'application/json', body: '{"ok":true,"wrote":true}' });
       }

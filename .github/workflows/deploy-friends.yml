@@ -51,11 +51,10 @@ jobs:
           BRIDGE_SECRET: ${{ secrets.FRIENDS_BRIDGE_SECRET }}
           FIRST_PASSWORD: ${{ secrets.FRIENDS_FIRST_PASSWORD }}
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
-          APP_TOKEN: ${{ secrets.APP_TOKEN }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
           npx --no-install wrangler d1 migrations apply DB --remote
-          node -e 'const e=process.env;process.stdout.write(JSON.stringify({BRIDGE_SECRET:e.BRIDGE_SECRET,FIRST_PASSWORD:e.FIRST_PASSWORD,...(e.KAKAO_REST_KEY?{KAKAO_REST_KEY:e.KAKAO_REST_KEY}:{}),...(e.APP_TOKEN?{OWNER_TOKEN_SHA:require('crypto').createHash('sha256').update(e.APP_TOKEN).digest('hex')}:{})}))' | npx --no-install wrangler secret bulk
+          node -e 'const e=process.env;process.stdout.write(JSON.stringify({BRIDGE_SECRET:e.BRIDGE_SECRET,FIRST_PASSWORD:e.FIRST_PASSWORD,...(e.KAKAO_REST_KEY?{KAKAO_REST_KEY:e.KAKAO_REST_KEY}:{})}))' | npx --no-install wrangler secret bulk
           npx --no-install wrangler deploy
       - name: 운영 영화 검색 확인
         env:

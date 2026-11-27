@@ -8,7 +8,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   await p.route('https://script.google.com/**', rt => {
     const q = rt.request(), u = q.url(); let body;
     if (q.method() === 'POST') {
-      const o = JSON.parse(q.postData()); posts.push(o);
+      const o = JSON.parse(q.postData()); (x => x.action !== 'session' && posts.push(x))(o);
       if (o.action === 'friendAccept') social = { ...social, incoming: [], friends: [...social.friends, { name: o.name, icon: '', intro: '' }] };
       if (o.action === 'friendRequest') social = { ...social, outgoing: [o.name] };
       if (o.action === 'friendRemove') social = { ...social, friends: social.friends.filter(f => f.name !== o.name), outgoing: social.outgoing.filter(n => n !== o.name) };

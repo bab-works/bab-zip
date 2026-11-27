@@ -21,7 +21,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   assert.ok(h < 3.6, 'toast fits in ~2 lines, got ' + h);
   // 영화 탭 ＋ → 영화 검색 → 위시리스트에 바로 담기
   await p.unroute('https://script.google.com/**'); const posts = [];
-  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') posts.push(JSON.parse(q.postData()));
+  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') (x => x.action !== 'session' && posts.push(x))(JSON.parse(q.postData()));
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify(/what=movie/.test(q.url()) ? { ok: true, movies: [{ title: '위키드', type: '영화', year: '2024', image: '' }] } : { ok: true, wrote: true, lists: {} }) }); });
   await p.evaluate(() => setSection('movie')); await p.waitForTimeout(300);
   assert.ok(await p.locator('#lNotice').isHidden(), 'movie has search now');

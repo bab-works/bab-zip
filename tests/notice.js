@@ -5,7 +5,7 @@ http.createServer((q, r) => { const f = path.join(__dirname, '..', q.url.split('
   p.on('pageerror', e => { console.error('ERR', e.message); process.exit(1); });
   // 예전 버전(v86)을 쓰던 사람이 새 버전을 처음 연 상황
   await ctx.addInitScript(() => { if (!localStorage.getItem('cfg')) { localStorage.setItem('testUpd', 'true'); localStorage.setItem('seenVer', '"gagyebu-v86"'); localStorage.setItem('startSec', '"home"'); localStorage.setItem('cfg', JSON.stringify({ url: 'https://script.google.com/macros/s/x/exec', token: 'f0123456789a' })); } });
-  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') posts.push(JSON.parse(q.postData()));
+  await p.route('https://script.google.com/**', rt => { const q = rt.request(); if (q.method() === 'POST') (x => x.action !== 'session' && posts.push(x))(JSON.parse(q.postData()));
     rt.fulfill({ contentType: 'application/json', body: JSON.stringify(q.method() === 'POST' ? { ok: true, wrote: true } : /what=me/.test(q.url()) ? { ok: true, role: 'friend', name: '민지', people: [] } : { ok: true, lists: {}, habits: [] }) }); });
   await p.goto('http://localhost:8798/'); await p.waitForSelector('#updSheet[open]', { timeout: 5000 });
   assert.match(await p.textContent('#updVer'), /v86 → v\d+/); assert.match(await p.textContent('#updList'), /공지사항 · Q&A · 제보하기[\s\S]*여러 개를 한 번에/);

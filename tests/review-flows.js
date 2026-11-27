@@ -20,7 +20,7 @@ async function run() {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
     const posts = [];
     await page.route('https://script.google.com/**', route => {
-      if (route.request().method() === 'POST') posts.push(route.request().postDataJSON());
+      if (route.request().method() === 'POST') (x => x.action !== 'session' && posts.push(x))(route.request().postDataJSON());
       return route.fulfill({ json: { ok: true, wrote: true, role: 'friend', name: '테스트', people: [], lists: {}, habits: [] } });
     });
     const base = 'http://127.0.0.1:' + server.address().port;

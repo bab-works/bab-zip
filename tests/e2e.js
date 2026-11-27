@@ -52,7 +52,7 @@ const sheets = {
 };
 const extraTabs = { '영화 기록': new Sheet([['번호', '영화 제목', '감독', '관람일', '극장', '평점', '함께한 사람', '후기', 'id']], 1000, 10), '연극·뮤지컬 기록': new Sheet([['번호', '작품명', '종류', '관람일', '극장', '출연', '평점', '함께한 사람', '후기', 'id']], 1000, 11), '보드게임 기록': new Sheet([['기록 ID', '날짜', '종류', '테마·보드게임', '장소', '함께한 사람', '후기', '연결 일정', '일정 키']], 1000, 26) };
 const ss = { getSheetByName: n => sheets[n] || extraTabs[n] || (bookSS[n] || null) || (hobbySS[n] || null), insertSheet: n => (sheets[n] = new Sheet([], 1000, 26)), getSpreadsheetTimeZone: () => 'Asia/Seoul' };
-let uid = 0, cardGoals = null;
+let uid = 0, cardGoals = null, sessionsProp = null;
 const SUM = Array(10).fill(undefined).concat(['요약']); // K열 요약 표 흉내
 const withId = (hdr, idx) => [...hdr, ...Array(idx - hdr.length).fill(''), 'id'];
 const bookSS = { '독서 기록': new Sheet([
@@ -71,9 +71,9 @@ let flushError = null; // 시트 규칙 위반처럼 저장 마지막(flush)에 
 const g = { SpreadsheetApp: { getActiveSpreadsheet: () => ss, Dimension: { ROWS: 'ROWS' }, flush: () => { if (flushError) throw new Error(flushError); } },
   ContentService: { MimeType: { JSON: 1 }, createTextOutput: s => ({ setMimeType: () => s }) },
   Utilities: { formatDate: (d, tz, p) => p === 'yyyy-MM' ? ymd(d).slice(0, 7) : ymd(d), getUuid: () => 'u' + (++uid),
-    DigestAlgorithm: { MD5: 'MD5' }, computeDigest: (a, t) => [...crypto.createHash('md5').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
+    DigestAlgorithm: { MD5: 'MD5', SHA_256: 'SHA_256' }, computeDigest: (a, t) => [...crypto.createHash(a === 'SHA_256' ? 'sha256' : 'md5').update(t).digest()], base64Encode: b => Buffer.from(b).toString('base64') },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) }, ScriptApp: {},
-  PropertiesService: { getScriptProperties: () => ({ getProperty: k => k === 'CARD_GOALS' ? cardGoals : null, setProperty(k, v) { if (k === 'CARD_GOALS') cardGoals = v; } }) } }; // 카드 실적만 실제로 기억 (다른 키는 예전처럼 없음)
+  PropertiesService: { getScriptProperties: () => ({ getProperty: k => k === 'CARD_GOALS' ? cardGoals : k === 'SESSIONS' ? sessionsProp : null, setProperty(k, v) { if (k === 'CARD_GOALS') cardGoals = v; if (k === 'SESSIONS') sessionsProp = v; } }) } }; // 카드 실적·출입증만 실제로 기억 (다른 키는 예전처럼 없음)
 const gs = new Function(...Object.keys(g), fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8').replace(/^const TOKEN = .*$/m, "const TOKEN = 'test-token';") + ';return {doGet, doPost}')(...Object.values(g));
 const TOKEN = 'test-token';
 const T = sheets.거래, col = c => T.d.slice(1).map(r => r[c - 1]);
@@ -351,7 +351,7 @@ http.createServer((q, r) => { const f = path.join(ROOT, (q.url.split('?')[0] ===
   await p.mouse.click(195, 10); await p.waitForSelector('#catSheet', { state: 'hidden' });
   await p.click('#openSettings'); await p.waitForSelector('#prefs[open]'); await p.mouse.click(195, 10); await p.waitForSelector('#prefs', { state: 'hidden' });
   // 설정 목록 → 비밀번호(접속코드) 변경 창
-  await p.click('#openSettings'); await p.click('#prefAdv'); await p.waitForSelector('#settings[open]'); assert.equal(await p.inputValue('[name=token]'), TOKEN);
+  await p.click('#openSettings'); await p.click('#prefAdv'); await p.waitForSelector('#settings[open]'); assert.match(await p.inputValue('[name=token]'), /^so\./, 'old password was swapped for a session');
   await p.click('#settings button[value=cancel]'); await p.waitForSelector('#settings', { state: 'hidden' });
   await status(/저장됨|동기화됨|삭제됨/); // 설정을 바깥 클릭으로 닫아도 연결 유지
   console.log('font:', await p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family)[0] || 'not loaded'; }));
