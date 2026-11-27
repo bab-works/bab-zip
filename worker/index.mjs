@@ -112,6 +112,59 @@ async function bookSearch(env, query) {
   return { books, source: "kakao" };
 }
 
+// ── 카드 결제 문자 → 가계부 ──
+// 단축어가 「승인」(또는 「취소」) 문자를 그대로 보내면 해석해서 sms_inbox에 저장. 시트(Apps Script)가 smsPull로 가져가 거래 탭에 씀
+// 단축어 열쇠: 열쇠 자체는 저장소에 두지 않고 SHA-256만 둠 (긴 무작위 값이라 거꾸로 알아낼 수 없음). 바꾸려면 새 열쇠의 해시로 교체
+const SMS_HOOK_SHA = "354b2bde9f3adf6a418e5bfce9ee0199a4e0aa9e0e66a65a560123bc668c043f";
+// 카드사별 문자 모양 (롯데·현대·국민). 이름·카드번호는 쓰지 않고 날짜·시간·금액·가맹점·할부·취소만 뽑음
+export function parseSms(text, now = new Date()) {
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l && !/^\[?Web발신\]?$/.test(l) && l !== "제목없음");
+  const t = lines.join("\n");
+  const card = /롯데/.test(t) ? "롯데" : /현대/.test(t) ? "현대" : /KB|국민/.test(t) ? "국민" : "";
+  if (!card || !/승인|취소/.test(t)) return null;
+  const cancel = /취소/.test(t);
+  const noTotal = t.replace(/누적\s*[\d,]+원/g, "");
+  const fx = noTotal.match(/\b(USD|JPY|EUR|CNY|GBP|HKD|TWD|SGD|THB|VND|AUD|CAD|CHF|PHP)\s*([\d,]+(?:\.\d+)?)/);
+  const won = noTotal.match(/([\d,]+)원/);
+  const amount = won ? Number(won[1].replace(/,/g, "")) : 0;
+  if (!fx && !(amount > 0)) return null;
+  const inst = Number((noTotal.match(/(\d{1,2})개월/) || [])[1] || 0);
+  const kst = new Date(now.getTime() + 9 * 3600e3), dt = t.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  let year = kst.getUTCFullYear(), month = dt ? +dt[1] : kst.getUTCMonth() + 1, day = dt ? +dt[2] : kst.getUTCDate();
+  if (month > kst.getUTCMonth() + 2) year--; // 12월 결제 문자를 1월에 받은 경우
+  const pad = (n) => String(n).padStart(2, "0");
+  const date = `${year}-${pad(month)}-${pad(day)}`, time = dt ? `${pad(dt[3])}:${dt[4]}` : `${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`;
+  // 가맹점: 현대·국민은 날짜 줄 다음 줄, 롯데는 첫 줄, 자동납부는 금액이 있는 줄에서 금액을 뺀 것
+  const at = lines.findIndex((l) => /\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/.test(l)), next = lines[at + 1] || "";
+  let merchant = at >= 0 && next && !/^누적/.test(next) ? next
+    : card === "롯데" ? lines[0]
+    : (lines.find((l) => /[\d,]+원/.test(l) && !/^누적/.test(l) && !/승인|취소/.test(l)) || "").replace(/\s*[\d,]+원.*$/, "");
+  merchant = merchant.replace(/^\[[^\]]*\]\s*/, "").trim().slice(0, 60);
+  return { card, type: cancel ? "환불" : "지출", amount: fx ? 0 : amount, currency: fx ? fx[1] : "", foreign: fx ? Number(fx[2].replace(/,/g, "")) : 0,
+    inst: inst >= 2 ? inst : 0, date, time, merchant: merchant || `${card}카드` };
+}
+// 해외 결제: 그날 환율로 원화 (유럽중앙은행 기준 공개 환율). 실패하면 0 → 다음에 다시
+async function toKrw(p) {
+  if (!p.currency || p.amount) return p;
+  const r = await fetch(`https://api.frankfurter.app/latest?from=${p.currency}&to=KRW`, { signal: AbortSignal.timeout(5000) }).catch(() => null);
+  const rate = r?.ok ? (await r.json())?.rates?.KRW : 0;
+  return rate ? { ...p, amount: Math.round(p.foreign * rate), rate } : p;
+}
+async function smsHook(env, request) {
+  const key = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/, "");
+  check(key && (await sha256hex(key)) === (env.SMS_HOOK_SHA || SMS_HOOK_SHA), "열쇠가 맞지 않아요"); // 테스트는 env로 바꿔 끼움
+  const b = await request.json(), text = clip(b?.text, 2000);
+  const p = parseSms(text);
+  check(p, "결제 문자가 아니에요");
+  const id = "sms:" + (await sha256hex([p.card, p.type, p.date, p.time, p.amount, p.currency, p.foreign, p.merchant].join("|"))).slice(0, 24);
+  const parsed = await toKrw(p);
+  const r = await env.DB.prepare("INSERT OR IGNORE INTO sms_inbox (id, received, text, parsed) VALUES (?, ?, ?, ?)")
+    .bind(id, Math.floor(Date.now() / 1000), text, JSON.stringify(parsed)).run();
+  return { saved: r.meta.changes > 0, duplicate: r.meta.changes === 0, id,
+    summary: `${parsed.card} ${parsed.type} ${parsed.currency ? parsed.currency + " " + parsed.foreign : parsed.amount.toLocaleString("ko-KR") + "원"} ${parsed.merchant}` };
+}
+
 async function dispatch(env, b, authorization) {
   const sql = (s, ...args) => env.DB.prepare(s).bind(...args);
   const rows = async (s, ...args) => (await sql(s, ...args).all()).results;
@@ -183,6 +236,20 @@ async function dispatch(env, b, authorization) {
   // 주인은 책·영화 검색만 시트를 거치지 않고 바로 (토큰의 SHA-256 = OWNER_TOKEN_SHA일 때만, 다른 기능은 안 됨)
   const ownerSearch = !action && ["book", "movie"].includes(b.what) && !!env.OWNER_TOKEN_SHA && !!b.token &&
     (await sha256hex(String(b.token))) === env.OWNER_TOKEN_SHA;
+  // 시트가 문자 보관함에서 새 결제를 가져가고(smsPull) 다 쓴 것을 알려 줌(smsAck). 시트 연결 비밀값으로만
+  if (action === "smsPull") {
+    check(service);
+    const items = (await rows("SELECT id, parsed FROM sms_inbox WHERE status='new' ORDER BY received LIMIT 50")).map((x) => ({ id: x.id, parsed: JSON.parse(x.parsed) }));
+    for (const x of items) if (x.parsed.currency && !x.parsed.amount) { x.parsed = await toKrw(x.parsed); await sql("UPDATE sms_inbox SET parsed=? WHERE id=?", JSON.stringify(x.parsed), x.id).run(); }
+    return { items: items.filter((x) => x.parsed.amount > 0) };
+  }
+  if (action === "smsAck") {
+    check(service && Array.isArray(b.done) && Array.isArray(b.failed));
+    // 시트에 적은 문자는 원본·해석 내용을 지우고 중복 확인용 id만 남김 (서버에 결제 내역이 쌓이지 않게)
+    for (const id of b.done.slice(0, 50)) await sql("UPDATE sms_inbox SET status='done', note='', text='', parsed='{}' WHERE id=?", String(id)).run();
+    for (const f of b.failed.slice(0, 50)) await sql("UPDATE sms_inbox SET note=? WHERE id=?", clip(f.error, 120), String(f.id)).run();
+    return {};
+  }
   const me = service || ownerSearch
     ? await sql("SELECT id,name FROM accounts WHERE id='owner'").first()
     : await sql(
@@ -601,6 +668,8 @@ export default {
         await env.DB.prepare("SELECT id FROM accounts LIMIT 1").first();
         return Response.json({ ok: true }, { headers });
       }
+      if (url.pathname === "/hook/sms" && request.method === "POST")
+        return Response.json({ ok: true, ...(await smsHook(env, request)) }, { headers });
       check(url.pathname === "/" && ["GET", "POST"].includes(request.method));
       const b =
         request.method === "POST"

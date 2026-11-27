@@ -21,10 +21,15 @@ const mf = new Miniflare({
     FIRST_PASSWORD: first,
     TMDB_READ_TOKEN: first,
     KAKAO_REST_KEY: first + "-kakao",
+    SMS_HOOK_SHA: createHash("sha256").update("sms-" + first).digest("hex"),
     OWNER_TOKEN_SHA: createHash("sha256").update("owner-" + first).digest("hex"),
   },
   outboundService(request) {
     const url = new URL(request.url);
+    if (url.origin === "https://api.frankfurter.app") {
+      assert.equal(url.searchParams.get("to"), "KRW");
+      return Response.json({ rates: { KRW: url.searchParams.get("from") === "USD" ? 1400 : 9.5 } });
+    }
     if (url.origin === "https://dapi.kakao.com") {
       assert.equal(url.pathname, "/v3/search/book");
       assert.equal(url.searchParams.get("size"), "20");
@@ -173,6 +178,24 @@ try {
   assert.equal((await call({ what: "movie", q: "가상", token: ownerTok })).source, "tmdb");
   assert.equal((await request({ what: "lists", token: ownerTok })).ok, false, "owner token opens searches only");
   assert.equal((await request({ what: "book", q: "만조", token: "wrong" })).ok, false);
+  // 카드 결제 문자 웹훅: 열쇠 확인 → 해석해 보관함에 저장(같은 문자는 한 번만) → 시트가 가져가고 완료 표시
+  for (const f of ["migrations/0003_sms.sql"]) for (const stmt of (await readFile(new URL(f, root), "utf8")).replace(/^--.*$/gm, "").split(";").filter((s) => s.trim())) await db.prepare(stmt).run();
+  const hook = (text, key = "sms-" + first) => mf.dispatchFetch("http://localhost/hook/sms", { method: "POST", headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).then((r) => r.json());
+  const sms1 = "[Web발신]\n현대 M 승인\n홍*동\n43,500원 일시불\n11/20 12:30\n가나다식당\n누적1,234,567원";
+  const sms2 = "[Web발신]\n현대 M 해외승인\n홍*동\nUSD 9.99\n11/21 10:05\nEXAMPLE SHOP";
+  assert.equal((await hook(sms1, "wrong")).ok, false, "wrong key rejected");
+  assert.equal((await hook("오늘 승인 났어?")).ok, false, "not a card message");
+  const h1 = await hook(sms1); assert.deepEqual([h1.ok, h1.saved], [true, true]); assert.match(h1.summary, /현대 지출 43,500원 가나다식당/);
+  assert.deepEqual([(await hook(sms1)).duplicate, (await hook(sms1)).id], [true, h1.id], "same text saved once");
+  assert.match((await hook(sms2)).summary, /USD 9.99 EXAMPLE SHOP/);
+  assert.equal((await request({ action: "smsPull" }, a.code)).ok, false, "only the Sheet can pull");
+  const pulled = (await call({ action: "smsPull" }, bridge)).items;
+  assert.deepEqual(pulled.map((x) => [x.parsed.merchant, x.parsed.amount]), [["가나다식당", 43500], ["EXAMPLE SHOP", 13986]], "foreign amount converted to KRW");
+  await call({ action: "smsAck", done: [pulled[0].id], failed: [{ id: pulled[1].id, error: "test" }] }, bridge);
+  assert.deepEqual((await call({ action: "smsPull" }, bridge)).items.map((x) => x.id), [pulled[1].id], "done ones are not pulled again");
+  assert.deepEqual(await db.prepare("SELECT text, parsed FROM sms_inbox WHERE id=?").bind(pulled[0].id).first(), { text: "", parsed: "{}" }, "written messages are wiped from the server");
+  assert.equal((await hook(sms1)).duplicate, true, "still deduped after wiping");
+  for (const t of [a.code, undefined]) assert.equal((await request({ action: "smsAck", done: [], failed: [] }, t)).ok, false, "friends cannot touch the inbox");
   const login = (name, password) => ({ action: "login", name, password });
   assert.equal((await call(login("가", first))).token, a.code);
   await call({ action: "setPassword", password }, a.code);

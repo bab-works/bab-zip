@@ -421,6 +421,34 @@ function bookSearch_(q) {
     image: ((v.imageLinks || {}).thumbnail || '').replace(/^http:/, 'https:') })).filter(b => b.title);
 }
 
+// ── 카드 결제 문자 → 거래 탭: 단축어 → 친구 서버 보관함(sms_inbox) → 여기서 가져와 기록 (5분마다 + 가계부를 열 때) ──
+function smsIngest_() {
+  if (friendMode_() !== 'worker' || !FRIEND_BRIDGE_) return 0;
+  const r = workerCall_({ action: 'smsPull' }, true);
+  if (!r.ok || !(r.items || []).length) return 0;
+  const meta = meta_(), done = [], failed = [];
+  r.items.forEach(x => { try { saveTx_(smsTx_(x.id, x.parsed, meta)); done.push(x.id); } catch (err) { failed.push({ id: x.id, error: String(err.message) }); } });
+  if (done.length) { SpreadsheetApp.flush(); bumpVer_(); }
+  workerCall_({ action: 'smsAck', done, failed }, true);
+  return done.length;
+}
+// 해석된 문자 → 거래 한 줄. 결제수단은 카테고리 탭의 결제수단 이름에서 카드사로 찾고, 대분류는 「분류규칙」(가맹점 글자)으로
+function smsTx_(id, p, meta) {
+  const kw = { 롯데: /롯데/, 현대: /현대/, 국민: /국민|KB/i }[p.card];
+  const pay = (meta.payments.find(x => kw && kw.test(x[0])) || [])[0] || p.card + '카드';
+  const m = String(p.merchant || ''), majors = [...new Set(meta.cats.map(c => c[0]))];
+  const rule = meta.rules.find(r => r[0] && m.toLowerCase().includes(String(r[0]).toLowerCase()) && (!r[1] || r[1] === p.type) && majors.includes(r[2]));
+  const major = rule ? rule[2] : (majors.find(x => /미분류|기타/.test(x)) || majors[0] || '기타');
+  return { id, date: p.date, time: p.time, type: p.type, major, minor: rule ? rule[3] || '' : '', content: m, pay, amount: p.amount, inst: p.inst || '',
+    memo: ['문자 자동', p.currency ? p.currency + ' ' + p.foreign + (p.rate ? ' · 환율 ' + p.rate : '') : ''].filter(Boolean).join(' · ') };
+}
+function smsTick() { if (friendMode_() === 'worker') withLock_(() => smsIngest_()); } // 5분마다 (시간 트리거)
+function ensureSmsTrigger_() {
+  const props = PropertiesService.getScriptProperties(); if (props.getProperty('SMS_TRIGGER')) return;
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'smsTick')) ScriptApp.newTrigger('smsTick').timeBased().everyMinutes(5).create();
+  props.setProperty('SMS_TRIGGER', '1');
+}
+
 function rows_(name, cols) {
   const sh = ss_().getSheetByName(name);
   return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues();
@@ -909,6 +937,7 @@ function doGet(e) {
     // full=1이면 전부 보냄. 할부 진행 같은 수식 값도 지문에 들어가서, 바뀌면 앱이 전체를 다시 받음
     const since = /^\d{4}-\d{2}-\d{2}$/.test(e.parameter.since || '') ? e.parameter.since : '';
     return out_(withLock_(() => {
+      try { smsIngest_(); ensureSmsTrigger_(); } catch (err) {} // 카드 문자 보관함에 새 결제가 있으면 먼저 거래 탭에 (실패해도 보관함에 남아 다음에 다시)
       // 반복 거래 채우기는 하루 한 번이면 충분 (매번 돌려서 느렸음). 반복 규칙을 바꾸면 다시 돎
       const props = PropertiesService.getScriptProperties(), day = fmt_(new Date(), 'yyyy-MM-dd');
       if (props.getProperty('REC_RUN') !== day) { runRecurring_(); props.setProperty('REC_RUN', day); }

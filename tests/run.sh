@@ -9,4 +9,5 @@ if ! (cd ../worker && node -e "require.resolve('miniflare')" 2>/dev/null); then
   npm ci --prefix ../worker --no-audit --no-fund
 fi
 node worker.mjs
+node sms.mjs
 node migration.mjs

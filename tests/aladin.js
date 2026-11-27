@@ -28,4 +28,10 @@ assert.deepEqual(vm.runInContext('bookSearch_("페스트")', ctx), [{ title: '�
   ctx.UrlFetchApp.fetch = u => { assert.match(u, /^https:\/\/kinolights\.com\/search\?keyword=/); return { getContentText: () => page }; };
   const m = JSON.parse(JSON.stringify(vm.runInContext('movieSearch_("위키드")', ctx)));
   assert.deepEqual(m.map(x => [x.title, x.type, x.year, x.image]), [['위키드', '영화', '2024', 'https://f/b.jpg'], ['위키드 2', '영화', '', ''], ['위키드', '예능', '2016', 'https://f/a.jpg']]); }
+// 카드 결제 문자 → 거래 한 줄: 결제수단은 카테고리 탭 이름에서 카드사로, 대분류는 분류규칙(가맹점 글자), 없으면 기타
+{ const meta = { cats: [['식비', '외식'], ['기타', '']], payments: [['샘플 현대카드', '신용'], ['OO롯데카드', '신용'], ['KB국민 샘플', '체크']], rules: [['가나다', '지출', '식비', '외식']] };
+  const tx = JSON.parse(JSON.stringify(vm.runInContext(`smsTx_('sms:a', { card: '현대', type: '지출', amount: 43500, inst: 0, date: '2026-11-20', time: '12:30', merchant: '가나다식당', currency: '' }, ${JSON.stringify(meta)})`, ctx)));
+  assert.deepEqual([tx.pay, tx.major, tx.minor, tx.content, tx.amount, tx.memo], ['샘플 현대카드', '식비', '외식', '가나다식당', 43500, '문자 자동']);
+  const fx = JSON.parse(JSON.stringify(vm.runInContext(`smsTx_('sms:b', { card: '국민', type: '환불', amount: 13986, inst: 5, date: '2026-11-27', time: '10:33', merchant: 'EXAMPLE SHOP', currency: 'USD', foreign: 9.99, rate: 1400 }, ${JSON.stringify(meta)})`, ctx)));
+  assert.deepEqual([fx.pay, fx.major, fx.type, fx.inst, fx.memo], ['KB국민 샘플', '기타', '환불', 5, '문자 자동 · USD 9.99 · 환율 1400']); }
 console.log('ALADIN OK');
